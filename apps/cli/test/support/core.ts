@@ -76,6 +76,22 @@ function seed(core: CoreService, data: FixtureData): void {
     for (const record of data.evidence) {
       tx.insert('evidence', { version: 1, ...record });
     }
+    if (data.onboarding !== undefined) {
+      // The reference workspace was set up by onboarding (01 §9.1): its answers, committed.
+      tx.insert('onboarding', {
+        id: 'onb_main',
+        profile: {
+          ...data.onboarding,
+          completedSteps: [...data.onboarding.completedSteps, 'commit'],
+        },
+        committedAt: at,
+        createdAt: at,
+        createdBy: SEEDER,
+        updatedAt: at,
+        updatedBy: SEEDER,
+        version: 1,
+      });
+    }
     for (const binding of BINDINGS) {
       tx.insert('connector_bindings', {
         id: binding.id,
@@ -93,8 +109,8 @@ function seed(core: CoreService, data: FixtureData): void {
 export interface TestCoreOptions {
   /** The profile directory (`<userData>`); one per test, from createProfileDir(). */
   readonly profileDir: string;
-  /** The records to start with; the reference dataset by default. */
-  readonly data?: FixtureData;
+  /** The records to start with; the reference dataset by default; null for a fresh profile. */
+  readonly data?: FixtureData | null;
   /** Principals to create besides `cli-default`; default all of PRINCIPALS. */
   readonly principals?: readonly string[];
 }
@@ -114,7 +130,7 @@ export interface TestCore {
 
 /** Starts the headless core over the dataset in its own store, with the test principals. */
 export async function startTestCore(options: TestCoreOptions): Promise<TestCore> {
-  const data = options.data ?? referenceData();
+  const data = options.data === undefined ? referenceData() : options.data;
   const core = await startHeadless({
     profileDir: options.profileDir,
     env: {},
@@ -122,7 +138,7 @@ export async function startTestCore(options: TestCoreOptions): Promise<TestCore>
     validateResults: true,
     installedActions: (binding) => BINDINGS.find((known) => known.id === binding.id)?.actions ?? [],
   });
-  seed(core, data);
+  if (data !== null) seed(core, data);
   for (const name of options.principals ?? PRINCIPALS) {
     const extra = EXTRA_PRINCIPALS[name];
     if (extra === undefined) continue;

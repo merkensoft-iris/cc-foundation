@@ -499,6 +499,88 @@ cc-axi workstreams view alderwick
 cc-axi workstreams view quillmarsh --format json
 ```
 
+## `cc-axi onboarding status`
+
+Where onboarding stands: the steps answered, the next one, and the app-only answers.
+
+```text
+cc-axi onboarding status
+```
+
+Local API: `onboarding.status`.
+
+Examples:
+
+```text
+cc-axi onboarding status
+cc-axi onboarding status --format json
+```
+
+## `cc-axi onboarding recommend`
+
+Run the framework recommender on a profile.json (01 §6): one recommendation per workstream.
+
+```text
+cc-axi onboarding recommend --file <profile.json>
+```
+
+| Flag                    | Meaning                                 | Default |
+| ----------------------- | --------------------------------------- | ------- |
+| `--file <profile.json>` | An OnboardingProfile (01 §4). Required. |         |
+
+Local API: `onboarding.recommend`.
+
+Examples:
+
+```text
+cc-axi onboarding recommend --file profile.json
+cc-axi onboarding recommend --file fixtures/onboarding/sample-profile.json --format json
+```
+
+## `cc-axi onboarding apply`
+
+Set up the workspace from a profile.json; --dry-run previews every record and writes nothing.
+
+```text
+cc-axi onboarding apply --file <profile.json> [--dry-run]
+```
+
+| Flag                    | Meaning                                                 | Default |
+| ----------------------- | ------------------------------------------------------- | ------- |
+| `--file <profile.json>` | A whole OnboardingProfile (01 §4, C-01-07). Required.   |         |
+| `--dry-run`             | Preview every record and outward action; write nothing. |         |
+
+Local API: `onboarding.preview`, `onboarding.apply`.
+
+Examples:
+
+```text
+cc-axi onboarding apply --file profile.json --dry-run
+cc-axi onboarding apply --file profile.json
+cc-axi onboarding apply --file fixtures/onboarding/sample-profile.json --dry-run --format json
+```
+
+## `cc-axi onboarding export`
+
+Write the answers as a profile.json to commit: no records, secrets or person names (01 §9.1).
+
+```text
+cc-axi onboarding export --out <profile.json>
+```
+
+| Flag                   | Meaning                      | Default |
+| ---------------------- | ---------------------------- | ------- |
+| `--out <profile.json>` | The file to write. Required. |         |
+
+Local API: `onboarding.export`.
+
+Examples:
+
+```text
+cc-axi onboarding export --out profile.json
+cc-axi onboarding export --out engine/profile.json --format json
+```
+
 ## `cc-axi update`
 
 Report the cc-axi version; cc-axi ships inside the Command Center app and updates with it.

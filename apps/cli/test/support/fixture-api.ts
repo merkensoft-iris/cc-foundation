@@ -18,6 +18,7 @@ import type {
   Issue,
   Measure,
   MeasureValue,
+  OnboardingProfile,
   Workstream,
 } from '@cc/schemas';
 
@@ -44,6 +45,8 @@ const LONG_DONE_MEANS = Array.from(
 ).join(' ');
 
 export interface FixtureData {
+  /** The onboarding answers, committed (01 §9.1); none in the empty dataset. */
+  onboarding?: OnboardingProfile;
   workstreams: Workstream[];
   items: ActionItem[];
   decisions: Decision[];
@@ -132,6 +135,9 @@ export function referenceData(): FixtureData {
   );
 
   return {
+    onboarding: JSON.parse(
+      readFileSync(join(ROOT, 'fixtures', 'onboarding', 'sample-profile.json'), 'utf8'),
+    ) as OnboardingProfile,
     workstreams,
     items,
     decisions: readFixtures<Decision>('decision@1'),
