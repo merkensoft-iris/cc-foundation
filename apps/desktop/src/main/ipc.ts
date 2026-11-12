@@ -10,6 +10,11 @@
  *
  * `cc:rebuild` is the window's Rebuild now and Later (04 §10 rule 2). It is a shell action,
  * not a core method, so no local API client (CLI, MCP) can reach it (OQ-04-11).
+ *
+ * `backups.passphrase` (onboarding S1, 01 §3.1 row 9; 04 §9.1 rule 3) is answered here first:
+ * main keeps the passphrase in the OS secret store (`safeStorage`, `<userData>/secrets/`), and
+ * the core is told only that it is set. The passphrase never reaches the core, the store or a
+ * log.
  */
 import type { ApiErrorData } from '@cc/schemas';
 
@@ -26,6 +31,11 @@ export const REBUILD_CHANNEL = 'cc:rebuild';
 export const REBUILD_STATE_CHANNEL = 'cc:rebuild-state';
 
 export type RebuildAction = 'state' | 'now' | 'later';
+
+/** The human-only method whose secret main keeps (04 §9.1 rule 3). */
+export const BACKUP_PASSPHRASE_METHOD = 'backups.passphrase';
+/** The shortest backup passphrase accepted; CC cannot recover a lost one (04 §9.1 rule 3). */
+export const MIN_PASSPHRASE_LENGTH = 12;
 
 export type InvokeAnswer =
   | { readonly ok: true; readonly result: unknown }
@@ -55,6 +65,8 @@ export interface BridgeOptions {
     readonly now: () => Promise<RebuildState>;
     readonly later: () => Promise<RebuildState>;
   };
+  /** Keeps the backup passphrase in the secret store; absent where there is none. */
+  readonly storeBackupPassphrase?: (passphrase: string) => Promise<void>;
   readonly log?: (event: string, fields?: Record<string, unknown>) => void;
 }
 
@@ -69,6 +81,44 @@ export function isTrustedSender(event: InvokeEvent): boolean {
 
 function refused(message: string): InvokeAnswer {
   return { ok: false, error: { code: 'E_FORBIDDEN', message, help: [] } };
+}
+
+function failed(code: string, message: string, help: string[] = []): InvokeAnswer {
+  return { ok: false, error: { code, message, help } };
+}
+
+/** S1's passphrase: into the secret store, then the core records that it is set. */
+async function setBackupPassphrase(options: BridgeOptions, params: unknown): Promise<InvokeAnswer> {
+  const passphrase =
+    typeof params === 'object' && params !== null
+      ? (params as Record<string, unknown>)['passphrase']
+      : undefined;
+  if (typeof passphrase !== 'string' || passphrase.length < MIN_PASSPHRASE_LENGTH) {
+    return failed(
+      'E_USAGE',
+      `a backup passphrase has at least ${String(MIN_PASSPHRASE_LENGTH)} characters`,
+      ['Command Center cannot recover a lost passphrase: keep it somewhere safe (04 §9.1)'],
+    );
+  }
+  if (options.storeBackupPassphrase === undefined) {
+    return failed('E_FORBIDDEN', 'this app has no secret store to keep the passphrase in', [
+      'Set the passphrase in the installed app',
+    ]);
+  }
+  try {
+    await options.storeBackupPassphrase(passphrase);
+  } catch {
+    options.log?.('ipc.secret_store_failed', { method: BACKUP_PASSPHRASE_METHOD });
+    return failed('E_PERMISSION', 'the OS secret store refused the passphrase', [
+      'Check that the system keychain is unlocked, then try again',
+    ]);
+  }
+  try {
+    return { ok: true, result: await options.call(BACKUP_PASSPHRASE_METHOD, {}) };
+  } catch (error) {
+    if (error instanceof UiCallError) return { ok: false, error: error.data };
+    return failed('E_CRASH', `${BACKUP_PASSPHRASE_METHOD} failed in the app`);
+  }
 }
 
 export async function handleInvoke(
@@ -87,6 +137,7 @@ export async function handleInvoke(
       error: { code: 'E_USAGE', message: 'a method is <namespace>.<verb>', help: [] },
     };
   }
+  if (method === BACKUP_PASSPHRASE_METHOD) return setBackupPassphrase(options, params);
   try {
     return { ok: true, result: await options.call(method, params) };
   } catch (error) {

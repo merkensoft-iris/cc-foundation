@@ -45,6 +45,11 @@ export type SmokeResult =
       readonly version: string;
       /** What the UI call through main to the core answered (`home.get`). */
       readonly uiCall: string;
+      /**
+       * The screen the window opens on (AC-08-11): `onboarding` until onboarding is committed,
+       * then `home` (01 §1 item 7; the renderer's `App.start` applies the same rule).
+       */
+      readonly firstScreen: string;
       readonly ms: number;
     }
   | { readonly ok: false; readonly reason: string; readonly ms: number };
@@ -84,6 +89,11 @@ export interface ShellPlatform {
   readonly rebuild?: () => Promise<RebuildOutcome>;
   /** `--smoke`: start once, report and exit. */
   readonly smoke?: boolean;
+  /**
+   * Keeps a secret in `<userData>/secrets/<name>`, encrypted with the OS keychain
+   * (`safeStorage`, 04 §9 rule 1); absent where the OS offers none.
+   */
+  readonly storeSecret?: (name: string, value: string) => Promise<void>;
   requestSingleInstanceLock(): boolean;
   onSecondInstance(listener: (argv: readonly string[]) => void): void;
   /** macOS delivers deep links as `open-url`; register before ready. */
@@ -281,6 +291,15 @@ export async function startShell(
         return Promise.resolve(rebuild.state);
       },
     },
+    ...(platform.storeSecret === undefined
+      ? {}
+      : {
+          storeBackupPassphrase: (passphrase: string) =>
+            (platform.storeSecret as NonNullable<ShellPlatform['storeSecret']>)(
+              'backup-passphrase',
+              passphrase,
+            ),
+        }),
     log: (event, fields) => platform.log(event, fields),
   });
 
@@ -400,6 +419,16 @@ async function runSmoke(run: SmokeRun): Promise<void> {
       // The core answered with an API error: it is running and the UI path works.
       uiCall = `home.get: ${error.data.code}`;
     }
+    let firstScreen: string;
+    try {
+      const status = (await Promise.race([core.call('onboarding.status', {}), timeout])) as {
+        state?: unknown;
+      };
+      firstScreen = status.state === 'committed' ? 'home' : 'onboarding';
+    } catch (error) {
+      if (!(error instanceof UiCallError)) throw error;
+      firstScreen = `home (onboarding.status: ${error.data.code})`;
+    }
     const target = run.window();
     if (target === undefined) throw new Error('no window');
     await Promise.race([target.loaded, timeout]);
@@ -410,6 +439,7 @@ async function runSmoke(run: SmokeRun): Promise<void> {
       packaged: platform.packaged,
       version: platform.version,
       uiCall,
+      firstScreen,
       ms: elapsed(),
     };
   } catch (error) {

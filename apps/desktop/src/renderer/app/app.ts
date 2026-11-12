@@ -10,6 +10,7 @@ import { homeScreen } from '../screens/home.js';
 import { issuesScreen } from '../screens/issues.js';
 import { itemsScreen } from '../screens/items.js';
 import { meetingsScreen } from '../screens/meetings.js';
+import { onboardingScreen } from '../screens/onboarding.js';
 import { scorecardScreen } from '../screens/scorecard.js';
 import { settingsScreen } from '../screens/settings.js';
 import { h, type VNode } from '../ui/vnode.js';
@@ -24,6 +25,7 @@ const SCREENS: Record<ScreenName, Screen<unknown> & { readonly ticks?: boolean }
   meetings: meetingsScreen as Screen<unknown> & { readonly ticks: true },
   scorecard: scorecardScreen as Screen<unknown>,
   settings: settingsScreen as Screen<unknown>,
+  onboarding: onboardingScreen as Screen<unknown>,
 };
 
 export interface AppOptions {
@@ -79,6 +81,21 @@ export class App {
   /** Whether the current screen shows a clock that needs a render now and then. */
   get ticks(): boolean {
     return SCREENS[this.#route.screen].ticks === true && this.#loaded.kind === 'ready';
+  }
+
+  /**
+   * The first screen: onboarding until it is committed (01 §1 item 7, AC-08-11), else Home.
+   * When the status cannot be read, Home shows why.
+   */
+  async start(): Promise<void> {
+    let route: AppRoute = { screen: 'home' };
+    try {
+      const status = await this.ui.call<{ state: string }>('onboarding.status', {});
+      if (status.state !== 'committed') route = { screen: 'onboarding' };
+    } catch {
+      // Home loads next and shows the failure.
+    }
+    await this.go(route);
   }
 
   /** Opens a screen and loads it. */

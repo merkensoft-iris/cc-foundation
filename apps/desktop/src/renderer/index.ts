@@ -79,8 +79,9 @@ async function start(): Promise<void> {
   const shell = await window.cc.shell();
   showMode(shell.mode);
   void window.cc.rebuild('state').then(showRebuild);
-  // A deep link that opened the app may already have chosen the screen.
-  if (!navigated) await app.go({ screen: 'home' });
+  // A deep link that opened the app may already have chosen the screen; otherwise the first
+  // screen is onboarding until it is committed (01 §1 item 7), then Home.
+  if (!navigated) await app.start();
 }
 
 void start();
