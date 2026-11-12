@@ -4,10 +4,10 @@
  * validates fixtures/records/<type>@<major>/*.json against it (08 §6).
  *
  * The types are those of 03 §5, plus AgentPrincipal (07 §5), the identity of every local API
- * connection, FrameworkInstance (01 §4, added by P1-06), and MeetingSeries and MeetingInstance
- * (02 §3, added by P1-07). Records specified in other documents (connector installs and
- * bindings, browser sessions, confirmations, standing approvals, development requests, backup
- * runs) are added by the build steps that own them.
+ * connection, FrameworkInstance (01 §4, added by P1-06), MeetingSeries and MeetingInstance
+ * (02 §3, added by P1-07), and Onboarding (01 §3, §9.1, added by P1-12). Records specified in
+ * other documents (connector installs and bindings, browser sessions, confirmations, standing
+ * approvals, development requests, backup runs) are added by the build steps that own them.
  */
 import { z } from 'zod';
 
@@ -22,6 +22,7 @@ import { Goal } from './goal.js';
 import { Issue, Risk } from './issue.js';
 import { Measure, MeasureValue } from './measure.js';
 import { MeetingInstance, MeetingSeries } from './meeting.js';
+import { Onboarding } from './onboarding.js';
 import { Person } from './person.js';
 import { Workspace } from './workspace.js';
 import { Workstream } from './workstream.js';
@@ -110,6 +111,13 @@ export const recordTypes: readonly RecordType[] = [
     spec: '02 §3',
     source: `${SRC}/meeting.ts`,
     schema: MeetingInstance,
+  },
+  {
+    type: 'onboarding',
+    major: 1,
+    spec: '01 §3, §9.1',
+    source: `${SRC}/onboarding.ts`,
+    schema: Onboarding,
   },
 ];
 

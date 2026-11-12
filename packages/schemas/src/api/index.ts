@@ -5,6 +5,8 @@ export {
   EvidenceInput,
   ItemSummary,
   methodJsonSchema,
+  OnboardingNotice,
+  OnboardingPreview,
   pendingNamespaces,
   type ApiMethod,
 } from './methods.js';

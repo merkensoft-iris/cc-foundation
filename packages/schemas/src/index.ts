@@ -32,6 +32,7 @@ export * from './records/template.js';
 export * from './records/framework-instance.js';
 export * from './records/rrule.js';
 export * from './records/meeting.js';
+export * from './records/onboarding.js';
 export * from './temporal.js';
 export * from './frameworks/agenda.js';
 export * from './frameworks/framework.js';

@@ -82,7 +82,7 @@ describe('record conventions (03 §3)', () => {
 });
 
 describe('record types (03 §5)', () => {
-  it('registers every record type of 03 §5, AgentPrincipal, FrameworkInstance, MeetingSeries and MeetingInstance once', () => {
+  it('registers every record type of 03 §5, AgentPrincipal, FrameworkInstance, MeetingSeries, MeetingInstance and Onboarding once', () => {
     expect(recordTypes.map((record) => record.type)).toEqual([
       'workspace',
       'person',
@@ -101,6 +101,7 @@ describe('record types (03 §5)', () => {
       'framework_instance',
       'meeting_series',
       'meeting_instance',
+      'onboarding',
     ]);
   });
 
@@ -180,6 +181,8 @@ describe('local API methods (04 §4.1)', () => {
       'principals.create',
       'principals.update',
       'principals.revoke',
+      'backups.destination',
+      'backups.passphrase',
     ]);
   });
 

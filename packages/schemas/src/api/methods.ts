@@ -7,9 +7,10 @@
  * MCP and AI layer call the same handlers, C-07-03), results carry the records of 03 §5, and
  * list results carry the minimal summaries and total counts of 07 §4.1 rules 2 and 4.
  *
- * The namespaces in `pendingNamespaces` return records specified outside 03 §5 (
- * connectors, sessions, confirmations, onboarding, development requests, backups). Their
- * methods are added here by the build steps named there, with their record types.
+ * The namespaces in `pendingNamespaces` return records specified outside 03 §5 (connectors,
+ * sessions, confirmations, development requests). Their methods are added here by the build
+ * steps named there, with their record types. `backups.*` has the two S1 answers of P1-12
+ * (destination and passphrase); P1-17 adds its status and history methods.
  */
 import { z } from 'zod';
 
@@ -31,6 +32,21 @@ import { Issue, Risk } from '../records/issue.js';
 import { InstanceState, MeetingInstance } from '../records/meeting.js';
 import { Measure, MeasureValue } from '../records/measure.js';
 import { Slug, Workstream, WorkstreamKind } from '../records/workstream.js';
+import {
+  FrameworkId,
+  FrameworkMode,
+  FrameworkRecommendation,
+  FrameworkTemplate,
+  GoalModel,
+  Pack,
+  PackId,
+} from '../frameworks/framework.js';
+import {
+  BackupDestination,
+  CalendarMapping,
+  OnboardingProfile,
+  OnboardingStep,
+} from '../frameworks/onboarding.js';
 import { Limit, MutationStatus, PersonRef, recordRef, WorkstreamRef } from './common.js';
 
 export interface ApiMethod<P extends z.ZodType = z.ZodType, R extends z.ZodType = z.ZodType> {
@@ -1014,6 +1030,269 @@ export const principalsRevoke = method({
   result: z.strictObject({ principal: PrincipalSummary }),
 });
 
+// onboarding (01 §3, §9.1; 09 P1-12)
+
+/** A warning or a blocker of the onboarding preview: a W- code of 01 §6.4, or a rule. */
+export const OnboardingNotice = z.strictObject({
+  /** `W-TIME-BUDGET`, `W-NO-SLOT`, `W-NOT-BUILT`, `W-PLACEMENT`, `W-INVARIANT`, `W-DEFERRED`. */
+  code: z.string().regex(/^W-[A-Z-]+$/),
+  text: z.string().min(1),
+  /** What the user can do about it: the options of T1, the confirmation to give. */
+  help: z.array(z.string()),
+  /** For a placement that needs the user's confirmation: the S6 answer that gives it. */
+  overlap: z
+    .strictObject({
+      workstreamKey: Slug,
+      meetingKey: z.string().min(1),
+      blockId: z.string().min(1).optional(),
+      reason: z.enum(['soft_block', 'outside_working_hours']),
+    })
+    .optional(),
+});
+export type OnboardingNotice = z.infer<typeof OnboardingNotice>;
+
+/**
+ * The full record preview of an onboarding commit (01 §3 S9, AC-01-06): every record the
+ * commit writes, in one transaction, and every outward action, each confirmed on its own
+ * afterwards (C-01-01). Workstreams appear by key; series and instances as the rhythm engine
+ * composes and materialises them (02 §4).
+ */
+export const OnboardingPreview = z.strictObject({
+  /** The local date the commit is reckoned from (`today`, 01 §6.1). */
+  today: LocalDate,
+  /** The Monday after `today`: the meetings start in the next week (README §4). */
+  rhythmStartsOn: LocalDate,
+  recommenderVersion: z.string().min(1),
+  workspace: z.strictObject({
+    displayName: z.string().min(1),
+    timeZone: z.string().min(1),
+    weeklyManagementMinutes: z.int().min(0),
+  }),
+  persons: z.array(
+    z.strictObject({
+      role: z.enum(['self', 'collaborator', 'external']),
+      name: z.string().min(1),
+      /** The workstream whose principal this person is. */
+      principalOf: z.array(Slug),
+    }),
+  ),
+  workstreams: z.array(
+    z.strictObject({
+      key: Slug,
+      name: z.string().min(1),
+      kind: WorkstreamKind,
+      parent: Slug.optional(),
+      /** Its own framework instance; absent when it inherits its parent's (R5) or for Workspace. */
+      framework: FrameworkId.optional(),
+      privacy: z.enum(['normal', 'sensitive']),
+      aiDataPolicy: z.enum(['allow', 'redact_people', 'deny']),
+    }),
+  ),
+  frameworkInstances: z.array(
+    z.strictObject({
+      workstream: Slug,
+      templateId: FrameworkId,
+      templateVersion: z.string().min(1),
+      mode: FrameworkMode,
+      goalModel: GoalModel,
+      packs: z.array(PackId),
+      firedRules: z.array(z.string().min(1)),
+      overrodeRecommendation: z.boolean(),
+      parameters: z.record(z.string(), z.unknown()),
+    }),
+  ),
+  measures: z.array(
+    z.strictObject({
+      ref: humanRef('K'),
+      workstreams: z.array(Slug).min(1),
+      name: z.string().min(1),
+      role: z.enum(['lead', 'lag']),
+      unit: Measure.shape.unit,
+      cadence: Measure.shape.cadence,
+      /** e.g. "gte 3", "between 90 and 110". */
+      target: z.string().min(1),
+      source: z.enum(['manual', 'derived']),
+    }),
+  ),
+  goals: z.array(
+    z.strictObject({
+      ref: humanRef('G'),
+      workstream: Slug,
+      kind: GoalKind,
+      title: z.string().min(1),
+      /** e.g. "2026-Q4". */
+      period: z.string().min(1),
+    }),
+  ),
+  series: z.array(
+    z.strictObject({
+      name: z.string().min(1),
+      cadence: z.string().min(1),
+      rrule: z.string().min(1),
+      /** Local "YYYY-MM-DDTHH:MM" of the first occurrence (ADR 0001 decision 5). */
+      dtstart: z.string().min(1),
+      durationMinutes: z.int().min(1),
+      workstreams: z.array(Slug).min(1),
+      /** The backbone meeting key, e.g. "weekly"; "portfolio.daily-start" (02 §4.5). */
+      meeting: z.string().min(1),
+      agendaTemplateId: z.string().min(1),
+      /** e.g. "weekly (30 min)" for the monthly review (02 §4.3). */
+      absorbs: z.string().min(1).optional(),
+    }),
+  ),
+  /** The instances materialised over the horizon (02 §4.1). */
+  instances: z.strictObject({
+    count: z.int().min(0),
+    first: LocalDate.optional(),
+    last: LocalDate.optional(),
+  }),
+  /** T1 (01 §6.4). */
+  timeBudget: z.strictObject({
+    averageWeeklyMinutes: z.number().min(0),
+    weeklyManagementMinutes: z.int().min(0),
+  }),
+  warnings: z.array(OnboardingNotice),
+  /** What stops the commit until the user answers it: T1 without a fix, T2, placement. */
+  blockers: z.array(OnboardingNotice),
+  /** Outward actions after the commit, each with its own confirmation (C-01-01). */
+  outwardActions: z.array(
+    z.strictObject({
+      kind: z.enum(['calendar_batch', 'sign_in', 'discovery']),
+      text: z.string().min(1),
+    }),
+  ),
+});
+export type OnboardingPreview = z.infer<typeof OnboardingPreview>;
+
+/** The app-only answers of 01 §3.1 (rows 9, 10, 66 and 67), which a profile.json cannot carry. */
+export const AppOnlyAnswer = z.strictObject({
+  row: z.int().min(1).max(67),
+  question: z.string().min(1),
+  answered: z.boolean(),
+});
+
+export const onboardingStatus = method({
+  method: 'onboarding.status',
+  spec: '01 §3, §9.1',
+  description:
+    'Where onboarding stands: not started, in progress (steps answered) or committed; the app also gets the answers.',
+  scope: 'read',
+  humanOnly: false,
+  params: z.strictObject({}),
+  result: z.strictObject({
+    state: z.enum(['not_started', 'in_progress', 'committed']),
+    completedSteps: z.array(OnboardingStep),
+    /** The first step not answered yet, in S1 to S9 order. */
+    nextStep: OnboardingStep.optional(),
+    committedAt: UtcTimestamp.optional(),
+    workstreams: z.int().min(0),
+    appOnly: z.array(AppOnlyAnswer),
+    /** The saved answers; returned to the app (the user) only. */
+    profile: OnboardingProfile.optional(),
+    calendarMapping: CalendarMapping.optional(),
+  }),
+});
+
+export const onboardingSave = method({
+  method: 'onboarding.save',
+  spec: '01 §3 (answers persist after every step)',
+  description:
+    'Saves the onboarding answers so far, marking a step answered; writes no other record (C-01-01).',
+  scope: 'onboarding:apply',
+  humanOnly: false,
+  params: z.strictObject({
+    profile: OnboardingProfile,
+    calendarMapping: CalendarMapping.optional(),
+    /** The step just answered; it joins `completedSteps`. */
+    step: OnboardingStep.optional(),
+  }),
+  result: z.strictObject({
+    status: MutationStatus,
+    completedSteps: z.array(OnboardingStep),
+    nextStep: OnboardingStep.optional(),
+  }),
+});
+
+export const onboardingRecommend = method({
+  method: 'onboarding.recommend',
+  spec: '01 §6, C-01-02',
+  description:
+    'Runs the recommender on a profile (or the saved answers): one framework recommendation per workstream.',
+  scope: 'read',
+  humanOnly: false,
+  params: z.strictObject({ profile: OnboardingProfile.optional() }),
+  result: z.strictObject({
+    recommendations: z.array(FrameworkRecommendation),
+    /** The built templates and packs, for the S4 and S5 choices. */
+    templates: z.array(FrameworkTemplate),
+    packs: z.array(Pack),
+  }),
+});
+
+export const onboardingPreview = method({
+  method: 'onboarding.preview',
+  spec: '01 §3 S6 and S9, C-01-07 (--dry-run), AC-01-06',
+  description:
+    'Previews every record and outward action an onboarding commit would make, and writes nothing.',
+  scope: 'read',
+  humanOnly: false,
+  params: z.strictObject({
+    profile: OnboardingProfile.optional(),
+    calendarMapping: CalendarMapping.optional(),
+  }),
+  result: z.strictObject({ preview: OnboardingPreview }),
+});
+
+export const onboardingApply = method({
+  method: 'onboarding.apply',
+  spec: '01 §3 S9, C-01-01, C-01-07',
+  description:
+    'Commits onboarding: writes every record in one transaction; outward actions wait for their own confirmations.',
+  scope: 'onboarding:apply',
+  humanOnly: false,
+  params: z.strictObject({
+    profile: OnboardingProfile.optional(),
+    calendarMapping: CalendarMapping.optional(),
+  }),
+  result: z.strictObject({
+    status: MutationStatus,
+    committedAt: UtcTimestamp,
+    preview: OnboardingPreview,
+  }),
+});
+
+export const onboardingExport = method({
+  method: 'onboarding.export',
+  spec: '01 §9.1 rule 3, C-01-09',
+  description:
+    'The answers as a profile.json to commit: no records, no secrets, no person names, workstreams by key.',
+  scope: 'read',
+  humanOnly: false,
+  params: z.strictObject({}),
+  result: z.strictObject({ profile: OnboardingProfile }),
+});
+
+// backups: the S1 answers (04 §9.1); the rest of backups.* is P1-17
+
+export const backupsDestination = method({
+  method: 'backups.destination',
+  spec: '04 §4.3, 04 §9.1 rule 5, 01 §3.1 row 10',
+  description: 'Sets or clears the off-machine backup destination.',
+  humanOnly: true,
+  params: z.strictObject({ destination: BackupDestination.nullable() }),
+  result: z.strictObject({ status: MutationStatus }),
+});
+
+export const backupsPassphrase = method({
+  method: 'backups.passphrase',
+  spec: '04 §4.3, 04 §9.1 rule 3, 01 §3.1 row 9',
+  description:
+    'Records that the backup passphrase is set; the app keeps it in the secret store, never here.',
+  humanOnly: true,
+  params: z.strictObject({}),
+  result: z.strictObject({ status: MutationStatus, passphraseSet: z.boolean() }),
+});
+
 /** Every method `pnpm cc:gen` writes a schema for, in 04 §4.1 order. */
 export const apiMethods: readonly ApiMethod[] = [
   authHello,
@@ -1065,6 +1344,14 @@ export const apiMethods: readonly ApiMethod[] = [
   principalsCreate,
   principalsUpdate,
   principalsRevoke,
+  onboardingStatus,
+  onboardingSave,
+  onboardingRecommend,
+  onboardingPreview,
+  onboardingApply,
+  onboardingExport,
+  backupsDestination,
+  backupsPassphrase,
   exportRun,
 ];
 
@@ -1076,9 +1363,7 @@ export const pendingNamespaces: readonly { namespace: string; spec: string; step
   { namespace: 'connectors.*', spec: '05', step: 'P1-13 (empty results), P2-02' },
   { namespace: 'sessions.*', spec: '04 §5', step: 'P4 (browser sandbox)' },
   { namespace: 'confirmations.*', spec: '04 §7.3', step: 'P1-13, P2-01' },
-  { namespace: 'onboarding.*', spec: '01 §3, §9.1', step: 'P1-12' },
   { namespace: 'requests.*', spec: '06 §10.4', step: 'P6-05' },
-  { namespace: 'backups.*', spec: '04 §9.1', step: 'P1-17' },
 ];
 
 /** The JSON Schema (draft 2020-12) of one method: its params and result side by side. */
