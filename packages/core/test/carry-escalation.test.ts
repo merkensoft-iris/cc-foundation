@@ -18,6 +18,7 @@ import {
   scenarioPlacement,
   scenarioSeries,
   seriesById,
+  wigSeries,
 } from '../../rhythm/test/harness.ts';
 import { parseIcs } from '../../rhythm/test/ics-parse.ts';
 import { seedWorkspace } from './helpers.js';
@@ -147,7 +148,7 @@ describe('AC-02-05 on the workspace store', () => {
     expect(third.carried).toContain('A-0142');
     expect(w.item('A-0142')).toMatchObject({ carryCount: 2, escalationLevel: 2 });
     const [issue] = escalationIssues();
-    expect(issue).toMatchObject({ workstreamId: 'ws_dry', status: 'open' });
+    expect(issue).toMatchObject({ workstreamId: 'ws_ald', status: 'open' });
     expect(w.item('A-0142').links.issueIds).toContain(issue?.id);
     const monthly = w.instance('2026-11-27T15:00', 'ser_ceo_monthly');
     const raised = w.db.read((tx) => tx.history('issue', issue?.id ?? ''));
@@ -207,7 +208,7 @@ describe('AC-02-05 on the workspace store', () => {
 
 describe('AC-02-08 on the workspace store', () => {
   it('AC-02-08 export-ics --weeks 13 gives one event per instance, and a re-export after a time change raises SEQUENCE for the changed events only', async () => {
-    const w = world('2026-11-04T04:10:00Z', scenarioSeries());
+    const w = world('2026-11-04T04:10:00Z', [...scenarioSeries(), wigSeries()]);
     const first = w.meetings.exportIcs(13);
     const before = new Map(parseIcs(first.ics).map((e) => [e.uid, e]));
     expect(before.size).toBe(first.instances.length);
@@ -226,14 +227,14 @@ describe('AC-02-08 on the workspace store', () => {
     await w.clock.advanceTo('2026-11-18T04:00:00Z');
     w.rhythm.clock.set('2026-11-18T04:00:00Z');
     const rhythmStore = storeRhythmStore(w.db);
-    const wig = rhythmStore.listSeries().find((s) => s.id === 'ser_own_wig') as MeetingSeries;
+    const wig = rhythmStore.listSeries().find((s) => s.id === 'ser_goal_wig') as MeetingSeries;
     const changed = updateSeries(
       w.rhythm.ctx,
       user,
       wig,
       { rrule: 'FREQ=WEEKLY;BYDAY=MO;BYHOUR=16;BYMINUTE=0' },
       {
-        activeWorkstreamIds: ['ws_dry', 'ws_mrk', 'ws_own', 'ws_friend'],
+        activeWorkstreamIds: ['ws_ald', 'ws_qlm', 'ws_goal'],
         placement: scenarioPlacement(),
       },
     );

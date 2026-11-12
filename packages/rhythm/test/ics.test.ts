@@ -30,14 +30,15 @@ import {
   scenarioSeries,
   seriesById,
   user,
+  wigSeries,
 } from './harness.ts';
 import { parseIcs } from './ics-parse.ts';
 
 const IST = 'Asia/Kolkata';
-const ALL = ['ws_dry', 'ws_mrk', 'ws_own', 'ws_friend'];
+const ALL = ['ws_ald', 'ws_qlm', 'ws_goal'];
 const encoder = new TextEncoder();
 
-function seeded(series: readonly MeetingSeries[] = scenarioSeries()) {
+function seeded(series: readonly MeetingSeries[] = [...scenarioSeries(), wigSeries()]) {
   const h = harness('2026-11-04T04:10:00Z');
   const store = memoryStore(series);
   extendHorizon(store, h.ctx, scenarioPlacement());
@@ -124,7 +125,7 @@ describe('ADR 0001 decision 3 the UTC writer', () => {
 describe('02 §9.1 the export', () => {
   it('exports the window from the start of today, unbound series only, and moves planned instances to scheduled once', () => {
     const bound: MeetingSeries = {
-      ...seriesById('ser_own_wig'),
+      ...seriesById('ser_goal_wig'),
       calendars: [
         {
           bindingId: 'bnd_gcal' as never,
@@ -135,7 +136,7 @@ describe('02 §9.1 the export', () => {
         },
       ],
     };
-    const series = scenarioSeries().map((s) => (s.id === bound.id ? bound : s));
+    const series = [...scenarioSeries(), bound];
     const { exportNow, store } = seeded(series);
     const first = exportNow(2);
     checkChanges(first.changes);
@@ -170,7 +171,7 @@ describe('02 §9.1 the export', () => {
         ...ctx.registry,
         workstream: (id) => {
           const found = ctx.registry.workstream(id);
-          return found === undefined || id !== 'ws_friend'
+          return found === undefined || id !== 'ws_goal'
             ? found
             : { ...found, privacy: 'sensitive' };
         },
@@ -205,9 +206,9 @@ describe('02 §9.1 the export', () => {
       .filter((line) => line.startsWith('- '))
       .reduce((sum, line) => sum + Number(/(\d+) min$/.exec(line)?.[1] ?? 0), 0);
     expect(minutes).toBe(120); // the absorbed weekly backbone (30) and the monthly's own (90)
-    const friend = byUid.get(`${instance('ser_friend_wig', '2026-11-12').id}@command-center`);
+    const friend = byUid.get(`${instance('ser_goal_wig', '2026-11-16').id}@command-center`);
     expect(friend?.summary).toBe('[CC] Weekly meeting');
-    const names = ['Alderwick', 'Quillmarsh', 'alderwick', 'quillmarsh', "Friend's search"];
+    const names = ['Alderwick', 'Quillmarsh', 'alderwick', 'quillmarsh', 'goal-area'];
     for (const event of events) {
       for (const name of names) {
         expect(event.summary).not.toContain(name);
@@ -244,7 +245,7 @@ describe('AC-02-08 the .ics export without a calendar binding', () => {
     for (const instance of absorbed) expect(first.instances).not.toContain(instance.ref);
 
     clock.set('2026-11-18T04:00:00Z');
-    const wig = store.listSeries().find((s) => s.id === 'ser_own_wig') as MeetingSeries;
+    const wig = store.listSeries().find((s) => s.id === 'ser_goal_wig') as MeetingSeries;
     const changed = updateSeries(
       ctx,
       user,
@@ -265,7 +266,7 @@ describe('AC-02-08 the .ics export without a calendar binding', () => {
       const instance = [...store.instances.values()].find(
         (i) => `${i.id}@command-center` === event.uid,
       ) as MeetingInstance;
-      expect(instance.seriesId).toBe('ser_own_wig');
+      expect(instance.seriesId).toBe('ser_goal_wig');
       expect(localDateTime(instance.scheduledStart, IST).slice(11)).toBe('16:00');
       expect(event.sequence).toBeGreaterThan(before.get(event.uid)?.sequence ?? 0);
     }

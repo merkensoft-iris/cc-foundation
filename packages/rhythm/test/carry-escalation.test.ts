@@ -67,7 +67,7 @@ describe('02 §7.1 rule 2 which completed instances count an item (key p1-09-car
   it('counts reviews only: weekly or slower series, never the daily start or shutdown', () => {
     expect(isReviewSeries(dailyStart)).toBe(false);
     expect(isReviewSeries(seriesById('ser_daily_shutdown'))).toBe(false);
-    for (const id of ['ser_ceo_weekly', 'ser_own_wig', 'ser_ceo_monthly', 'ser_ceo_yearly']) {
+    for (const id of ['ser_ceo_weekly', 'ser_goal_wig', 'ser_ceo_monthly', 'ser_ceo_yearly']) {
       expect(isReviewSeries(seriesById(id))).toBe(true);
     }
     const daily = completed('ser_daily_start', '2026-11-16T09:00');
@@ -83,7 +83,7 @@ describe('02 §7.1 rule 2 which completed instances count an item (key p1-09-car
       ).toBe(false);
     }
     const review = completed('ser_ceo_weekly', local);
-    expect(incrementsCarryCount(weekly, review, { ...due, workstreamId: 'ws_own' as never })).toBe(
+    expect(incrementsCarryCount(weekly, review, { ...due, workstreamId: 'ws_goal' as never })).toBe(
       false,
     );
     for (const lifecycle of ['draft', 'claimed_done', 'verified_done', 'dropped'] as const) {
@@ -98,13 +98,13 @@ describe('02 §7.1 rule 2 which completed instances count an item (key p1-09-car
     // A weekly review on Friday 09:00 IST is still Thursday 22:30 in New York.
     const morning: MeetingSeries = {
       ...weekly,
-      workstreamIds: ['ws_friend'] as MeetingSeries['workstreamIds'],
+      workstreamIds: ['ws_us'] as MeetingSeries['workstreamIds'],
       rrule: 'FREQ=WEEKLY;BYDAY=FR;BYHOUR=9;BYMINUTE=0',
       dtstart: '2026-11-13T09:00',
     };
     const review = { state: 'completed' as const, scheduledStart: '2026-11-20T03:30:00Z' };
     const friend = (date: string, timeZone: string) =>
-      openItem(date, { workstreamId: 'ws_friend' as never, due: { date, timeZone } });
+      openItem(date, { workstreamId: 'ws_us' as never, due: { date, timeZone } });
     expect(incrementsCarryCount(morning, review, friend('2026-11-19', 'America/New_York'))).toBe(
       false,
     );
@@ -329,7 +329,7 @@ describe('02 §7.2 the escalation job', () => {
     checkChanges(result.changes);
     const [issue] = result.issues;
     expect(issue).toMatchObject({
-      workstreamId: 'ws_dry',
+      workstreamId: 'ws_ald',
       status: 'open',
       raisedFrom: { kind: 'escalation', actionItemId: due.id, level: 2 },
       title: escalationIssueTitle(due),
@@ -354,7 +354,7 @@ describe('02 §7.2 the escalation job', () => {
     expect(result.nudgeDrafts).toEqual([
       {
         ref: 'A-0152',
-        to: 'per_friend',
+        to: 'per_client',
         text: `A reminder that A-0152 "${friends.title}" is due on 2026-11-21.`,
       },
     ]);
