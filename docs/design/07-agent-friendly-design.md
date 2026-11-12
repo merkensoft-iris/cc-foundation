@@ -113,6 +113,8 @@ cc-axi update [--check]                             prints the version: cc-axi s
                                                     with it; shadows the SDK's npm-based built-in (ADR 0002, OQ-07-02)
 ```
 
+`onboarding apply --dry-run` calls `onboarding.preview` and needs only `read`; committing calls `onboarding.apply` and needs `onboarding:apply` (§5 rule 3). A profile from the CLI cannot carry the app-only answers (01 §3.1 rows 9, 10, 66 and 67): `workspace.backup` in it is `E_USAGE`.
+
 No command approves, confirms, attests, rejects or decides, and none approves, rejects or defers a development request, runs a restore or activates a connector. Those are human-only ([04 §4.3](04-platform.md#43-who-counts-as-the-user)).
 
 `items update --propose-due <date> --reason "<text>"` does not move the due date. It records an `action_item.due_proposed` event with the proposed date and the reason, and leaves the item unchanged. The proposal shows in the item's history (`items history`, C-03-04) for the user to re-plan in the app. The same proposal again, or the date the item already has, is `no-op` (owner decision, 12 Nov 2026).

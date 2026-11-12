@@ -433,7 +433,7 @@ Rules:
    - The E2 issue is raised once per item while it is open, on the item's workstream, and linked from the item (`links.issueIds`), so dropping the item resolves it ([03 §7](03-decisions-and-action-items.md#7-action-item-lifecycle)).
    - E3's "overdue more than 30 days" counts from the overdue instant of ADR 0001 decision 7; its priority or WIG is an `active` goal of kind `priority` or `wig` with health `off_track`.
    - "Quarter end" is the end of a calendar quarter in the workspace time zone, passed after the item reached E3.
-   - The thresholds are the workstream's Q-T08 answers; until onboarding stores them (P1-12), the defaults.
+   - The thresholds are the workstream's Q-T08 answers, stored with the onboarding answers (P1-12); a client engagement or project with a parent takes its parent's, and a workstream onboarding did not tailor takes the defaults.
    - A level change is one `action_item.escalated` event with its triggers; the event marks the day it asked for a notification.
 
 ## 8. Reference scenario: series and scorecards
