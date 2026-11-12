@@ -145,6 +145,7 @@ export interface MeetingView {
   readonly title: string;
   readonly agendaTemplateId: string;
   readonly timeZone: string;
+  readonly workstreams: readonly { id: string; slug: string; name: string }[];
   readonly sections: readonly MeetingSectionView[];
   readonly readBack: readonly ReadBackLine[];
 }

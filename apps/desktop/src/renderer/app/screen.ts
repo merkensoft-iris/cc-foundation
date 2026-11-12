@@ -44,14 +44,19 @@ export function errorText(error: unknown): string {
 
 /**
  * Runs an action: calls `run`, flashes `done` when it succeeds or the error when it fails,
- * and reloads the screen either way, so it shows the records as they now are.
+ * and reloads the screen either way, so it shows the records as they now are. Resolves to
+ * whether it succeeded, so a form can keep what was typed when it did not.
  */
-export async function act(ui: Ui, run: () => Promise<unknown>, done: string): Promise<void> {
+export async function act(ui: Ui, run: () => Promise<unknown>, done: string): Promise<boolean> {
+  let ok: boolean;
   try {
     await run();
     ui.flash(done, 'ok');
+    ok = true;
   } catch (error) {
     ui.flash(errorText(error), 'error');
+    ok = false;
   }
   await ui.reload();
+  return ok;
 }

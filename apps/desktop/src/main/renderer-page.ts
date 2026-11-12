@@ -212,6 +212,17 @@ td {
   align-items: flex-end;
   margin: var(--cc-pad) 0;
 }
+.form fieldset {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--cc-pad);
+  align-items: flex-end;
+  border: 1px solid var(--cc-color-border, #8884);
+  border-radius: var(--cc-radius-small, 4px);
+}
+.form fieldset .field input {
+  min-width: 7rem;
+}
 .field {
   display: flex;
   flex-direction: column;

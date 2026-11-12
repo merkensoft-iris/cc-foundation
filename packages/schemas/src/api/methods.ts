@@ -858,6 +858,10 @@ export const meetingsGet = method({
     title: z.string().min(1),
     agendaTemplateId: z.string().min(1),
     timeZone: z.string().min(1),
+    /** The series' workstreams; an output in a section shared by several names one of them. */
+    workstreams: z.array(
+      z.strictObject({ id: z.string().min(1), slug: Slug, name: z.string().min(1) }),
+    ),
     sections: z.array(MeetingSection),
     readBack: z.array(ReadBackLine),
   }),

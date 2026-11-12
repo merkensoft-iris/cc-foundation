@@ -261,6 +261,7 @@ export interface MeetingView {
   readonly title: string;
   readonly agendaTemplateId: string;
   readonly timeZone: string;
+  readonly workstreams: readonly { id: string; slug: string; name: string }[];
   readonly sections: readonly MeetingViewSection[];
   readonly readBack: readonly {
     kind: 'action_item' | 'decision';
@@ -743,6 +744,12 @@ export class Meetings {
         title: series.name,
         agendaTemplateId: series.agendaTemplateId,
         timeZone: workspaceTimeZone(tx),
+        workstreams: series.workstreamIds.flatMap((id) => {
+          const workstream = tx.get('workstreams', id);
+          return workstream === undefined
+            ? []
+            : [{ id: workstream.id, slug: workstream.slug, name: workstream.name }];
+        }),
         sections,
         readBack,
       };

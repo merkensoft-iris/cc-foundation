@@ -26,6 +26,7 @@ import {
   localTime,
   page,
   section,
+  select,
   stateChip,
 } from '../ui/parts.js';
 import { h, type VNode } from '../ui/vnode.js';
@@ -42,6 +43,8 @@ export interface CaptureForm {
   title: string;
   due: string;
   doneMeans: string;
+  /** The workstream slug of an item captured in a section shared by several workstreams. */
+  workstream: string;
 }
 
 export interface MeetingsState {
@@ -49,7 +52,6 @@ export interface MeetingsState {
   run?: {
     readonly view: MeetingView;
     readonly clock: RunnerClock;
-    readonly names: Readonly<Record<string, string>>;
     readonly forms: Record<string, CaptureForm>;
     readonly onBehalf: Record<string, string>;
   };
@@ -139,7 +141,14 @@ function captureForms(
   const allowsNote = section.allowedOutputs.includes('note');
   if (!allowsItem && !allowsNote) return null;
   const key = sectionKey(section);
-  const form = (run.forms[key] ??= { note: '', title: '', due: '', doneMeans: '' });
+  const shared = section.workstreamId === undefined && run.view.workstreams.length > 1;
+  const form = (run.forms[key] ??= {
+    note: '',
+    title: '',
+    due: '',
+    doneMeans: '',
+    workstream: run.view.workstreams[0]?.slug ?? '',
+  });
   const ref = run.view.meeting.ref;
   return h(
     'div',
@@ -154,7 +163,6 @@ function captureForms(
             () => {
               const text = form.note.trim();
               if (text === '') return;
-              form.note = '';
               void act(
                 ui,
                 () =>
@@ -164,7 +172,11 @@ function captureForms(
                     output: { kind: 'note', text },
                   }),
                 'Note captured.',
-              );
+              ).then((ok) => {
+                if (!ok) return;
+                form.note = '';
+                ui.render();
+              });
             },
             { test: 'add-note' },
           ),
@@ -185,6 +197,15 @@ function captureForms(
           field('Done means', form.doneMeans, (value) => (form.doneMeans = value), {
             test: 'capture-done-means',
           }),
+          shared
+            ? select(
+                'Workstream',
+                form.workstream,
+                run.view.workstreams.map((w) => ({ value: w.slug, label: w.name })),
+                (value) => (form.workstream = value),
+                'capture-workstream',
+              )
+            : null,
           button(
             'Capture item',
             () => {
@@ -197,15 +218,19 @@ function captureForms(
                 title: form.title.trim(),
                 due: form.due,
                 doneMeans: form.doneMeans.trim(),
+                ...(shared && form.workstream !== '' ? { workstream: form.workstream } : {}),
               };
-              form.title = '';
-              form.due = '';
-              form.doneMeans = '';
               void act(
                 ui,
                 () => ui.call('meetings.capture', { ref, section: keyParams(section), output }),
                 'Item captured as a draft; the read-back accepts it.',
-              );
+              ).then((ok) => {
+                if (!ok) return;
+                form.title = '';
+                form.due = '';
+                form.doneMeans = '';
+                ui.render();
+              });
             },
             { test: 'capture-item' },
           ),
@@ -324,7 +349,7 @@ function runnerView(run: NonNullable<MeetingsState['run']>, ui: Ui): VNode {
   const label = (s: MeetingSectionView) =>
     s.workstreamId === undefined
       ? s.title
-      : `${s.title}: ${run.names[s.workstreamId] ?? s.workstreamId}`;
+      : `${s.title}: ${view.workstreams.find((w) => w.id === s.workstreamId)?.name ?? s.workstreamId}`;
   const total = view.sections.reduce((sum, s) => sum + s.timeboxMinutes, 0);
   return page(
     `${view.title} ${meeting.ref}`,
@@ -412,33 +437,12 @@ export const meetingsScreen: Screen<MeetingsState> & { readonly ticks: true } = 
       return { week };
     }
     const view = await ui.call<MeetingView>('meetings.get', { ref: route.ref });
-    const ids = [
-      ...new Set(
-        view.sections.flatMap((s) => (s.workstreamId === undefined ? [] : [s.workstreamId])),
-      ),
-    ];
-    const names: Record<string, string> = {};
-    await Promise.all(
-      ids.map(async (id) => {
-        try {
-          const { workstream } = await ui.call<{ workstream: { name: string } }>(
-            'workstreams.get',
-            {
-              workstream: id,
-            },
-          );
-          names[id] = workstream.name;
-        } catch {
-          names[id] = id;
-        }
-      }),
-    );
     const kept = ui.keep(`meeting:${view.meeting.ref}`, () => ({
       clock: { current: 0, startedAt: ui.now() } as RunnerClock,
       forms: {} as Record<string, CaptureForm>,
       onBehalf: {} as Record<string, string>,
     }));
-    return { run: { view, names, ...kept } };
+    return { run: { view, ...kept } };
   },
   view(state, ui) {
     if (state.run !== undefined) return runnerView(state.run, ui);

@@ -73,9 +73,12 @@ function riskForm(state: IssuesState, ui: Ui): VNode {
           description: form.description.trim(),
           trigger: form.trigger.trim(),
         };
-        form.description = '';
-        form.trigger = '';
-        void act(ui, () => ui.call('risks.record', params), 'Risk recorded.');
+        void act(ui, () => ui.call('risks.record', params), 'Risk recorded.').then((ok) => {
+          if (!ok) return;
+          form.description = '';
+          form.trigger = '';
+          ui.render();
+        });
       },
       { test: 'record-risk', primary: true },
     ),
@@ -104,8 +107,11 @@ function issueForm(state: IssuesState, ui: Ui): VNode {
           return;
         }
         const params = { workstream: form.workstream, title: form.title.trim() };
-        form.title = '';
-        void act(ui, () => ui.call('issues.raise', params), 'Issue raised.');
+        void act(ui, () => ui.call('issues.raise', params), 'Issue raised.').then((ok) => {
+          if (!ok) return;
+          form.title = '';
+          ui.render();
+        });
       },
       { test: 'raise-issue' },
     ),

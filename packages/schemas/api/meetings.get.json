@@ -301,6 +301,23 @@
         "title": { "type": "string", "minLength": 1 },
         "agendaTemplateId": { "type": "string", "minLength": 1 },
         "timeZone": { "type": "string", "minLength": 1 },
+        "workstreams": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": { "type": "string", "minLength": 1 },
+              "slug": {
+                "type": "string",
+                "pattern": "^[a-z0-9][a-z0-9-]*$",
+                "description": "Lower-case slug, unique in the workspace"
+              },
+              "name": { "type": "string", "minLength": 1 }
+            },
+            "required": ["id", "slug", "name"],
+            "additionalProperties": false
+          }
+        },
         "sections": {
           "type": "array",
           "items": {
@@ -359,7 +376,15 @@
           }
         }
       },
-      "required": ["meeting", "title", "agendaTemplateId", "timeZone", "sections", "readBack"],
+      "required": [
+        "meeting",
+        "title",
+        "agendaTemplateId",
+        "timeZone",
+        "workstreams",
+        "sections",
+        "readBack"
+      ],
       "additionalProperties": false
     }
   },

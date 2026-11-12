@@ -94,6 +94,7 @@ export function registerMeetingHandlers(
         allowedOutputs: [...section.allowedOutputs],
         rows: section.rows.map((row) => ({ ...row, flags: [...row.flags] })),
       })),
+      workstreams: [...view.workstreams],
       readBack: [...view.readBack],
     };
   });

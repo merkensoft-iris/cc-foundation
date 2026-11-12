@@ -31,6 +31,10 @@ function dailyStart(state: string, extra: Partial<MeetingInstance> = {}): Meetin
     title: 'Daily start',
     agendaTemplateId: 'agenda.portfolio.daily-start@1',
     timeZone: 'Asia/Kolkata',
+    workstreams: [
+      { id: 'ws_ald', slug: 'alderwick', name: 'Alderwick' },
+      { id: 'ws_qlm', slug: 'quillmarsh', name: 'Quillmarsh' },
+    ],
     sections: [
       {
         sectionId: 'attention',
@@ -170,6 +174,9 @@ describe('the runner', () => {
     type(byTest(form, 'capture-title'), 'Call the venue');
     type(byTest(form, 'capture-due'), '2026-11-14');
     type(byTest(form, 'capture-done-means'), 'The venue is booked');
+    // The section is shared by both workstreams of the meeting, so the item names its own.
+    expect(byTest(form, 'capture-workstream').props.value).toBe('alderwick');
+    type(byTest(form, 'capture-workstream'), 'quillmarsh');
     await click(app, byTest(form, 'capture-item'));
     expect(app.callsOf('meetings.capture')).toEqual([
       {
@@ -185,6 +192,7 @@ describe('the runner', () => {
           title: 'Call the venue',
           due: '2026-11-14',
           doneMeans: 'The venue is booked',
+          workstream: 'quillmarsh',
         },
       },
     ]);

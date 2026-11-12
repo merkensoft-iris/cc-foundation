@@ -304,6 +304,7 @@ function withMeetings(test: TestCore, ids: readonly string[]): void {
 
 interface MeetingGet {
   meeting: { ref: string; state: string };
+  workstreams: { id: string; slug: string; name: string }[];
   title: string;
   sections: {
     sectionId: string;
@@ -336,6 +337,7 @@ describe('the Meetings screen (02 §4.7, §5.7, §6)', () => {
     expect(started.meeting.state).toBe('in_progress');
     const runner = await user<MeetingGet>('meetings.get', { ref });
     expect(runner.sections.length).toBeGreaterThan(1);
+    expect(runner.workstreams.map((w) => w.slug)).toEqual(['alderwick', 'quillmarsh']);
     expect(runner.sections.every((s) => s.title.length > 0 && s.timeboxMinutes >= 0)).toBe(true);
     const capturing = runner.sections.find(
       (s) => s.allowedOutputs.includes('action_item') && s.allowedOutputs.includes('note'),
