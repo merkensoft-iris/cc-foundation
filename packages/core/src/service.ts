@@ -36,8 +36,12 @@ import {
 import type { Logger } from './logger.js';
 import { silentLogger } from './logger.js';
 import { registerItemHandlers } from './handlers/items.js';
+import { registerMeetingHandlers } from './handlers/meetings.js';
+import { registerPrincipalHandlers } from './handlers/principals.js';
 import { registerReadHandlers } from './handlers/reads.js';
+import { registerReviewHandlers } from './handlers/review.js';
 import { registerWriteHandlers } from './handlers/writes.js';
+import { Meetings } from './meetings.js';
 import { Principals } from './principals.js';
 import { StorePrincipalDirectory } from './store-principals.js';
 import { StoreRecordStore, type InstalledActions } from './store-records.js';
@@ -180,6 +184,9 @@ async function serve(options: CoreOptions, basics: Basics): Promise<CoreService>
   registerItemHandlers(dispatcher, records);
   registerReadHandlers(dispatcher, store, clock);
   registerWriteHandlers(dispatcher, records, store, clock);
+  registerReviewHandlers(dispatcher, records, store);
+  registerMeetingHandlers(dispatcher, new Meetings(store, { clock }), store, clock);
+  registerPrincipalHandlers(dispatcher, principals);
   options.register?.(dispatcher, handle);
 
   const api = new LocalApiServer({

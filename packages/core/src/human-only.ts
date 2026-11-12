@@ -237,6 +237,14 @@ export const HUMAN_ONLY_OPERATIONS: readonly HumanOnlyOperation[] = [
     link: 'app',
     screen: 'Settings → Backups',
   }),
+  op({
+    method: 'goals.update',
+    operation: 'editing a goal',
+    spec: '04 §4.3, 03 §5.3, owner decision Q2, AC-03-10',
+    link: 'app',
+    target: 'ref',
+    screen: 'Scorecard → Goals',
+  }),
 ];
 
 const BY_METHOD = new Map(HUMAN_ONLY_OPERATIONS.map((entry) => [entry.method, entry]));

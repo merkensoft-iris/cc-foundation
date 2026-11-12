@@ -34,6 +34,7 @@ const TABLE_OF: Partial<Record<EntityKind, TableName>> = {
   goal: 'goals',
   measure_value: 'measure_values',
   meeting_instance: 'meeting_instances',
+  workstream: 'workstreams',
 };
 
 /** The table whose records carry each HumanRef kind (03 §3); meetings arrive with P1-07. */

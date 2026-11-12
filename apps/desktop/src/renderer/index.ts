@@ -1,14 +1,19 @@
 /// <reference lib="dom" />
 /**
  * @cc/desktop renderer (04 §3): sandboxed, no Node, no network; it reaches the app only
- * through `window.cc` (rule D3). This is the shell's placeholder page: it shows the start
- * mode, whether the core answers, and the last deep link opened. The screens of 09 P1-11
- * (React, with the engine's slots through `@cc/ui-sdk`) replace it.
+ * through `window.cc` (rule D3). It shows the start mode, the Rebuild now strip, and the
+ * screens of 09 P1-11 (`app/app.ts`), opening the screen a `commandcenter://` link names.
  */
-import type { CcBridge, CcError, RebuildState, Route, StartMode } from './bridge.js';
+import { App } from './app/app.js';
+import { routeOfLink } from './app/routes.js';
+import type { CcBridge, RebuildState, StartMode } from './bridge.js';
 import { describeRebuild } from './rebuild-view.js';
+import { mount } from './ui/dom.js';
 
 export const PROCESS = 'renderer';
+
+/** How often a screen with a clock (the meeting runner) is drawn again. */
+const TICK_MS = 15_000;
 
 declare global {
   interface Window {
@@ -19,10 +24,6 @@ declare global {
 function text(id: string, value: string): void {
   const element = document.getElementById(id);
   if (element !== null) element.textContent = value;
-}
-
-function describeRoute(route: Route): string {
-  return route.kind === 'home' ? 'Opened: Home' : `Opened: ${route.kind} ${route.target}`;
 }
 
 /** Developer mode is labelled on every window and cannot be dismissed (ADR 0004 decision 7). */
@@ -51,12 +52,18 @@ function showRebuild(state: RebuildState): void {
   show('rebuild-later', view.later);
 }
 
-function isCcError(value: unknown): value is CcError {
-  return typeof value === 'object' && value !== null && 'code' in value && 'message' in value;
-}
-
 async function start(): Promise<void> {
-  window.cc.onNavigate((route) => text('route', describeRoute(route)));
+  const container = document.getElementById('app');
+  if (container === null) return;
+  const app = new App({
+    call: (method, params) => window.cc.invoke(method, params),
+    render: (node) => mount(container, node),
+  });
+  let navigated = false;
+  window.cc.onNavigate((route) => {
+    navigated = true;
+    void app.go(routeOfLink(route));
+  });
   window.cc.onRebuildState(showRebuild);
   document
     .getElementById('rebuild-now')
@@ -64,20 +71,16 @@ async function start(): Promise<void> {
   document
     .getElementById('rebuild-later')
     ?.addEventListener('click', () => void window.cc.rebuild('later').then(showRebuild));
+  setInterval(() => {
+    // Only when nothing is being typed: a render replaces the inputs.
+    const typing = document.activeElement?.matches('input, textarea, select') ?? false;
+    if (app.ticks && !typing) app.render();
+  }, TICK_MS);
   const shell = await window.cc.shell();
   showMode(shell.mode);
   void window.cc.rebuild('state').then(showRebuild);
-  try {
-    await window.cc.invoke('home.get', {});
-    text('core-status', 'Core connected.');
-  } catch (error) {
-    if (isCcError(error) && error.code !== 'E_APP_NOT_RUNNING' && error.code !== 'E_CRASH') {
-      // The core answered, with an error: it is running. Home arrives with the screens (P1-11).
-      text('core-status', `Core connected (home.get: ${error.code}).`);
-    } else {
-      text('core-status', `Core not available: ${isCcError(error) ? error.message : 'unknown'}`);
-    }
-  }
+  // A deep link that opened the app may already have chosen the screen.
+  if (!navigated) await app.go({ screen: 'home' });
 }
 
 void start();

@@ -34,7 +34,8 @@ describe('the human-only catalogue (04 §4.3)', () => {
     // 04 §4.3 rule 3, in order: confirmations; claims (confirm, attest, reject); decisions;
     // draft items and drops; meeting read-back; connector install, update, uninstall;
     // scopes; browser sessions; discovery start and path; lock activation and rollback;
-    // the ticket-run standing approval; development requests; backups.
+    // the ticket-run standing approval; development requests; backups; and editing a goal
+    // (owner decision Q2: on the Scorecard's Goals tab, so in the app only).
     expect(names).toEqual([
       'confirmations.approve',
       'confirmations.deny',
@@ -65,6 +66,7 @@ describe('the human-only catalogue (04 §4.3)', () => {
       'backups.passphrase',
       'backups.destination',
       'backups.restore',
+      'goals.update',
     ]);
   });
 

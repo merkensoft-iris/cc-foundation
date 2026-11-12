@@ -16,7 +16,7 @@ import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync, renameSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
 
-import type { Caller } from '@cc/domain';
+import { forbidden, isUser, localDate, localDateTime, type Caller } from '@cc/domain';
 import { findPack } from '@cc/frameworks';
 import {
   agendaTemplate,
@@ -69,7 +69,7 @@ import { blobPath, type ReadTx, type Store } from '@cc/store';
 import type { Clock } from './clock.js';
 import { domainContext } from './domain.js';
 import { CoreError } from './errors.js';
-import type { EventOnly, RecordView } from './records.js';
+import type { CommandOutcome, EventOnly, RecordView } from './records.js';
 import { StoreRecordStore } from './store-records.js';
 
 export interface MeetingsOptions {
@@ -231,6 +231,101 @@ function absorbedOf(tx: ReadTx, instance: MeetingInstance): AbsorbedMeeting[] {
       packSections: packSectionsOf(tx, series),
     };
   });
+}
+
+/** A row of the week view. */
+export interface MeetingListRow {
+  readonly ref: string;
+  readonly title: string;
+  readonly start: string;
+  readonly end: string;
+  readonly state: MeetingInstance['state'];
+  readonly agendaTemplateId: string;
+}
+
+export interface MeetingViewSection {
+  readonly sectionId: string;
+  readonly workstreamId?: string;
+  readonly absorbedFrom?: string;
+  readonly title: string;
+  readonly type: string;
+  readonly timeboxMinutes: number;
+  readonly status: 'pending' | 'done' | 'skipped';
+  readonly allowedOutputs: readonly string[];
+  readonly rows: readonly { ref: string; title: string; flags: readonly string[] }[];
+}
+
+/** What the meeting runner shows (`meetings.get`). */
+export interface MeetingView {
+  readonly meeting: MeetingInstance;
+  readonly title: string;
+  readonly agendaTemplateId: string;
+  readonly timeZone: string;
+  readonly workstreams: readonly { id: string; slug: string; name: string }[];
+  readonly sections: readonly MeetingViewSection[];
+  readonly readBack: readonly {
+    kind: 'action_item' | 'decision';
+    ref: string;
+    owner: string;
+    ownerPresent: boolean;
+    deliverable: string;
+    due?: string;
+    doneMeans?: string;
+    state: string;
+  }[];
+}
+
+export interface DismissOutcome {
+  readonly status: 'ok' | 'no-op';
+  /** The local date of the daily start the entry returns to. */
+  readonly until: string;
+}
+
+/** The day after a local date. */
+function nextDate(date: string): string {
+  return new Date(Date.parse(`${date}T00:00:00Z`) + 86_400_000).toISOString().slice(0, 10);
+}
+
+/** The attention entries dismissed in an instance (02 §5.7 rule 2). */
+function dismissedEntries(tx: ReadTx, instance: MeetingInstance): Set<string> {
+  return new Set(
+    tx
+      .history('meeting_instance', instance.id)
+      .filter((event) => event.type === 'meeting_instance.attention_dismissed')
+      .map((event) => (event.after as { entry?: string } | undefined)?.entry)
+      .filter((entry): entry is string => entry !== undefined),
+  );
+}
+
+/** A display title for a ref an agenda input found: the record's title, or the ref itself. */
+function titler(tx: ReadTx): (ref: string) => string {
+  const zone = workspaceTimeZone(tx);
+  return (ref) => {
+    const find = <T extends { ref: string }>(rows: readonly T[]) =>
+      rows.find((row) => row.ref === ref);
+    switch (ref.charAt(0)) {
+      case 'A':
+        return find(tx.list('action_items'))?.title ?? ref;
+      case 'D':
+        return find(tx.list('decisions'))?.question ?? ref;
+      case 'I':
+        return find(tx.list('issues'))?.title ?? ref;
+      case 'R':
+        return find(tx.list('risks'))?.description ?? ref;
+      case 'G':
+        return find(tx.list('goals'))?.title ?? ref;
+      case 'K':
+        return find(tx.list('measures'))?.name ?? ref;
+      case 'M': {
+        const instance = find(tx.list('meeting_instances'));
+        if (instance === undefined) return ref;
+        const name = tx.get('meeting_series', instance.seriesId)?.name ?? instance.seriesId;
+        return `${name} at ${localDateTime(instance.scheduledStart, zone).slice(11, 16)}`;
+      }
+      default:
+        return ref.startsWith('dst:') ? 'US daylight-saving change: check meeting times' : ref;
+    }
+  };
 }
 
 export class Meetings {
@@ -544,6 +639,166 @@ export class Meetings {
         result: outcome,
         changes: outcome.changes,
         events: sightingEvents(outcome.escalation?.reviewed ?? []),
+      };
+    });
+  }
+
+  /**
+   * The week view (09 P1-11): the instances whose local start date, in the workspace's time
+   * zone, falls between `from` and `to` inclusive, earliest first, with their series' names.
+   */
+  list(from: string, to: string): { timeZone: string; meetings: MeetingListRow[] } {
+    return this.#store.read((tx) => {
+      const zone = workspaceTimeZone(tx);
+      const series = new Map(tx.list('meeting_series').map((s) => [s.id as string, s]));
+      const meetings = tx
+        .list('meeting_instances')
+        .filter((instance) => {
+          const date = localDate(instance.scheduledStart, zone);
+          return from <= date && date <= to;
+        })
+        .sort(
+          (a, b) => a.scheduledStart.localeCompare(b.scheduledStart) || a.ref.localeCompare(b.ref),
+        )
+        .map((instance) => {
+          const owner = series.get(instance.seriesId);
+          return {
+            ref: instance.ref,
+            title: owner?.name ?? instance.seriesId,
+            start: instance.scheduledStart,
+            end: instance.scheduledEnd,
+            state: instance.state,
+            agendaTemplateId: owner?.agendaTemplateId ?? 'unknown',
+          };
+        });
+      return { timeZone: zone, meetings };
+    });
+  }
+
+  /**
+   * One meeting as the runner shows it (02 §6, 09 P1-11): its agenda rows with their section
+   * titles, types, timeboxes and allowed outputs, the rows each section's inputs found in the
+   * pre-read snapshot, and the read-back list. Attention entries dismissed in this instance
+   * are left out until tomorrow's daily start (02 §5.7 rule 2, owner decision Q6).
+   */
+  view(ref: string): MeetingView {
+    return this.#records.read((view) => {
+      const { tx } = view;
+      const instance = findInstance(tx, ref);
+      const series = seriesOf(tx, instance);
+      const own = {
+        template: agendaTemplate(series.agendaTemplateId),
+        packSections: packSectionsOf(tx, series),
+      };
+      const absorbed = absorbedOf(tx, instance).map((meeting) => ({
+        instanceId: meeting.instance.id,
+        template: meeting.template,
+        ...(meeting.packSections === undefined ? {} : { packSections: meeting.packSections }),
+      }));
+      const dismissed = dismissedEntries(tx, instance);
+      const title = titler(tx);
+      const sections = instance.agenda.map((row): MeetingViewSection => {
+        const template = sectionTemplateOf(row, own, absorbed);
+        const seen = new Set<string>();
+        const rows = row.inputResults.flatMap((result) =>
+          result.itemRefs
+            .filter((rowRef) => {
+              if (seen.has(rowRef)) return false;
+              seen.add(rowRef);
+              return !(template.type === 'attention' && dismissed.has(rowRef));
+            })
+            .map((rowRef) => ({ ref: rowRef, title: title(rowRef), flags: [...result.flags] })),
+        );
+        return {
+          sectionId: row.sectionId,
+          ...(row.workstreamId === undefined ? {} : { workstreamId: row.workstreamId }),
+          ...(row.absorbedFrom === undefined ? {} : { absorbedFrom: row.absorbedFrom }),
+          title: template.title,
+          type: template.type,
+          timeboxMinutes: row.timeboxMinutes,
+          status: row.status,
+          allowedOutputs: [...template.allowedOutputs],
+          rows,
+        };
+      });
+      const readBack = readBackList({
+        series,
+        instance,
+        selfPersonId: view.selfPersonId,
+        ...this.#outcomeRecords(tx, instance),
+      }).map((line) => ({
+        kind: line.kind,
+        ref: line.ref,
+        owner:
+          line.ownerId === view.selfPersonId
+            ? 'self'
+            : (view.person(line.ownerId)?.displayName ?? line.ownerId),
+        ownerPresent: line.ownerPresent,
+        deliverable: line.deliverable,
+        ...(line.due === undefined ? {} : { due: line.due }),
+        ...(line.doneMeans === undefined ? {} : { doneMeans: line.doneMeans }),
+        state: line.state,
+      }));
+      return {
+        meeting: instance,
+        title: series.name,
+        agendaTemplateId: series.agendaTemplateId,
+        timeZone: workspaceTimeZone(tx),
+        workstreams: series.workstreamIds.flatMap((id) => {
+          const workstream = tx.get('workstreams', id);
+          return workstream === undefined
+            ? []
+            : [{ id: workstream.id, slug: workstream.slug, name: workstream.name }];
+        }),
+        sections,
+        readBack,
+      };
+    });
+  }
+
+  /**
+   * Dismisses an attention entry of a daily start (02 §5.7 rule 2, owner decision Q6): it is
+   * snoozed to tomorrow's daily start, not resolved, so an entry whose cause remains returns the
+   * next day. Recorded as one `meeting_instance.attention_dismissed` event; the user only.
+   */
+  dismiss(caller: Caller, ref: string, entry: string): DismissOutcome {
+    if (!isUser(caller)) {
+      throw forbidden('02 §5.7', 'only the user dismisses an attention entry');
+    }
+    return this.#records.command(caller.actor, (view): CommandOutcome<DismissOutcome> => {
+      const { tx } = view;
+      const instance = findInstance(tx, ref);
+      const series = seriesOf(tx, instance);
+      const template = agendaTemplate(series.agendaTemplateId);
+      const attentionIds = new Set(
+        template.sections.filter((s) => s.type === 'attention').map((s) => s.id),
+      );
+      const listed = instance.agenda
+        .filter((row) => attentionIds.has(row.sectionId))
+        .some((row) => row.inputResults.some((result) => result.itemRefs.includes(entry)));
+      if (!listed) {
+        throw new CoreError('E_NOT_FOUND', `${instance.ref} lists no attention entry ${entry}`, [
+          "Dismiss an entry of the daily start's attention list",
+        ]);
+      }
+      const zone = workspaceTimeZone(tx);
+      const today = localDate(instance.scheduledStart, zone);
+      const until = nextDate(today);
+      if (dismissedEntries(tx, instance).has(entry)) {
+        return { result: { status: 'no-op' as const, until }, changes: [] };
+      }
+      return {
+        result: { status: 'ok' as const, until },
+        changes: [],
+        events: [
+          {
+            type: 'meeting_instance.attention_dismissed',
+            entity: { kind: 'meeting_instance', id: instance.id, ref: instance.ref },
+            after: { entry, until },
+            actor: caller.actor,
+            correlationId: instance.id,
+          },
+        ],
       };
     });
   }

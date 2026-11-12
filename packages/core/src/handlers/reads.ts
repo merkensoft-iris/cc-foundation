@@ -5,11 +5,12 @@
  * `sensitiveAccess` (07 §5, C-03-03); records it may not see are left out of lists and counts
  * and are "not found" by ref.
  *
- * Not served here: today's meetings and meeting search (meeting records arrive with P1-07 and
- * P1-08), confirmations and sessions counts (P1-13/P2-01 and P4), so those read as empty.
+ * Not served here: meeting search, confirmations and sessions counts (P1-13/P2-01 and P4), so
+ * those read as empty. Today's meetings come from the rhythm engine's instances (P1-07, P1-08).
  */
 import path from 'node:path';
 
+import { localDateTime } from '@cc/domain';
 import type { ActionItem, DomainEvent, ItemSummary } from '@cc/schemas';
 import { methods } from '@cc/schemas';
 import { exportWorkspace, MANIFEST_NAME, type ReadTx, type Store } from '@cc/store';
@@ -105,6 +106,42 @@ function itemHistory(tx: ReadTx, item: ActionItem): DomainEvent[] {
     .map(withoutVersion);
 }
 
+/** The states of an instance that is on today's list: held, about to be, or being held. */
+const HELD_STATES: ReadonlySet<string> = new Set([
+  'planned',
+  'scheduled',
+  'prepared',
+  'in_progress',
+  'completed',
+]);
+
+/**
+ * Today's meetings for the home view (07 §4.3): instances whose local start is today in the
+ * workspace's time zone, earliest first, from series whose workstreams the caller sees.
+ */
+function todaysMeetings(read: Read, zone: string): { ref: string; time: string; title: string }[] {
+  const today = localToday(read.now, zone);
+  return read.tx
+    .list('meeting_instances')
+    .filter((instance) => HELD_STATES.has(instance.state))
+    .map((instance) => ({
+      instance,
+      series: read.tx.get('meeting_series', instance.seriesId),
+      local: localDateTime(instance.scheduledStart, zone),
+    }))
+    .filter(({ local }) => local.slice(0, 10) === today)
+    .filter(
+      ({ series }) =>
+        series !== undefined && series.workstreamIds.some((id) => read.visibility.workstream(id)),
+    )
+    .sort((a, b) => a.instance.scheduledStart.localeCompare(b.instance.scheduledStart))
+    .map(({ instance, series, local }) => ({
+      ref: instance.ref,
+      time: local.slice(11, 16),
+      title: series?.name ?? instance.seriesId,
+    }));
+}
+
 export function registerReadHandlers(dispatcher: Dispatcher, store: Store, clock: Clock): void {
   const read = <T>(context: HandlerContext, run: (read: Read) => T): T =>
     reading(store, clock, context, run);
@@ -126,8 +163,7 @@ export function registerReadHandlers(dispatcher: Dispatcher, store: Store, clock
         // 07 §4.3 names the workspace by its ID without the prefix: wsp_main is "main".
         workspace: workspace.id.replace(/^wsp_/, ''),
         now: localWithOffset(r.now, zone),
-        // Meeting instances are records of the rhythm engine and agendas (P1-07, P1-08).
-        today: [],
+        today: todaysMeetings(r, zone),
         attention: {
           overdue: active.filter((item) => displayState(item, r.nowIso) === 'overdue').length,
           atRisk: active.filter((item) => item.health === 'at_risk' || item.health === 'off_track')
