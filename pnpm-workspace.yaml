@@ -1,0 +1,8 @@
+packages:
+  - apps/*
+  - packages/*
+
+# Dependency install scripts run only when listed here (pnpm 12). electron-winstaller comes
+# with electron-builder (@cc/build) for Squirrel.Windows, which CC does not use (NSIS).
+allowBuilds:
+  electron-winstaller: false

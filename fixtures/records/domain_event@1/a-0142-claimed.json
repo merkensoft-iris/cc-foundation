@@ -1,0 +1,21 @@
+{
+  "id": "evt_01",
+  "at": "2026-11-12T05:01:00Z",
+  "actor": {
+    "kind": "system",
+    "component": "review"
+  },
+  "type": "action_item.claimed",
+  "entity": {
+    "kind": "action_item",
+    "id": "act_a0142",
+    "ref": "A-0142"
+  },
+  "before": {
+    "lifecycle": "waiting"
+  },
+  "after": {
+    "lifecycle": "claimed_done"
+  },
+  "correlationId": "run_03"
+}

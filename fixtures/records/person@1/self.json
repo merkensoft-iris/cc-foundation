@@ -1,0 +1,17 @@
+{
+  "id": "per_self",
+  "displayName": "Self",
+  "role": "self",
+  "emails": ["self@example.com"],
+  "timeZone": "Asia/Kolkata",
+  "consents": [],
+  "createdAt": "2026-11-04T03:30:00Z",
+  "createdBy": {
+    "kind": "user"
+  },
+  "updatedAt": "2026-11-04T03:30:00Z",
+  "updatedBy": {
+    "kind": "user"
+  },
+  "version": 1
+}

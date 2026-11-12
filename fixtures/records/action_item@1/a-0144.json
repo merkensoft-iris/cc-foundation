@@ -1,0 +1,113 @@
+{
+  "id": "act_a0144",
+  "ref": "A-0144",
+  "workstreamId": "ws_qlm",
+  "kind": "todo",
+  "title": "Fix the contact form on the Quillmarsh site",
+  "doneMeans": "The contact form sends messages again and shows its confirmation after a submission.",
+  "evidenceRequirements": [
+    {
+      "id": "er1",
+      "description": "PR merged in the site repository",
+      "required": true,
+      "acceptedKinds": ["external_task"],
+      "check": {
+        "type": "external_task_state",
+        "system": "firstmate",
+        "taskId": "quillmarsh-contact-form",
+        "expect": "merged"
+      }
+    },
+    {
+      "id": "er2",
+      "description": "Contact page returns 200 and shows \"Thank you\" after a test submission",
+      "required": true,
+      "acceptedKinds": ["url", "note"],
+      "check": {
+        "type": "url_reachable",
+        "url": "https://www.quillmarsh.example/contact",
+        "expectStatus": [200],
+        "expectText": "Thank you"
+      }
+    }
+  ],
+  "verificationPolicy": "require_review",
+  "ownerId": "per_self",
+  "reviewerId": "per_self",
+  "informIds": [],
+  "due": {
+    "date": "2026-11-18",
+    "timeZone": "Asia/Kolkata"
+  },
+  "lifecycle": "waiting",
+  "health": "on_track",
+  "waitingOn": {
+    "kind": "external_agent",
+    "ref": "quillmarsh-contact-form",
+    "since": "2026-11-12T06:00:00Z"
+  },
+  "execution": {
+    "mode": "mixed",
+    "steps": [
+      {
+        "id": "s1",
+        "order": 1,
+        "title": "Fix the contact form and merge the PR",
+        "performer": {
+          "kind": "external_agent",
+          "system": "firstmate",
+          "principalId": "agt_firstmate_main",
+          "handoff": "Intent: the contact form sends messages again and shows its confirmation. Acceptance: PR merged in the site repository; the contact page returns 200 and shows \"Thank you\" after a test submission (checked by the user). Report back: cc-axi items claim A-0144 --evidence <pr-url> --principal firstmate-main"
+        },
+        "dependsOn": [],
+        "satisfies": ["er1"],
+        "confirmation": "policy",
+        "status": "waiting_external",
+        "runIds": []
+      },
+      {
+        "id": "s2",
+        "order": 2,
+        "title": "Submit a test message through the contact form",
+        "performer": {
+          "kind": "user"
+        },
+        "dependsOn": ["s1"],
+        "satisfies": ["er2"],
+        "confirmation": "policy",
+        "status": "pending",
+        "runIds": []
+      }
+    ]
+  },
+  "source": {
+    "kind": "manual"
+  },
+  "links": {
+    "goalIds": [],
+    "measureIds": [],
+    "decisionIds": [],
+    "issueIds": []
+  },
+  "privacy": "normal",
+  "replannedCount": 0,
+  "escalationLevel": 0,
+  "externalRefs": [
+    {
+      "system": "firstmate",
+      "home": "/home/user/firstmate",
+      "taskId": "quillmarsh-contact-form"
+    }
+  ],
+  "carryCount": 0,
+  "createdAt": "2026-11-11T09:00:00Z",
+  "createdBy": {
+    "kind": "user"
+  },
+  "updatedAt": "2026-11-12T06:00:00Z",
+  "updatedBy": {
+    "kind": "agent",
+    "principalId": "agt_firstmate_main"
+  },
+  "version": 3
+}

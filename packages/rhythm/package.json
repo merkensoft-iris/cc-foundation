@@ -1,0 +1,27 @@
+{
+  "name": "@cc/rhythm",
+  "version": "0.0.0",
+  "private": true,
+  "description": "RRULE expansion, instance state machine, placement, carry-forward, escalation (pure, D4)",
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "@cc/domain": "workspace:*",
+    "@cc/schemas": "workspace:*",
+    "rrule-temporal": "2.2.8"
+  },
+  "devDependencies": {
+    "ical.js": "2.2.1"
+  }
+}

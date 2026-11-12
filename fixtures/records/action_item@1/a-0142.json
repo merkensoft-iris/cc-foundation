@@ -1,0 +1,116 @@
+{
+  "id": "act_a0142",
+  "ref": "A-0142",
+  "workstreamId": "ws_ald",
+  "kind": "todo",
+  "title": "Send revised proposal with phased pricing to the consulting lead",
+  "doneMeans": "The revised proposal is sent from the Alderwick mailbox to the lead and filed in the client folder.",
+  "evidenceRequirements": [
+    {
+      "id": "er1",
+      "description": "Sent message to the lead with the proposal attached",
+      "required": true,
+      "acceptedKinds": ["connector_record"],
+      "check": {
+        "type": "connector_query",
+        "bindingId": "bnd_gmail_ald",
+        "action": "search_messages",
+        "input": {
+          "query": "in:sent to:{{lead.email}} subject:\"Revised proposal\" after:2026-11-10"
+        },
+        "expect": {
+          "path": "messages.length",
+          "op": "gte",
+          "value": 1
+        },
+        "retry": {
+          "attempts": 3,
+          "intervalMinutes": 30
+        }
+      }
+    }
+  ],
+  "verificationPolicy": "require_review",
+  "ownerId": "per_self",
+  "reviewerId": "per_self",
+  "informIds": [],
+  "due": {
+    "date": "2026-11-12",
+    "timeZone": "Asia/Kolkata"
+  },
+  "lifecycle": "waiting",
+  "health": "on_track",
+  "waitingOn": {
+    "kind": "confirmation",
+    "ref": "cfm_7q2",
+    "since": "2026-11-11T10:05:00Z"
+  },
+  "execution": {
+    "mode": "mixed",
+    "steps": [
+      {
+        "id": "s1",
+        "order": 1,
+        "title": "Draft the email and attach the proposal",
+        "dependsOn": [],
+        "satisfies": [],
+        "performer": {
+          "kind": "agent",
+          "profile": "drafter",
+          "instructions": "Draft a reply to the lead's last message using the revised proposal; save it as a Gmail draft.",
+          "tools": ["cc_get", "cc_connector_invoke:gmail-alderwick.create_draft"],
+          "budget": {
+            "maxUsd": 0.5,
+            "maxMinutes": 5,
+            "maxToolCalls": 10
+          }
+        },
+        "confirmation": "policy",
+        "status": "succeeded",
+        "runIds": ["run_01"]
+      },
+      {
+        "id": "s2",
+        "order": 2,
+        "title": "Review and send the draft",
+        "dependsOn": ["s1"],
+        "satisfies": ["er1"],
+        "performer": {
+          "kind": "connector",
+          "bindingId": "bnd_gmail_ald",
+          "action": "send_draft",
+          "input": {
+            "draftId": "{{s1.output.draftId}}"
+          }
+        },
+        "confirmation": "always",
+        "status": "waiting_confirmation",
+        "runIds": []
+      }
+    ]
+  },
+  "source": {
+    "kind": "manual"
+  },
+  "links": {
+    "goalIds": [],
+    "measureIds": ["msr_k0003"],
+    "decisionIds": [],
+    "issueIds": []
+  },
+  "carryCount": 0,
+  "replannedCount": 0,
+  "escalationLevel": 0,
+  "privacy": "normal",
+  "externalRefs": [],
+  "createdAt": "2026-11-10T06:30:00Z",
+  "createdBy": {
+    "kind": "user"
+  },
+  "updatedAt": "2026-11-11T10:05:00Z",
+  "updatedBy": {
+    "kind": "system",
+    "component": "scheduler"
+  },
+  "version": 4
+}

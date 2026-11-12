@@ -1,0 +1,18 @@
+{
+  "id": "evd_a0142_er1",
+  "actionItemId": "act_a0142",
+  "requirementId": "er1",
+  "kind": "connector_record",
+  "summary": "Sent message to the lead with the revised proposal attached",
+  "record": {
+    "bindingId": "bnd_gmail_ald",
+    "recordType": "message",
+    "externalId": "msg_18c2f0"
+  },
+  "capturedAt": "2026-11-12T05:00:00Z",
+  "capturedBy": {
+    "kind": "connector",
+    "bindingId": "bnd_gmail_ald",
+    "runId": "run_03"
+  }
+}

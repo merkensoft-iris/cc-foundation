@@ -1,0 +1,23 @@
+{
+  "repoPaths": [],
+  "groundingRefs": [],
+  "status": "active",
+  "principalId": "per_self",
+  "stewardId": "per_self",
+  "timeZone": "Asia/Kolkata",
+  "privacy": "normal",
+  "aiDataPolicy": "allow",
+  "id": "ws_workspace",
+  "slug": "workspace",
+  "name": "Workspace",
+  "kind": "workspace",
+  "createdAt": "2026-11-04T04:10:00Z",
+  "createdBy": {
+    "kind": "user"
+  },
+  "updatedAt": "2026-11-04T04:10:00Z",
+  "updatedBy": {
+    "kind": "user"
+  },
+  "version": 1
+}

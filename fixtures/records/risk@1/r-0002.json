@@ -1,0 +1,19 @@
+{
+  "id": "rsk_r0002",
+  "ref": "R-0002",
+  "workstreamId": "ws_workspace",
+  "description": "Laptop failure: if the machine is lost before an off-machine backup is set, the store is lost",
+  "watcherId": "per_self",
+  "trigger": "No off-machine backup destination 7 days after onboarding",
+  "status": "watching",
+  "reviewCadence": "monthly",
+  "createdAt": "2026-11-04T05:00:00Z",
+  "createdBy": {
+    "kind": "user"
+  },
+  "updatedAt": "2026-11-04T05:00:00Z",
+  "updatedBy": {
+    "kind": "user"
+  },
+  "version": 1
+}

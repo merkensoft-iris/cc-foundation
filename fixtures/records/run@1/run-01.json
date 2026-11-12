@@ -1,0 +1,22 @@
+{
+  "id": "run_01",
+  "kind": "agent",
+  "actionItemId": "act_a0142",
+  "stepId": "s1",
+  "startedAt": "2026-11-11T10:00:00Z",
+  "endedAt": "2026-11-11T10:03:10Z",
+  "status": "succeeded",
+  "actor": {
+    "kind": "agent",
+    "principalId": "agt_orchestrator_drafter",
+    "runId": "run_01"
+  },
+  "usage": {
+    "provider": "anthropic_api",
+    "model": "claude-opus-5-5",
+    "inputTokens": 5200,
+    "outputTokens": 900,
+    "usd": 0.09
+  },
+  "logSha256": "3f00000000000000000000000000000000000000000000000000000000000000"
+}

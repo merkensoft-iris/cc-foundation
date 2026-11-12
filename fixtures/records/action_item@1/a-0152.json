@@ -1,0 +1,135 @@
+{
+  "id": "act_a0152",
+  "ref": "A-0152",
+  "workstreamId": "ws_ald",
+  "kind": "todo",
+  "title": "Sign the statement of work for phase two",
+  "doneMeans": "The client contact has signed the phase-two statement of work, shown by the countersigned copy in the Alderwick mailbox or the client contact's message.",
+  "evidenceRequirements": [
+    {
+      "id": "er1",
+      "description": "The statement of work is signed",
+      "required": true,
+      "acceptedKinds": ["connector_record", "note"]
+    }
+  ],
+  "verificationPolicy": "require_review",
+  "ownerId": "per_client",
+  "reviewerId": "per_self",
+  "informIds": [],
+  "due": {
+    "date": "2026-11-20",
+    "timeZone": "Asia/Kolkata"
+  },
+  "lifecycle": "open",
+  "health": "on_track",
+  "execution": {
+    "mode": "mixed",
+    "steps": [
+      {
+        "id": "s1",
+        "order": 1,
+        "title": "Draft the statement of work from the engagement notes",
+        "performer": {
+          "kind": "agent",
+          "profile": "drafter",
+          "instructions": "Draft the phase-two statement of work from the engagement notes. Never invent scope, prices or dates.",
+          "tools": ["cc_get"],
+          "budget": {
+            "maxUsd": 1,
+            "maxMinutes": 10,
+            "maxToolCalls": 20
+          }
+        },
+        "dependsOn": [],
+        "satisfies": [],
+        "confirmation": "policy",
+        "status": "ready",
+        "runIds": []
+      },
+      {
+        "id": "s2",
+        "order": 2,
+        "title": "Review the statement of work",
+        "performer": {
+          "kind": "user"
+        },
+        "dependsOn": ["s1"],
+        "satisfies": [],
+        "confirmation": "policy",
+        "status": "pending",
+        "runIds": []
+      },
+      {
+        "id": "s3",
+        "order": 3,
+        "title": "Draft an email to the client contact with the statement of work",
+        "performer": {
+          "kind": "connector",
+          "bindingId": "bnd_gmail_ald",
+          "action": "create_draft",
+          "input": {
+            "to": "{{per_client.email}}",
+            "subject": "Statement of work for phase two",
+            "attachments": ["{{s1.output.evidenceIds}}"]
+          }
+        },
+        "dependsOn": ["s2"],
+        "satisfies": [],
+        "confirmation": "policy",
+        "status": "pending",
+        "runIds": []
+      },
+      {
+        "id": "s4",
+        "order": 4,
+        "title": "Send the email",
+        "performer": {
+          "kind": "user"
+        },
+        "dependsOn": ["s3"],
+        "satisfies": [],
+        "confirmation": "policy",
+        "status": "pending",
+        "runIds": []
+      },
+      {
+        "id": "s5",
+        "order": 5,
+        "title": "Sign",
+        "performer": {
+          "kind": "person",
+          "personId": "per_client"
+        },
+        "dependsOn": ["s4"],
+        "satisfies": ["er1"],
+        "confirmation": "policy",
+        "status": "pending",
+        "runIds": []
+      }
+    ]
+  },
+  "source": {
+    "kind": "manual"
+  },
+  "links": {
+    "goalIds": [],
+    "measureIds": [],
+    "decisionIds": [],
+    "issueIds": []
+  },
+  "privacy": "sensitive",
+  "replannedCount": 0,
+  "escalationLevel": 0,
+  "externalRefs": [],
+  "carryCount": 0,
+  "createdAt": "2026-11-12T11:00:00Z",
+  "createdBy": {
+    "kind": "user"
+  },
+  "updatedAt": "2026-11-12T11:05:00Z",
+  "updatedBy": {
+    "kind": "user"
+  },
+  "version": 2
+}

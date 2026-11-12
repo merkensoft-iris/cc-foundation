@@ -1,0 +1,32 @@
+{
+  "id": "ser_daily_start",
+  "name": "Daily start",
+  "cadence": "daily",
+  "rrule": "FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR;BYHOUR=9;BYMINUTE=0",
+  "dtstart": "2026-11-09T09:00",
+  "timeZone": "Asia/Kolkata",
+  "durationMinutes": 10,
+  "workstreamIds": ["ws_ald", "ws_qlm"],
+  "frameworkInstanceIds": [],
+  "backboneMeetingKey": "portfolio.daily-start",
+  "agendaTemplateId": "agenda.portfolio.daily-start@1",
+  "agendaOverrides": [],
+  "attendeeIds": ["per_self"],
+  "chairId": "per_self",
+  "mode": "solo",
+  "absorbs": [],
+  "calendars": [],
+  "prereadLeadMinutes": 30,
+  "reminderMinutes": [15],
+  "graceMinutes": 60,
+  "status": "active",
+  "createdAt": "2026-11-04T04:10:00Z",
+  "createdBy": {
+    "kind": "user"
+  },
+  "updatedAt": "2026-11-04T04:10:00Z",
+  "updatedBy": {
+    "kind": "user"
+  },
+  "version": 1
+}

@@ -1,0 +1,14 @@
+{
+  "name": "@cc/ui-sdk",
+  "version": "2.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./v1": {
+      "types": "./v1.d.ts"
+    },
+    "./v2": {
+      "types": "./v2.d.ts"
+    }
+  }
+}

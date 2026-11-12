@@ -1,0 +1,202 @@
+{
+  "version": 1,
+  "completedSteps": ["workspace", "workstreams", "profiles", "tools", "ai"],
+  "workspace": {
+    "displayName": "Main",
+    "timeZone": "Asia/Kolkata",
+    "workweek": ["MO", "TU", "WE", "TH", "FR"],
+    "workingHours": [
+      {
+        "start": "09:00",
+        "end": "17:30"
+      },
+      {
+        "start": "18:00",
+        "end": "23:00"
+      }
+    ],
+    "protectedBlocks": [
+      {
+        "id": "pb_evening",
+        "label": "Evening block",
+        "rrule": "FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR;BYHOUR=18;BYMINUTE=0",
+        "timeZone": "Asia/Kolkata",
+        "durationMinutes": 300,
+        "policy": "hard"
+      },
+      {
+        "id": "pb_break",
+        "label": "Afternoon break",
+        "rrule": "FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR;BYHOUR=14;BYMINUTE=0",
+        "timeZone": "Asia/Kolkata",
+        "durationMinutes": 60,
+        "policy": "hard"
+      },
+      {
+        "id": "pb_deep_a",
+        "label": "Deep block A",
+        "rrule": "FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR;BYHOUR=9;BYMINUTE=45",
+        "timeZone": "Asia/Kolkata",
+        "durationMinutes": 180,
+        "policy": "soft"
+      }
+    ],
+    "weeklyManagementMinutes": 240,
+    "quietHours": [
+      {
+        "start": "23:30",
+        "end": "08:00"
+      }
+    ]
+  },
+  "workstreams": [
+    {
+      "key": "alderwick",
+      "kind": "company",
+      "name": "Alderwick",
+      "principal": {
+        "kind": "self"
+      },
+      "headcount": 1,
+      "leadershipGroupSize": 1,
+      "hasTeamsUnderLeads": false,
+      "stage": "early_revenue",
+      "businessType": "mixed_services_product",
+      "primaryGoal": "grow_revenue",
+      "goalShape": "few_priorities",
+      "existingFramework": "none",
+      "weightPreference": "light",
+      "confidentiality": "normal"
+    },
+    {
+      "key": "quillmarsh",
+      "kind": "company",
+      "name": "Quillmarsh",
+      "principal": {
+        "kind": "self"
+      },
+      "headcount": 1,
+      "leadershipGroupSize": 1,
+      "hasTeamsUnderLeads": false,
+      "stage": "pre_revenue",
+      "businessType": "product",
+      "primaryGoal": "launch",
+      "goalShape": "few_priorities",
+      "existingFramework": "none",
+      "weightPreference": "light",
+      "confidentiality": "normal"
+    }
+  ],
+  "tools": [
+    {
+      "workstreamKeys": ["alderwick", "quillmarsh"],
+      "category": "calendar",
+      "toolName": "Google Calendar",
+      "accountLabel": "gcal-main",
+      "choice": {
+        "kind": "connector",
+        "connectorId": "google-calendar"
+      }
+    },
+    {
+      "workstreamKeys": ["alderwick"],
+      "category": "email",
+      "toolName": "Gmail",
+      "accountLabel": "gmail-alderwick",
+      "choice": {
+        "kind": "connector",
+        "connectorId": "gmail"
+      }
+    },
+    {
+      "workstreamKeys": ["quillmarsh"],
+      "category": "email",
+      "toolName": "Gmail",
+      "accountLabel": "gmail-quillmarsh",
+      "choice": {
+        "kind": "connector",
+        "connectorId": "gmail"
+      }
+    },
+    {
+      "workstreamKeys": ["alderwick"],
+      "category": "chat",
+      "toolName": "WhatsApp",
+      "accountLabel": "whatsapp-alderwick",
+      "choice": {
+        "kind": "connector",
+        "connectorId": "whatsapp-web"
+      }
+    },
+    {
+      "workstreamKeys": ["alderwick", "quillmarsh"],
+      "category": "social",
+      "toolName": "LinkedIn",
+      "accountLabel": "linkedin-self",
+      "choice": {
+        "kind": "connector",
+        "connectorId": "linkedin"
+      }
+    },
+    {
+      "workstreamKeys": ["alderwick", "quillmarsh"],
+      "category": "social_scheduler",
+      "toolName": "Hootsuite",
+      "accountLabel": "hootsuite-main",
+      "choice": {
+        "kind": "later"
+      }
+    },
+    {
+      "workstreamKeys": ["alderwick"],
+      "category": "cms",
+      "toolName": "WordPress",
+      "accountLabel": "wordpress-alderwick",
+      "choice": {
+        "kind": "connector",
+        "connectorId": "wordpress"
+      }
+    },
+    {
+      "workstreamKeys": ["quillmarsh"],
+      "category": "hosting",
+      "toolName": "Hostinger",
+      "choice": {
+        "kind": "discover"
+      }
+    },
+    {
+      "workstreamKeys": ["quillmarsh", "alderwick"],
+      "category": "code",
+      "toolName": "GitHub",
+      "accountLabel": "github-main",
+      "choice": {
+        "kind": "connector",
+        "connectorId": "github"
+      }
+    },
+    {
+      "workstreamKeys": ["alderwick"],
+      "category": "time_tracking",
+      "toolName": "Toggl Track",
+      "accountLabel": "toggl-main",
+      "choice": {
+        "kind": "connector",
+        "connectorId": "toggl-track"
+      }
+    },
+    {
+      "workstreamKeys": ["alderwick", "quillmarsh"],
+      "category": "task_tracker",
+      "toolName": "Google Sheets",
+      "choice": {
+        "kind": "later"
+      }
+    }
+  ],
+  "ai": {
+    "provider": "claude_cli",
+    "model": "claude-opus-5-5",
+    "dailyBudgetUsd": 5
+  }
+}

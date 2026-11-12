@@ -1,0 +1,36 @@
+{
+  "id": "mtg_m0030",
+  "ref": "M-0030",
+  "seriesId": "ser_ceo_weekly",
+  "occurrenceStart": "2026-11-27T09:30:00Z",
+  "scheduledStart": "2026-11-27T09:30:00Z",
+  "scheduledEnd": "2026-11-27T10:30:00Z",
+  "state": "absorbed",
+  "agenda": [],
+  "outputs": {
+    "decisionIds": [],
+    "actionItemIds": [],
+    "issueIds": [],
+    "riskIds": [],
+    "measureValueIds": [],
+    "goalIds": [],
+    "statusUpdates": [],
+    "verifications": []
+  },
+  "calendarEvents": [],
+  "carriedFrom": [],
+  "absorbedInstanceIds": [],
+  "absorbedBy": "mtg_m0031",
+  "notes": "",
+  "createdAt": "2026-11-04T04:10:00Z",
+  "createdBy": {
+    "kind": "system",
+    "component": "rhythm"
+  },
+  "updatedAt": "2026-11-04T04:10:00Z",
+  "updatedBy": {
+    "kind": "system",
+    "component": "rhythm"
+  },
+  "version": 1
+}

@@ -1,0 +1,19 @@
+{
+  "name": "@cc/test-kit",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Fake clock, fixture HTTP server, fake calendar services, canaries, scenario seeder",
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json"
+  }
+}

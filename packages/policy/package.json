@@ -1,0 +1,19 @@
+{
+  "name": "@cc/policy",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Policy Engine, risk classes, confirmations, standing approvals (pure, D4)",
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json"
+  }
+}

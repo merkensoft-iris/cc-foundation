@@ -1,0 +1,12 @@
+{
+  "id": "wsp_main",
+  "displayName": "Example workspace",
+  "timeZone": "Asia/Kolkata",
+  "selfPersonId": "per_self",
+  "counters": { "A": 143, "D": 9, "I": 13, "R": 3, "M": 32, "G": 5, "K": 10 },
+  "createdAt": "2026-11-04T03:30:00Z",
+  "createdBy": { "kind": "user" },
+  "updatedAt": "2026-11-13T04:00:00Z",
+  "updatedBy": { "kind": "system", "component": "rhythm" },
+  "version": 7
+}

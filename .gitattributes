@@ -1,0 +1,2 @@
+# LF everywhere, so Prettier's check gives the same answer on Windows, macOS and Linux.
+* text=auto eol=lf

@@ -1,0 +1,24 @@
+{
+  "name": "@cc/frameworks",
+  "version": "0.0.0",
+  "private": true,
+  "description": "recommend(), templates, packs, validators (pure, D4)",
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/src/index.d.ts",
+      "default": "./dist/src/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "packs",
+    "templates"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "@cc/schemas": "workspace:*"
+  }
+}

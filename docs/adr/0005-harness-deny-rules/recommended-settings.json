@@ -1,0 +1,26 @@
+{
+  "permissions": {
+    "disableBypassPermissionsMode": "disable",
+    "deny": [
+      "Bash",
+      "Write",
+      "Edit",
+      "NotebookEdit",
+      "Monitor",
+      "Agent",
+      "Workflow",
+      "EnterWorktree",
+      "ExitWorktree",
+      "CronCreate",
+      "CronDelete",
+      "RemoteTrigger",
+      "PushNotification",
+      "SendMessage",
+      "TaskCreate",
+      "TaskUpdate",
+      "Artifact",
+      "Projects",
+      "DesignSync"
+    ]
+  }
+}

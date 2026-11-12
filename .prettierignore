@@ -1,0 +1,7 @@
+pnpm-lock.yaml
+dist/
+coverage/
+# Verbatim from docs/design/08-repository-and-automation.md §5.1; Prettier would rewrap it.
+AGENTS.md
+# The design documents, moved from workie (OQ-08-02); kept as written there.
+docs/design/

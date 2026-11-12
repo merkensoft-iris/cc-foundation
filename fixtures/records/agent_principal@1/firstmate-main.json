@@ -1,0 +1,18 @@
+{
+  "id": "agt_firstmate_main",
+  "name": "firstmate-main",
+  "kind": "external_framework",
+  "scopes": ["read", "items:write", "items:claim"],
+  "workstreamFilter": ["ws_ald", "ws_qlm"],
+  "sensitiveAccess": false,
+  "tokenPath": "<userData>/run/tokens/firstmate-main.token",
+  "createdAt": "2026-11-05T05:00:00Z",
+  "createdBy": {
+    "kind": "user"
+  },
+  "updatedAt": "2026-11-05T05:00:00Z",
+  "updatedBy": {
+    "kind": "user"
+  },
+  "version": 1
+}

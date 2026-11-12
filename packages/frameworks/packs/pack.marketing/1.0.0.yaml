@@ -1,0 +1,30 @@
+# pack.marketing 1.0.0: docs/design/01-onboarding-and-frameworks.md §5.5. Compiled into
+# packages/frameworks/src/generated/catalogue.ts by pnpm cc:gen; validated against pack@1 (01 §4).
+# The content pipeline (idea → draft → review → schedule → publish → reuse, regime/plan.md
+# §4.3) has no field of its own in the Pack type; 01 §4 lists it under rules.
+id: pack.marketing
+version: 1.0.0
+title: Marketing
+measureTemplates:
+  - key: posts_published
+    name: Posts published against plan, per channel
+    unit: count
+    role: lead
+    cadence: weekly
+  - key: blogs_on_time
+    name: Blogs shipped on time
+    unit: boolean
+    role: lead
+    cadence: weekly
+agendaSections:
+  - slot: 'after:headlines'
+    sectionTemplateId: content_review
+actionTemplates: []
+recurringItems: []
+connectorSuggestions:
+  - category: social
+    connectorIds: [linkedin]
+  - category: cms
+    connectorIds: [wordpress]
+rules:
+  - 'Content moves through the pipeline idea → draft → review → schedule → publish → reuse (regime/plan.md §4.3).'

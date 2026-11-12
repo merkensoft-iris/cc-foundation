@@ -1,0 +1,31 @@
+{
+  "name": "@cc/build",
+  "version": "0.0.0",
+  "private": true,
+  "description": "electron-builder config, fuses, hardening, clean-tree check; the engine-facing cc-build, cc-start, cc-install-stamp and cc-upgrade commands",
+  "type": "module",
+  "bin": {
+    "cc-build": "./dist/bin/cc-build.js",
+    "cc-start": "./dist/bin/cc-start.js",
+    "cc-install-stamp": "./dist/bin/cc-install-stamp.js",
+    "cc-upgrade": "./dist/bin/cc-upgrade.js"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "@cc/build-runtime": "workspace:*",
+    "@cc/schemas": "workspace:*",
+    "electron-builder": "26.18.0",
+    "ts-morph": "28.0.0"
+  }
+}

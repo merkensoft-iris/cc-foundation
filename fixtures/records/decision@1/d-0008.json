@@ -1,0 +1,50 @@
+{
+  "id": "dec_d0008",
+  "ref": "D-0008",
+  "workstreamId": "ws_ald",
+  "question": "Which scheduler should run Alderwick and Quillmarsh posting from week 3?",
+  "deciderId": "per_self",
+  "inputFromIds": [],
+  "informIds": [],
+  "reversibility": "two_way",
+  "dueBy": "2026-11-27",
+  "options": [
+    {
+      "id": "o1",
+      "text": "Keep LinkedIn's built-in scheduler only",
+      "proposedBy": {
+        "kind": "user"
+      }
+    },
+    {
+      "id": "o2",
+      "text": "Hootsuite (API connector available)",
+      "proposedBy": {
+        "kind": "user"
+      }
+    },
+    {
+      "id": "o3",
+      "text": "Buffer",
+      "proposedBy": {
+        "kind": "user"
+      }
+    }
+  ],
+  "status": "open",
+  "source": {
+    "kind": "meeting",
+    "meetingId": "mtg_m0031",
+    "sectionId": "issues"
+  },
+  "actionItemIds": [],
+  "createdAt": "2026-11-13T10:20:00Z",
+  "createdBy": {
+    "kind": "user"
+  },
+  "updatedAt": "2026-11-13T10:20:00Z",
+  "updatedBy": {
+    "kind": "user"
+  },
+  "version": 1
+}

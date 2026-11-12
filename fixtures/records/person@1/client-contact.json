@@ -1,0 +1,26 @@
+{
+  "id": "per_client",
+  "displayName": "Client contact",
+  "role": "external",
+  "emails": ["client.contact@example.com"],
+  "timeZone": "America/Toronto",
+  "consents": [
+    {
+      "scope": "contact_me",
+      "grantedAt": "2026-11-04T04:00:00Z",
+      "recordedBy": {
+        "kind": "user"
+      },
+      "evidenceNote": "Agreed at the kickoff call on 2026-11-02"
+    }
+  ],
+  "createdAt": "2026-11-04T04:00:00Z",
+  "createdBy": {
+    "kind": "user"
+  },
+  "updatedAt": "2026-11-04T04:00:00Z",
+  "updatedBy": {
+    "kind": "user"
+  },
+  "version": 1
+}

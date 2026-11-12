@@ -1,0 +1,25 @@
+// Type-checks the whole workspace in one program, tests and scripts included (pnpm typecheck).
+// Each package builds with its own tsconfig.json.
+{
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "allowImportingTsExtensions": true,
+    "rootDir": ".",
+    "paths": {
+      "@cc/cli": ["./apps/cli/src/index.ts"],
+      "@cc/core/*": ["./packages/core/src/*.ts"],
+      "@cc/*": ["./packages/*/src/index.ts"]
+    }
+  },
+  "include": [
+    "apps/*/src",
+    "apps/*/test",
+    "packages/*/src",
+    "packages/*/validators",
+    "packages/*/test",
+    "scripts",
+    "*.ts"
+  ],
+  "exclude": ["**/node_modules", "**/dist", "packages/*/test/fixtures"]
+}

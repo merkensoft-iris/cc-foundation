@@ -1,0 +1,15 @@
+{
+  "comment": "Digests of packages/store/migrations/*.sql. Migrations are forward-only: changing an existing file fails CI (AC-08-08). pnpm cc:new-migration <name> appends an entry and never rewrites one.",
+  "migrations": [
+    {
+      "number": 1,
+      "file": "0001_init.sql",
+      "sha256": "2adabb5384f6a57671811453df67ee82ff5655474addeb38e989338d929a550c"
+    },
+    {
+      "number": 2,
+      "file": "0002_meetings.sql",
+      "sha256": "be74e0f17670035737b7176ed3be1665d390c94930ce3bd6174993569ccc08c9"
+    }
+  ]
+}

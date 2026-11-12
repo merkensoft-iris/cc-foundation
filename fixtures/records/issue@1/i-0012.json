@@ -1,0 +1,31 @@
+{
+  "id": "iss_i0012",
+  "ref": "I-0012",
+  "workstreamId": "ws_ald",
+  "title": "Which scheduler should run posting from week 3?",
+  "raisedFrom": {
+    "kind": "meeting",
+    "meetingId": "mtg_m0031",
+    "sectionId": "issues"
+  },
+  "rank": 1,
+  "status": "resolved",
+  "resolution": {
+    "kind": "decision",
+    "refs": ["D-0008"],
+    "note": "Recorded as D-0008, due by 2026-11-27.",
+    "at": "2026-11-13T10:20:00Z",
+    "by": {
+      "kind": "user"
+    }
+  },
+  "createdAt": "2026-11-13T10:05:00Z",
+  "createdBy": {
+    "kind": "user"
+  },
+  "updatedAt": "2026-11-13T10:20:00Z",
+  "updatedBy": {
+    "kind": "user"
+  },
+  "version": 2
+}

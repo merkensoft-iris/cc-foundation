@@ -1,0 +1,249 @@
+# CI for cc-foundation (docs/design/08-repository-and-automation.md §9). P0-01 runs the jobs
+# the scaffold can run, P0-02 adds cc:gen --check and cc:trace, and P1-05 adds
+# cc:axi-conformance, and P1-16 the engine-template job (a fresh cc-engine copy installs,
+# builds and starts on the packed foundation on all three OSes); later phases add pnpm audit
+# and OSV, and the app end-to-end smoke as their scripts land.
+name: ci
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  check:
+    name: check (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+      - name: Install (frozen lockfile)
+        run: pnpm install --frozen-lockfile
+      - name: Doctor
+        run: pnpm cc:doctor
+      - name: Typecheck
+        run: pnpm typecheck
+      - name: Lint (ESLint, Prettier, dependency rules D1-D7)
+        run: pnpm lint
+      - name: Test (unit, integration, fixture; network blocked)
+        run: pnpm test
+      - name: E2E (headless scenario tests)
+        run: pnpm e2e
+      - name: Generated files have not drifted (cc:gen --check, C-08-03)
+        run: pnpm cc:gen --check
+      - name: AC-07-01 AC-07-02 AXI conformance over every cc-axi command, --version within 50 ms of node (cc:axi-conformance, C-07-01)
+        run: pnpm cc:axi-conformance
+      - name: Traceability, done phases covered (cc:trace, C-08-07)
+        run: pnpm cc:trace
+      - name: AC-08-04 two worktrees run pnpm test and pnpm e2e at the same time
+        shell: bash
+        run: |
+          second="$RUNNER_TEMP/cc-wt2"
+          git worktree add --detach "$second" HEAD
+          (cd "$second" && pnpm install --frozen-lockfile --prefer-offline)
+          run_suite() { (cd "$1" && pnpm test && pnpm e2e) > "$2" 2>&1; }
+          run_suite "$GITHUB_WORKSPACE" "$RUNNER_TEMP/wt1.log" & first_pid=$!
+          run_suite "$second" "$RUNNER_TEMP/wt2.log" & second_pid=$!
+          status=0
+          wait "$first_pid" || status=1
+          wait "$second_pid" || status=1
+          for log in wt1 wt2; do
+            echo "::group::$log"; cat "$RUNNER_TEMP/$log.log"; echo "::endgroup::"
+          done
+          exit "$status"
+
+  migrations:
+    name: migrations are forward-only
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    steps:
+      # Needs the merge base, so the whole history: the check is a diff against it.
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - name: AC-08-08 changing an existing file in packages/store/migrations fails CI
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          git cat-file -e "$BASE_SHA^{commit}" 2>/dev/null || git fetch --no-tags origin "$BASE_SHA"
+          changed="$(git diff --diff-filter=MDR --name-only "$BASE_SHA...HEAD" -- packages/store/migrations/)"
+          if [ -n "$changed" ]; then
+            echo "::error::migrations are forward-only; add a new one with pnpm cc:new-migration"
+            echo "$changed"
+            exit 1
+          fi
+          echo "No existing file in packages/store/migrations changed. Their digests in packages/store/migrations.lock.json are checked by pnpm test."
+
+  scan:
+    name: secret scan and canary denylist
+    runs-on: ubuntu-latest
+    env:
+      GITLEAKS_VERSION: 8.30.1
+      GITLEAKS_SHA256: 551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+      - name: Install (frozen lockfile)
+        run: pnpm install --frozen-lockfile
+      - name: Install gitleaks (pinned, checksum verified)
+        run: |
+          cd "$RUNNER_TEMP"
+          archive="gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
+          curl -sSfLO "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/${archive}"
+          echo "${GITLEAKS_SHA256}  ${archive}" | sha256sum -c -
+          tar -xzf "$archive" gitleaks
+          echo "$RUNNER_TEMP" >> "$GITHUB_PATH"
+      - name: Secret scan (gitleaks, full history)
+        run: gitleaks git --redact --no-banner .
+      - name: Canary denylist
+        run: pnpm scan:canaries
+      - name: AC-08-02 an AI SDK import in packages/core or packages/orchestrator fails pnpm lint naming D1
+        run: |
+          for pkg in core orchestrator; do
+            file="packages/$pkg/src/index.ts"
+            printf "import Anthropic from '@anthropic-ai/sdk';\nexport const client = Anthropic;\n" >> "$file"
+            for script in lint lint:deps; do
+              if pnpm "$script" > "$RUNNER_TEMP/lint.log" 2>&1; then
+                cat "$RUNNER_TEMP/lint.log"; echo "::error::pnpm $script passed with an AI SDK import in $file"; exit 1
+              fi
+              grep -q 'D1' "$RUNNER_TEMP/lint.log" || { cat "$RUNNER_TEMP/lint.log"; echo "::error::pnpm $script failed without naming D1"; exit 1; }
+              echo "pnpm $script failed for $file, naming D1:"; grep 'D1' "$RUNNER_TEMP/lint.log"
+            done
+            git checkout -- "$file"
+          done
+      - name: AC-08-07 a commit adding a canary or a secret to a fixture fails the scans
+        run: |
+          git config user.name ci
+          git config user.email ci@example.invalid
+          mkdir -p fixtures/scenario
+          prefix="cc_canary"
+          printf '{"owner": "%s"}\n' "${prefix}_ci${RANDOM}" > fixtures/scenario/leak.json
+          git add fixtures/scenario/leak.json && git commit -qm "test: canary fixture"
+          if pnpm scan:canaries; then echo "::error::scan:canaries passed with a canary fixture"; exit 1; fi
+          git reset -q --hard HEAD~1
+          key="$(python3 -c "import secrets; print('AKIA' + ''.join(secrets.choice('ABCDEFGHIJKLMNOPQRSTUVWXYZ234567') for _ in range(16)))")"
+          printf '[default]\naws_access_key_id = %s\n' "$key" > fixtures/scenario/leak.ini
+          git add fixtures/scenario/leak.ini && git commit -qm "test: secret fixture"
+          if gitleaks git --log-opts="-1" --redact --no-banner .; then echo "::error::gitleaks passed with a secret fixture"; exit 1; fi
+          git reset -q --hard HEAD~1
+          echo "Both scans failed as required."
+
+  # 09 P1-16 "clone, install, run" on macOS and Windows (and Linux): a fresh clone of the
+  # public cc-engine template, on this checkout's @cc/* packages packed locally (no registry,
+  # nothing published), pinned the way the template's "Pinning the foundation" steps say a
+  # release PR does. The engine copy lives in RUNNER_TEMP and is never pushed.
+  engine-template:
+    name: engine template on this foundation (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Scratch paths outside the checkout
+        run: |
+          tmp="$RUNNER_TEMP"
+          if [ "$RUNNER_OS" = Windows ]; then tmp="$(cygpath -m "$tmp")"; fi
+          { echo "ENGINE=$tmp/cc-engine"; echo "TARBALLS=$tmp/cc-tarballs"; echo "PROFILE=$tmp/cc-profile"; } >> "$GITHUB_ENV"
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+      - name: Install and build the foundation (frozen lockfile)
+        run: pnpm install --frozen-lockfile && pnpm build
+      - name: Pack every @cc/* package locally (pnpm pack, no registry)
+        run: pnpm cc:engine-template pack --out "$TARBALLS"
+      - name: Fresh clone of the cc-engine template (main, read-only)
+        run: |
+          git clone --depth 1 --branch main https://github.com/merkensoft-iris/cc-engine.git "$ENGINE"
+          git -C "$ENGINE" log -1 --format='cc-engine %H %s'
+      - name: Pin the packed foundation in the copy and commit it locally (never pushed)
+        run: |
+          pnpm cc:engine-template pin --engine "$ENGINE" --tarballs "$TARBALLS"
+          cd "$ENGINE"
+          # The pin changes package.json, so this install writes the lockfile, as the release
+          # PR's pnpm add does; CI otherwise defaults to a frozen install.
+          pnpm install --no-frozen-lockfile
+          git -c user.name=ci -c user.email=ci@example.invalid commit -qam "test: pin the packed foundation"
+          test -z "$(git status --porcelain)"
+      - name: AC-08-11 a fresh template copy installs, builds and starts (pnpm install, pnpm build, pnpm start; its onboarding part waits for P1-12)
+        run: |
+          cd "$ENGINE"
+          pnpm install --frozen-lockfile
+          pnpm build
+          if [ "$RUNNER_OS" = Linux ]; then
+            # Ubuntu 24.04 blocks the unprivileged user namespaces Chromium's sandbox uses; the
+            # app keeps its sandbox on, so the runner allows them instead.
+            sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+            run=(xvfb-run -a)
+          else
+            run=()
+          fi
+          "${run[@]}" pnpm start --smoke --profile-dir "$PROFILE"
+      - name: The packaged app started normally on the core (smoke.json), clean-tree start check and fuses
+        run: |
+          cd "$ENGINE"
+          cat "$PROFILE/smoke.json"
+          node -e '
+            const r = JSON.parse(require("fs").readFileSync(process.argv[1], "utf8"));
+            const fail = (m) => { console.error("::error::" + m); process.exit(1); };
+            if (r.ok !== true) fail("smoke failed: " + r.reason);
+            if (r.packaged !== true) fail("the smoke run was not the packaged app");
+            if (r.mode.kind !== "normal") fail("start mode " + JSON.stringify(r.mode) + ", expected normal for a clean build");
+            if (r.offerRebuild !== false) fail("Rebuild now offered for a build at HEAD");
+            console.log("packaged app: mode normal, " + r.uiCall + ", ready in " + r.ms + " ms");
+          ' "$PROFILE/smoke.json"
+          test "$(pnpm exec cc-build start-check)" = "mode: normal"
+          case "$RUNNER_OS" in
+            macOS) app="$(ls -d dist/mac*/*.app | head -1)" ;;
+            Windows) app="$(ls dist/win*-unpacked/command-center.exe | head -1)" ;;
+            *) app="$(ls dist/linux*-unpacked/command-center | head -1)" ;;
+          esac
+          fuses="$(ls -d node_modules/.pnpm/@electron+fuses@*/node_modules/@electron/fuses | head -1)"
+          node "$fuses/dist/bin.js" read --app "$app" | tee "$RUNNER_TEMP/fuses.txt"
+          for fuse in "RunAsNode is Disabled" "EnableNodeOptionsEnvironmentVariable is Disabled" \
+            "EnableNodeCliInspectArguments is Disabled" "EnableEmbeddedAsarIntegrityValidation is Enabled" \
+            "OnlyLoadAppFromAsar is Enabled"; do
+            grep -q "$fuse" "$RUNNER_TEMP/fuses.txt" || { echo "::error::04 §10 rule 5: expected $fuse"; exit 1; }
+          done
+      - name: A commit past the build is "build out of date" with the Rebuild now offer (ADR 0004 decision 6)
+        run: |
+          cd "$ENGINE"
+          echo "# a later commit" >> README.md
+          git -c user.name=ci -c user.email=ci@example.invalid commit -qam "docs: a later commit"
+          out="$(pnpm exec cc-build start-check)"
+          echo "$out"
+          grep -q "^mode: developer (build out of date" <<<"$out"
+          grep -q "^rebuild: offered (Rebuild now)$" <<<"$out"
+      - name: Logs
+        if: failure()
+        run: |
+          ls -la "$PROFILE" 2>/dev/null || true
+          cat "$PROFILE/smoke.json" 2>/dev/null || true
+          ls -R "$ENGINE/dist" 2>/dev/null | head -50 || true

@@ -1,0 +1,37 @@
+{
+  "id": "ser_ceo_monthly",
+  "name": "Monthly review",
+  "cadence": "monthly",
+  "rrule": "FREQ=MONTHLY;BYDAY=-1FR;BYHOUR=15;BYMINUTE=0",
+  "dtstart": "2026-11-27T15:00",
+  "timeZone": "Asia/Kolkata",
+  "durationMinutes": 90,
+  "workstreamIds": ["ws_ald", "ws_qlm"],
+  "frameworkInstanceIds": ["fwi_ald", "fwi_qlm"],
+  "backboneMeetingKey": "monthly",
+  "agendaTemplateId": "agenda.eos-lite.monthly@1",
+  "agendaOverrides": [],
+  "attendeeIds": ["per_self"],
+  "chairId": "per_self",
+  "mode": "solo",
+  "absorbs": [
+    {
+      "cadence": "weekly",
+      "absorbedMinutes": 30
+    }
+  ],
+  "calendars": [],
+  "prereadLeadMinutes": 1440,
+  "reminderMinutes": [15],
+  "graceMinutes": 60,
+  "status": "active",
+  "createdAt": "2026-11-04T04:10:00Z",
+  "createdBy": {
+    "kind": "user"
+  },
+  "updatedAt": "2026-11-04T04:10:00Z",
+  "updatedBy": {
+    "kind": "user"
+  },
+  "version": 1
+}

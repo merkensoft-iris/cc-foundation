@@ -1,0 +1,12 @@
+/** Validators of the {{id}} invariants. Register each one in validators/index.ts. */
+import type { ValidatorDefinition } from './common.js';
+
+/** N-1: the rule, in words. */
+export const {{validator}}: ValidatorDefinition = {
+  /** Parameters the validator reads; the template must declare them. */
+  reads: [],
+  check() {
+    // TODO return one Violation per broken rule, with the offending values.
+    return [];
+  },
+};

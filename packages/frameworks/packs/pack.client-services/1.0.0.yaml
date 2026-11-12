@@ -1,0 +1,34 @@
+# pack.client-services 1.0.0: docs/design/01-onboarding-and-frameworks.md §5.5. Compiled into
+# packages/frameworks/src/generated/catalogue.ts by pnpm cc:gen; validated against pack@1 (01 §4).
+id: pack.client-services
+version: 1.0.0
+title: Client services
+measureTemplates:
+  - key: client_hours_vs_plan
+    name: Client hours logged against plan
+    unit: percent
+    role: lead
+    cadence: weekly
+  - key: milestones_on_time
+    name: Client milestones on time
+    unit: percent
+    role: lead
+    cadence: weekly
+  - key: invoices_raised
+    name: Invoices raised
+    unit: currency
+    role: lag
+    cadence: weekly
+  - key: overdue_receivables
+    name: Overdue receivables
+    unit: currency
+    role: lag
+    cadence: monthly
+agendaSections: []
+actionTemplates: []
+recurringItems: []
+connectorSuggestions:
+  - category: time_tracking
+    connectorIds: [toggl-track]
+rules:
+  - 'Supplies the money and operations inputs of the monthly review (money_ops, 02 §5.2): cash, invoices raised, receivables over 30 days, revenue and margin per client.'

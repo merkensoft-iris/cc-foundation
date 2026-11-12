@@ -1,0 +1,19 @@
+{
+  "name": "@cc/orchestrator",
+  "version": "0.0.0",
+  "private": true,
+  "description": "AiProvider interface, adapter loading, agent profiles, data policy, budgets, tool loop; no AI SDK (D1)",
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json"
+  }
+}

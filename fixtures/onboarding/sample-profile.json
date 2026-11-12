@@ -1,0 +1,468 @@
+{
+  "version": 1,
+  "completedSteps": [
+    "workspace",
+    "workstreams",
+    "profiles",
+    "recommendation",
+    "tailoring",
+    "rhythm",
+    "tools",
+    "ai"
+  ],
+  "workspace": {
+    "displayName": "Main",
+    "timeZone": "Asia/Kolkata",
+    "workweek": ["MO", "TU", "WE", "TH", "FR"],
+    "workingHours": [
+      {
+        "start": "09:00",
+        "end": "17:30"
+      },
+      {
+        "start": "18:00",
+        "end": "23:00"
+      }
+    ],
+    "protectedBlocks": [
+      {
+        "id": "pb_evening",
+        "label": "Evening block",
+        "rrule": "FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR;BYHOUR=18;BYMINUTE=0",
+        "timeZone": "Asia/Kolkata",
+        "durationMinutes": 300,
+        "policy": "hard"
+      },
+      {
+        "id": "pb_break",
+        "label": "Afternoon break",
+        "rrule": "FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR;BYHOUR=14;BYMINUTE=0",
+        "timeZone": "Asia/Kolkata",
+        "durationMinutes": 60,
+        "policy": "hard"
+      },
+      {
+        "id": "pb_deep_a",
+        "label": "Deep block A",
+        "rrule": "FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR;BYHOUR=9;BYMINUTE=45",
+        "timeZone": "Asia/Kolkata",
+        "durationMinutes": 180,
+        "policy": "soft"
+      }
+    ],
+    "weeklyManagementMinutes": 240,
+    "quietHours": [
+      {
+        "start": "23:30",
+        "end": "08:00"
+      }
+    ]
+  },
+  "workstreams": [
+    {
+      "key": "alderwick",
+      "kind": "company",
+      "name": "Alderwick",
+      "principal": {
+        "kind": "self"
+      },
+      "timeZone": "Asia/Kolkata",
+      "headcount": 1,
+      "leadershipGroupSize": 1,
+      "hasTeamsUnderLeads": false,
+      "stage": "early_revenue",
+      "businessType": "mixed_services_product",
+      "primaryGoal": "grow_revenue",
+      "goalShape": "few_priorities",
+      "deadline": null,
+      "existingFramework": "none",
+      "weightPreference": "light",
+      "confidentiality": "normal",
+      "notes": "Alderwick is me, mostly alone; client project work runs in the evenings, and LinkedIn posts and the blog bring in consulting leads."
+    },
+    {
+      "key": "quillmarsh",
+      "kind": "company",
+      "name": "Quillmarsh",
+      "principal": {
+        "kind": "self"
+      },
+      "timeZone": "Asia/Kolkata",
+      "headcount": 1,
+      "leadershipGroupSize": 1,
+      "hasTeamsUnderLeads": false,
+      "stage": "pre_revenue",
+      "businessType": "product",
+      "primaryGoal": "launch",
+      "goalShape": "few_priorities",
+      "deadline": null,
+      "existingFramework": "none",
+      "weightPreference": "light",
+      "confidentiality": "normal",
+      "notes": "Quillmarsh is a product I am building alone; shipping one thing every week matters most, and the website is hosted at Hostinger."
+    }
+  ],
+  "accepted": [
+    {
+      "workstreamKey": "alderwick",
+      "templateId": "eos-lite",
+      "acceptedAt": "2026-11-04T04:00:00Z",
+      "overrodeRecommendation": false
+    },
+    {
+      "workstreamKey": "quillmarsh",
+      "templateId": "eos-lite",
+      "acceptedAt": "2026-11-04T04:00:00Z",
+      "overrodeRecommendation": false
+    }
+  ],
+  "tailoring": [
+    {
+      "workstreamKey": "alderwick",
+      "parameters": {
+        "weekly.weekday": "FR",
+        "weekly.time": "15:00",
+        "weekly.duration": 60,
+        "monthly.week": "last",
+        "quarterly.weekOfQuarter": -2,
+        "priorityCount": 3,
+        "todoHorizonDays": 7,
+        "conclude.rating": false,
+        "decision.method": "single_decider",
+        "decision.memoForOneWayDoors": true
+      },
+      "merge": true,
+      "measures": [
+        {
+          "ref": "K-0001",
+          "name": "LinkedIn posts published",
+          "role": "lead",
+          "unit": "count",
+          "cadence": "weekly",
+          "target": {
+            "op": "gte",
+            "value": 3
+          },
+          "ownerRole": "self",
+          "source": "manual"
+        },
+        {
+          "ref": "K-0002",
+          "name": "Blog plan on schedule",
+          "role": "lead",
+          "unit": "boolean",
+          "cadence": "weekly",
+          "target": {
+            "op": "eq",
+            "value": true
+          },
+          "ownerRole": "self",
+          "source": "manual"
+        },
+        {
+          "ref": "K-0003",
+          "name": "Consulting leads",
+          "role": "lead",
+          "unit": "count",
+          "cadence": "weekly",
+          "target": {
+            "op": "gte",
+            "value": 2
+          },
+          "ownerRole": "self",
+          "source": "manual"
+        },
+        {
+          "ref": "K-0004",
+          "name": "Client hours logged against 25 planned",
+          "role": "lead",
+          "unit": "percent",
+          "cadence": "weekly",
+          "target": {
+            "op": "between",
+            "value": 90,
+            "value2": 110
+          },
+          "ownerRole": "self",
+          "source": "manual"
+        },
+        {
+          "ref": "K-0005",
+          "name": "Invoices raised",
+          "role": "lag",
+          "unit": "currency",
+          "currency": "INR",
+          "cadence": "weekly",
+          "ownerRole": "self",
+          "source": "manual"
+        },
+        {
+          "ref": "K-0006",
+          "name": "Action items closed on time",
+          "role": "lead",
+          "unit": "percent",
+          "cadence": "weekly",
+          "target": {
+            "op": "gte",
+            "value": 80
+          },
+          "ownerRole": "self",
+          "source": "derived",
+          "workstreamKeys": ["alderwick", "quillmarsh"]
+        }
+      ],
+      "goals": [
+        {
+          "title": "Win two consulting clients",
+          "kind": "priority",
+          "ownerRole": "self"
+        },
+        {
+          "title": "Publish the blog on its plan every week",
+          "kind": "priority",
+          "ownerRole": "self"
+        },
+        {
+          "title": "Keep the client project work within its planned hours",
+          "kind": "priority",
+          "ownerRole": "self"
+        }
+      ],
+      "owners": {
+        "*": "self"
+      },
+      "verification": {
+        "policy": "require_review",
+        "autoCloseOn": ["calendar_event", "measure_threshold"]
+      },
+      "escalation": {
+        "e2CarryCount": 2,
+        "e3CarryCount": 4,
+        "e3OverdueDays": 30
+      },
+      "aiDataPolicy": "allow",
+      "informRoles": []
+    },
+    {
+      "workstreamKey": "quillmarsh",
+      "parameters": {
+        "weekly.weekday": "FR",
+        "weekly.time": "15:00",
+        "weekly.duration": 60,
+        "monthly.week": "last",
+        "quarterly.weekOfQuarter": -2,
+        "priorityCount": 3,
+        "todoHorizonDays": 7,
+        "conclude.rating": false,
+        "decision.method": "single_decider",
+        "decision.memoForOneWayDoors": true
+      },
+      "merge": true,
+      "measures": [
+        {
+          "ref": "K-0007",
+          "name": "LinkedIn posts published",
+          "role": "lead",
+          "unit": "count",
+          "cadence": "weekly",
+          "target": {
+            "op": "gte",
+            "value": 2
+          },
+          "ownerRole": "self",
+          "source": "manual"
+        },
+        {
+          "ref": "K-0008",
+          "name": "Shipped one thing this week",
+          "role": "lead",
+          "unit": "boolean",
+          "cadence": "weekly",
+          "target": {
+            "op": "eq",
+            "value": true
+          },
+          "ownerRole": "self",
+          "source": "manual"
+        },
+        {
+          "ref": "K-0009",
+          "name": "Active users or pilots",
+          "role": "lag",
+          "unit": "count",
+          "cadence": "weekly",
+          "ownerRole": "self",
+          "source": "manual"
+        }
+      ],
+      "goals": [
+        {
+          "title": "Launch the first public version",
+          "kind": "priority",
+          "ownerRole": "self"
+        },
+        {
+          "title": "Sign the first pilot user",
+          "kind": "priority",
+          "ownerRole": "self"
+        }
+      ],
+      "owners": {
+        "*": "self"
+      },
+      "verification": {
+        "policy": "require_review",
+        "autoCloseOn": ["calendar_event", "measure_threshold"]
+      },
+      "escalation": {
+        "e2CarryCount": 2,
+        "e3CarryCount": 4,
+        "e3OverdueDays": 30
+      },
+      "aiDataPolicy": "allow",
+      "informRoles": []
+    }
+  ],
+  "rhythm": {
+    "dailyStart": true,
+    "dailyShutdown": true,
+    "acceptedOverlaps": [
+      {
+        "workstreamKey": "alderwick",
+        "meetingKey": "quarterly",
+        "blockId": "pb_deep_a",
+        "reason": "soft_block"
+      },
+      {
+        "workstreamKey": "alderwick",
+        "meetingKey": "yearly",
+        "blockId": "pb_deep_a",
+        "reason": "soft_block"
+      },
+      {
+        "workstreamKey": "quillmarsh",
+        "meetingKey": "quarterly",
+        "blockId": "pb_deep_a",
+        "reason": "soft_block"
+      },
+      {
+        "workstreamKey": "quillmarsh",
+        "meetingKey": "yearly",
+        "blockId": "pb_deep_a",
+        "reason": "soft_block"
+      }
+    ]
+  },
+  "tools": [
+    {
+      "workstreamKeys": ["alderwick", "quillmarsh"],
+      "category": "calendar",
+      "toolName": "Google Calendar",
+      "accountLabel": "gcal-main",
+      "choice": {
+        "kind": "connector",
+        "connectorId": "google-calendar"
+      }
+    },
+    {
+      "workstreamKeys": ["alderwick"],
+      "category": "email",
+      "toolName": "Gmail",
+      "accountLabel": "gmail-alderwick",
+      "choice": {
+        "kind": "connector",
+        "connectorId": "gmail"
+      }
+    },
+    {
+      "workstreamKeys": ["quillmarsh"],
+      "category": "email",
+      "toolName": "Gmail",
+      "accountLabel": "gmail-quillmarsh",
+      "choice": {
+        "kind": "connector",
+        "connectorId": "gmail"
+      }
+    },
+    {
+      "workstreamKeys": ["alderwick"],
+      "category": "chat",
+      "toolName": "WhatsApp",
+      "accountLabel": "whatsapp-alderwick",
+      "choice": {
+        "kind": "connector",
+        "connectorId": "whatsapp-web"
+      }
+    },
+    {
+      "workstreamKeys": ["alderwick", "quillmarsh"],
+      "category": "social",
+      "toolName": "LinkedIn",
+      "accountLabel": "linkedin-self",
+      "choice": {
+        "kind": "connector",
+        "connectorId": "linkedin"
+      }
+    },
+    {
+      "workstreamKeys": ["alderwick", "quillmarsh"],
+      "category": "social_scheduler",
+      "toolName": "Hootsuite",
+      "accountLabel": "hootsuite-main",
+      "choice": {
+        "kind": "later"
+      }
+    },
+    {
+      "workstreamKeys": ["alderwick"],
+      "category": "cms",
+      "toolName": "WordPress",
+      "accountLabel": "wordpress-alderwick",
+      "choice": {
+        "kind": "connector",
+        "connectorId": "wordpress"
+      }
+    },
+    {
+      "workstreamKeys": ["quillmarsh"],
+      "category": "hosting",
+      "toolName": "Hostinger",
+      "choice": {
+        "kind": "discover"
+      }
+    },
+    {
+      "workstreamKeys": ["quillmarsh", "alderwick"],
+      "category": "code",
+      "toolName": "GitHub",
+      "accountLabel": "github-main",
+      "choice": {
+        "kind": "connector",
+        "connectorId": "github"
+      }
+    },
+    {
+      "workstreamKeys": ["alderwick"],
+      "category": "time_tracking",
+      "toolName": "Toggl Track",
+      "accountLabel": "toggl-main",
+      "choice": {
+        "kind": "connector",
+        "connectorId": "toggl-track"
+      }
+    },
+    {
+      "workstreamKeys": ["alderwick", "quillmarsh"],
+      "category": "task_tracker",
+      "toolName": "Google Sheets",
+      "choice": {
+        "kind": "later"
+      }
+    }
+  ],
+  "ai": {
+    "provider": "claude_cli",
+    "model": "claude-opus-5-5",
+    "dailyBudgetUsd": 5
+  }
+}

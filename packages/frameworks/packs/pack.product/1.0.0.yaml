@@ -1,0 +1,24 @@
+# pack.product 1.0.0: docs/design/01-onboarding-and-frameworks.md §5.5. Compiled into
+# packages/frameworks/src/generated/catalogue.ts by pnpm cc:gen; validated against pack@1 (01 §4).
+id: pack.product
+version: 1.0.0
+title: Product
+measureTemplates:
+  - key: shipped_vs_planned
+    name: Shipped against planned
+    unit: boolean
+    role: lead
+    cadence: weekly
+  - key: active_users
+    name: Active users or pilots
+    unit: count
+    role: lag
+    cadence: weekly
+agendaSections: []
+actionTemplates: []
+recurringItems: []
+connectorSuggestions:
+  - category: code
+    connectorIds: [github]
+rules:
+  - 'At quarterly planning, each product bet gets a go, kill or hold item (02 §5.3).'

@@ -1,0 +1,80 @@
+# 4dx 1.0.0: docs/design/01-onboarding-and-frameworks.md §5.2. Compiled into
+# src/generated/catalogue.ts by pnpm cc:gen; validated against framework_template@1 (01 §4).
+# The 4DX elements used here were checked against FranklinCovey's own pages on 2026-11-11
+# (OQ-01-04); the sources below are the pages read.
+id: 4dx
+version: 1.0.0
+name: 4 Disciplines of Execution
+summary: One or two Wildly Important Goals stated as from X to Y by a date, moved by lead measures and a short weekly WIG session.
+appliesTo: [company, business_unit, client_engagement, project, job_search, personal, other]
+sources:
+  - label: "C. McChesney, S. Covey and J. Huling, The 4 Disciplines of Execution (Free Press, 2012, first edition; FranklinCovey's book page lists the 2nd edition)"
+    ref: https://www.franklincovey.com/books/the-4-disciplines-of-execution/
+  - label: 'FranklinCovey: The 4 Disciplines (the four disciplines by name)'
+    ref: https://www.franklincovey.com/courses/the-4-disciplines/
+  - label: 'FranklinCovey: Discipline 2, act on the lead measures (lead and lag measures)'
+    ref: https://www.franklincovey.com/courses/the-4-disciplines/discipline-2-act/
+  - label: 'FranklinCovey: Discipline 4, create a cadence of accountability (the weekly WIG session)'
+    ref: https://www.franklincovey.com/courses/the-4-disciplines/discipline-4-accountability/
+  - label: 'FranklinCovey: team goals (the from X to Y by when form)'
+    ref: https://www.franklincovey.com/blog/team-goals/
+backbone:
+  goalModel: wig
+  meetings:
+    - key: weekly
+      cadence: weekly
+      agendaTemplateId: agenda.4dx.wig-session@1
+      required: true
+      modes: [solo, team]
+      durationMinutes: { min: 15, default: 30, max: 45 }
+  invariants:
+    - id: X-1
+      text: 1 or 2 active WIGs per workstream. Each WIG has target.from, target.to, target.unit and target.by.
+      validator: wigCountAndTarget
+    - id: X-2
+      text: Each WIG has 1 to 3 lead measures (role lead, weekly cadence, one owner, a target) and exactly one lag measure that tracks the WIG itself.
+      validator: wigMeasures
+    - id: X-3
+      text: "Exactly one weekly WIG-session series per workstream. Agenda order: action_review (account for last week's commitments) → scorecard (lead and lag) → plan_commitments (new commitments) → conclude."
+      validator: wigSessionSeries
+    - id: X-4
+      text: A commitment is an action item with one owner, due before the next session (a 7-day horizon), and linked to the WIG.
+      validator: commitmentShape
+    - id: X-5
+      text: Before each session, every lead measure has a value for the period that just ended, or the missing value is flagged in the pre-read.
+      validator: leadMeasureValuesOrFlagged
+parameters:
+  - key: weekly.weekday
+    type: weekday
+    default: MO
+    description: Day of the weekly WIG session.
+  - key: weekly.time
+    type: time_of_day
+    default: '13:15'
+    description: Local start time of the weekly WIG session.
+  - key: weekly.duration
+    type: duration_minutes
+    default: 30
+    min: 15
+    max: 45
+    description: Length of the weekly WIG session in minutes.
+  - key: commitmentsPerOwnerPerWeek
+    type: int
+    default: 3
+    min: 1
+    max: 5
+    description: Most new commitments per owner per session (X-4).
+  - key: leadMeasureCount
+    type: int
+    default: 2
+    min: 1
+    max: 3
+    description: Lead measures per WIG (X-2).
+extensionSlots: ['before:plan_commitments']
+defaultPacks: []
+vocabulary:
+  goal: WIG
+  action: Commitment
+  issue: Obstacle
+  measure: Lead/Lag measure
+  meeting: WIG session

@@ -1,0 +1,29 @@
+{
+  "id": "msr_k0003",
+  "ref": "K-0003",
+  "workstreamIds": ["ws_ald"],
+  "name": "Consulting leads",
+  "ownerId": "per_self",
+  "unit": "count",
+  "role": "lead",
+  "cadence": "weekly",
+  "aggregation": "sum",
+  "target": {
+    "op": "gte",
+    "value": 2
+  },
+  "source": {
+    "kind": "manual"
+  },
+  "scorecardOrder": 3,
+  "active": true,
+  "createdAt": "2026-11-04T04:40:00Z",
+  "createdBy": {
+    "kind": "user"
+  },
+  "updatedAt": "2026-11-04T04:40:00Z",
+  "updatedBy": {
+    "kind": "user"
+  },
+  "version": 1
+}

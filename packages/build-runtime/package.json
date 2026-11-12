@@ -1,0 +1,19 @@
+{
+  "name": "@cc/build-runtime",
+  "version": "0.0.0",
+  "private": true,
+  "description": "The part of @cc/build the packaged app runs: build and install stamps, the clean-tree start check, Rebuild now and the idle restart; no dependencies, so the app does not carry the build tooling",
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json"
+  }
+}

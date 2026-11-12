@@ -1,0 +1,53 @@
+{
+  "name": "cc-foundation",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Command Center foundation: the modular core packages (@cc/*)",
+  "type": "module",
+  "packageManager": "pnpm@12.18.0",
+  "engines": {
+    "node": ">=26.13.0 <27"
+  },
+  "scripts": {
+    "build": "pnpm -r build",
+    "dev": "node scripts/dev.ts",
+    "test": "pnpm build && vitest run --project unit",
+    "e2e": "vitest run --project e2e",
+    "e2e:app": "node scripts/not-yet.ts e2e:app P1",
+    "lint": "pnpm lint:eslint && pnpm lint:format && pnpm lint:deps",
+    "lint:eslint": "eslint --max-warnings 0 .",
+    "lint:format": "prettier --check .",
+    "lint:deps": "depcruise --config .dependency-cruiser.cjs apps packages scripts",
+    "format": "prettier --write .",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "scan:canaries": "node scripts/scan-canaries.ts",
+    "cc:doctor": "node scripts/doctor.ts",
+    "cc:gen": "pnpm --silent --filter @cc/schemas --filter @cc/frameworks --filter @cc/cli build && node scripts/gen.ts",
+    "cc:axi-conformance": "pnpm --silent --filter \"@cc/cli...\" build && node scripts/axi-conformance.ts",
+    "cc:new-migration": "node scripts/new-migration.ts",
+    "cc:new-template": "pnpm --silent --filter @cc/schemas --filter @cc/frameworks build && node scripts/new-template.ts",
+    "cc:trace": "node scripts/trace.ts",
+    "cc:release": "node scripts/release.ts",
+    "cc:engine-template": "node scripts/engine-template.ts"
+  },
+  "devDependencies": {
+    "@cc/cli": "workspace:*",
+    "@cc/frameworks": "workspace:*",
+    "@cc/schemas": "workspace:*",
+    "@eslint/js": "^10.0.1",
+    "@toon-format/toon": "2.3.1",
+    "@types/better-sqlite3": "^9.6.0",
+    "@types/node": "~26.6.6",
+    "ajv": "^8.20.0",
+    "better-sqlite3": "^13.0.3",
+    "dependency-cruiser": "^18.7.2",
+    "eslint": "^10.14.0",
+    "eslint-config-prettier": "^10.1.8",
+    "globals": "^17.14.0",
+    "prettier": "^3.9.10",
+    "typescript": "~6.0.3",
+    "typescript-eslint": "~8.72.1",
+    "vitest": "^5.1.0",
+    "yaml": "^2.9.1"
+  }
+}

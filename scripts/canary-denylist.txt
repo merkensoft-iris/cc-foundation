@@ -1,0 +1,5 @@
+# Canary denylist (docs/design/08-repository-and-automation.md AC-08-07).
+# One regular expression per line; blank lines and lines starting with # are ignored.
+# `pnpm scan:canaries` fails when any committed or new file matches one of them.
+# Canary values are made at run time by @cc/test-kit makeCanary(); they never belong in a file.
+cc_canary_[A-Za-z0-9_]+

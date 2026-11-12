@@ -1,0 +1,19 @@
+{
+  "name": "@cc/ui-sdk",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Slots, theme tokens and schema types for engine widgets",
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json"
+  }
+}

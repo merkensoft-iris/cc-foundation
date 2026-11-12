@@ -1,0 +1,30 @@
+{
+  "id": "msr_k0006",
+  "ref": "K-0006",
+  "workstreamIds": ["ws_ald", "ws_qlm"],
+  "name": "Action items closed on time",
+  "ownerId": "per_self",
+  "unit": "percent",
+  "role": "lead",
+  "cadence": "weekly",
+  "aggregation": "last",
+  "target": {
+    "op": "gte",
+    "value": 80
+  },
+  "source": {
+    "kind": "derived",
+    "formula": "action_items_closed_on_time_pct"
+  },
+  "scorecardOrder": 6,
+  "active": true,
+  "createdAt": "2026-11-04T04:40:00Z",
+  "createdBy": {
+    "kind": "user"
+  },
+  "updatedAt": "2026-11-04T04:40:00Z",
+  "updatedBy": {
+    "kind": "user"
+  },
+  "version": 1
+}

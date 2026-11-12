@@ -1,0 +1,23 @@
+{
+  "name": "@cc/desktop",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Electron shell: main, preload and renderer",
+  "type": "module",
+  "main": "dist/main/index.js",
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "@cc/build-runtime": "workspace:*",
+    "@cc/core": "workspace:*",
+    "@cc/rhythm": "workspace:*",
+    "@cc/schemas": "workspace:*"
+  },
+  "devDependencies": {
+    "electron": "45.2.3"
+  }
+}

@@ -1,0 +1,13 @@
+{
+  "id": "mv_k0003_2026w46",
+  "measureId": "msr_k0003",
+  "periodStart": "2026-11-09",
+  "value": 1,
+  "source": "manual",
+  "recordedAt": "2026-11-13T09:40:00Z",
+  "recordedBy": {
+    "kind": "user"
+  },
+  "normal": false,
+  "note": "One lead; the second meeting moved to next week."
+}

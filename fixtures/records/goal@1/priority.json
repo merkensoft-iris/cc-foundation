@@ -1,0 +1,29 @@
+{
+  "id": "goal_g0004",
+  "ref": "G-0004",
+  "workstreamId": "ws_ald",
+  "frameworkInstanceId": "fwi_ald",
+  "kind": "priority",
+  "title": "Win 3 consulting clients",
+  "ownerId": "per_self",
+  "period": {
+    "start": "2026-10-01",
+    "end": "2026-12-31",
+    "label": "2026-Q4"
+  },
+  "doneMeans": "Three signed consulting engagements.",
+  "measureIds": ["msr_k0003"],
+  "commitment": "committed",
+  "status": "active",
+  "health": "at_risk",
+  "healthNote": "One signed so far; two proposals pending.",
+  "createdAt": "2026-11-04T04:30:00Z",
+  "createdBy": {
+    "kind": "user"
+  },
+  "updatedAt": "2026-11-13T10:00:00Z",
+  "updatedBy": {
+    "kind": "user"
+  },
+  "version": 2
+}

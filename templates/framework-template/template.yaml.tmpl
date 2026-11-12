@@ -1,0 +1,47 @@
+# {{id}} 1.0.0. Cite where every backbone element comes from (sources), and cite each
+# invariant and bound in docs/design/01-onboarding-and-frameworks.md §5 (skill
+# cc-add-framework-template). Then register the validator and run pnpm cc:gen.
+id: {{id}}
+version: 1.0.0
+name: {{name}}
+summary: TODO one sentence on who this framework is for.
+appliesTo: [company]
+sources:
+  - label: TODO the source of the backbone
+    ref: TODO a URL or a section reference
+backbone:
+  goalModel: priorities
+  meetings:
+    - key: weekly
+      cadence: weekly
+      agendaTemplateId: agenda.{{id}}.weekly@1
+      required: true
+      modes: [solo, team]
+      durationMinutes: { min: 30, default: 60, max: 90 }
+  invariants:
+    - id: N-1
+      text: TODO the rule, in words.
+      validator: {{validator}}
+parameters:
+  - key: weekly.weekday
+    type: weekday
+    default: MO
+    description: Day of the weekly meeting.
+  - key: weekly.time
+    type: time_of_day
+    default: "10:00"
+    description: Local start time of the weekly meeting.
+  - key: weekly.duration
+    type: duration_minutes
+    default: 60
+    min: 30
+    max: 90
+    description: Length of the weekly meeting in minutes.
+extensionSlots: []
+defaultPacks: []
+vocabulary:
+  goal: Goal
+  action: Action
+  issue: Issue
+  measure: Measure
+  meeting: Meeting

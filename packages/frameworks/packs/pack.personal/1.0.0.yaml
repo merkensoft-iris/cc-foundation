@@ -1,0 +1,21 @@
+# pack.personal 1.0.0: docs/design/01-onboarding-and-frameworks.md §5.5. Compiled into
+# packages/frameworks/src/generated/catalogue.ts by pnpm cc:gen; validated against pack@1 (01 §4).
+id: pack.personal
+version: 1.0.0
+title: Personal
+measureTemplates:
+  - key: habit_kept
+    name: Habit kept this week
+    unit: boolean
+    role: lead
+    cadence: weekly
+  - key: learning_hours
+    name: Learning hours
+    unit: hours
+    role: lead
+    cadence: weekly
+agendaSections: []
+actionTemplates: []
+recurringItems: []
+connectorSuggestions: []
+rules: []

@@ -1,0 +1,28 @@
+{
+  "id": "agt_cli_default",
+  "name": "cli-default",
+  "kind": "cli",
+  "scopes": [
+    "read",
+    "items:write",
+    "items:claim",
+    "measures:write",
+    "connectors:read",
+    "sessions:read"
+  ],
+  "workstreamFilter": "all",
+  "sensitiveAccess": false,
+  "tokenPath": "<userData>/run/tokens/cli-default.token",
+  "lastUsedAt": "2026-11-13T03:32:00Z",
+  "createdAt": "2026-11-04T03:30:00Z",
+  "createdBy": {
+    "kind": "system",
+    "component": "migration"
+  },
+  "updatedAt": "2026-11-04T03:30:00Z",
+  "updatedBy": {
+    "kind": "system",
+    "component": "migration"
+  },
+  "version": 1
+}

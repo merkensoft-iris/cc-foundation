@@ -1,0 +1,29 @@
+{
+  "id": "fwi_ald",
+  "workstreamId": "ws_ald",
+  "templateId": "eos-lite",
+  "templateVersion": "1.0.0",
+  "mode": "solo",
+  "goalModel": "rocks",
+  "packIds": ["pack.client-services", "pack.product", "pack.marketing"],
+  "parameters": {
+    "weekly.weekday": "FR",
+    "weekly.time": "15:00",
+    "weekly.duration": 60,
+    "monthly.week": "last",
+    "quarterly.weekOfQuarter": -2,
+    "priorityCount": 3,
+    "todoHorizonDays": 7,
+    "conclude.rating": false,
+    "decision.method": "single_decider",
+    "decision.memoForOneWayDoors": true
+  },
+  "vocabularyOverrides": {},
+  "seriesIds": ["ser_ceo_weekly", "ser_ceo_monthly", "ser_ceo_quarterly", "ser_ceo_yearly"],
+  "validatedAt": "2026-11-04T04:10:00Z",
+  "createdAt": "2026-11-04T04:10:00Z",
+  "createdBy": { "kind": "user" },
+  "updatedAt": "2026-11-04T04:10:00Z",
+  "updatedBy": { "kind": "user" },
+  "version": 1
+}

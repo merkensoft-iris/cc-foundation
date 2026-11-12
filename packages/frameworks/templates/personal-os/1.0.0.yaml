@@ -1,0 +1,94 @@
+# personal-os 1.0.0: docs/design/01-onboarding-and-frameworks.md §5.1. Compiled into
+# src/generated/catalogue.ts by pnpm cc:gen; validated against framework_template@1 (01 §4).
+id: personal-os
+version: 1.0.0
+name: Personal OS
+summary: A light weekly loop for one person running life areas, or any workstream that needs only a weekly review.
+appliesTo: [company, business_unit, client_engagement, project, job_search, personal, other]
+sources:
+  - label: "This design's own light template, derived from the routine in regime/plan.md §3 and §5"
+    ref: docs/design/01-onboarding-and-frameworks.md#51-personal-os-v1-light-personal-version-ships-in-p1
+backbone:
+  goalModel: personal_goals
+  meetings:
+    - key: weekly
+      cadence: weekly
+      agendaTemplateId: agenda.personal-os.weekly@1
+      required: true
+      modes: [solo, team]
+      durationMinutes: { min: 30, default: 45, max: 90 }
+    - key: daily
+      cadence: daily
+      agendaTemplateId: agenda.personal-os.daily@1
+      required: false
+      modes: [solo, team]
+      durationMinutes: { min: 5, default: 10, max: 15 }
+    - key: monthly
+      cadence: monthly
+      agendaTemplateId: agenda.personal-os.monthly@1
+      required: false
+      modes: [solo, team]
+      durationMinutes: { min: 30, default: 60, max: 90 }
+    - key: quarterly
+      cadence: quarterly
+      agendaTemplateId: agenda.personal-os.quarterly@1
+      required: true
+      modes: [solo, team]
+      durationMinutes: { min: 60, default: 90, max: 180 }
+  invariants:
+    - id: PO-1
+      text: Exactly one active weekly review series covers each personal-os workstream. Several workstreams may share one review.
+      validator: oneWeeklySeries
+    - id: PO-2
+      text: 1 to maxGoals active goals per workstream per quarter (maxGoals from 1 to 3, default 3).
+      validator: personalGoalCount
+    - id: PO-3
+      text: Every goal has a done-means or at least one measure.
+      validator: goalDoneMeansOrMeasure
+    - id: PO-4
+      text: 'The weekly review agenda order is check_in → scorecard → goals_review → action_review → plan_commitments (top 3 for next week) → conclude.'
+      validator: personalWeeklyAgendaOrder
+    - id: PO-5
+      text: Every action item has one owner and a due date (also enforced globally by INV-03-01 and INV-03-04).
+      validator: actionOwnerAndDue
+parameters:
+  - key: weekly.weekday
+    type: weekday
+    default: FR
+    description: Day of the weekly review.
+  - key: weekly.time
+    type: time_of_day
+    default: '16:00'
+    description: Local start time of the weekly review.
+  - key: weekly.duration
+    type: duration_minutes
+    default: 45
+    min: 30
+    max: 90
+    description: Length of the weekly review in minutes.
+  - key: daily.enabled
+    type: bool
+    default: false
+    description: Hold the optional daily plan.
+  - key: daily.time
+    type: time_of_day
+    default: '09:00'
+    description: Local start time of the daily plan.
+  - key: monthly.enabled
+    type: bool
+    default: false
+    description: Hold the optional monthly review.
+  - key: maxGoals
+    type: int
+    default: 3
+    min: 1
+    max: 3
+    description: Most active goals per workstream per quarter (PO-2).
+extensionSlots: []
+defaultPacks: []
+vocabulary:
+  goal: Goal
+  action: Action
+  issue: Snag
+  measure: Measure
+  meeting: Review

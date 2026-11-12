@@ -1,0 +1,25 @@
+{
+  "name": "@cc/schemas",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Zod types for records, API methods, MCP tools and config; generated JSON Schemas",
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "api",
+    "dist",
+    "records"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "temporal-polyfill": "1.0.8",
+    "zod": "^4.6.7"
+  }
+}

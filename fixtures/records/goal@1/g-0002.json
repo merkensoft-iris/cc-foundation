@@ -1,0 +1,28 @@
+{
+  "id": "goal_g0002",
+  "ref": "G-0002",
+  "workstreamId": "ws_ald",
+  "frameworkInstanceId": "fwi_ald",
+  "kind": "priority",
+  "title": "Deliver the phase-one report to the client",
+  "ownerId": "per_self",
+  "period": {
+    "start": "2026-10-01",
+    "end": "2026-12-31",
+    "label": "2026-Q4"
+  },
+  "doneMeans": "The phase-one report is delivered to the client contact.",
+  "measureIds": [],
+  "commitment": "committed",
+  "status": "active",
+  "health": "on_track",
+  "createdAt": "2026-11-04T04:30:00Z",
+  "createdBy": {
+    "kind": "user"
+  },
+  "updatedAt": "2026-11-04T04:30:00Z",
+  "updatedBy": {
+    "kind": "user"
+  },
+  "version": 1
+}

@@ -1,0 +1,63 @@
+# Release for cc-foundation (docs/design/08-repository-and-automation.md §9, C-08-06). Runs
+# only on a v* tag that the owner pushes after `pnpm cc:release --tag` on main; never on a
+# PR. It publishes every @cc/* package at the tag's version, with provenance.
+#
+# Before the first publish the owner decides the registry and licence (OQ-08-07, OQ-08-01),
+# makes the packages public (`private: false`), sets the repository variable CC_REGISTRY_URL
+# (default https://registry.npmjs.org) and the `release` environment's secret
+# CC_REGISTRY_TOKEN, and gives that environment a required reviewer. Until then the verify
+# step fails: every @cc/* package is private.
+name: release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    name: publish @cc/* ${{ github.ref_name }}
+    runs-on: ubuntu-latest
+    environment: release
+    permissions:
+      contents: read
+      id-token: write # npm provenance
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - name: The tag is on main (08 §9 rule 3)
+        run: |
+          git fetch --no-tags origin main
+          if ! git merge-base --is-ancestor "$GITHUB_SHA" origin/main; then
+            echo "::error::$GITHUB_REF_NAME is not on main; release artifacts come only from a tag of main (C-08-06)"
+            exit 1
+          fi
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+          registry-url: ${{ vars.CC_REGISTRY_URL || 'https://registry.npmjs.org' }}
+      - name: The tag matches every @cc/* version and the changelog
+        run: node scripts/release.ts --verify-tag "$GITHUB_REF_NAME"
+      - name: Install (frozen lockfile)
+        run: pnpm install --frozen-lockfile
+      - name: Build and test
+        run: pnpm test
+      - name: Publish every @cc/* package at one version, with provenance
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.CC_REGISTRY_TOKEN }}
+          DIST_TAG: ${{ contains(github.ref_name, '-beta.') && 'beta' || 'latest' }}
+        run: |
+          if [ -z "$NODE_AUTH_TOKEN" ]; then
+            echo "::error::the release environment has no CC_REGISTRY_TOKEN (OQ-08-07)"
+            exit 1
+          fi
+          pnpm --filter "@cc/*" -r publish --no-git-checks --provenance --tag "$DIST_TAG"

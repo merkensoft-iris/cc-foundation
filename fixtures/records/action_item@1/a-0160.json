@@ -1,0 +1,128 @@
+{
+  "id": "act_a0160",
+  "ref": "A-0160",
+  "workstreamId": "ws_ald",
+  "kind": "todo",
+  "title": "Alderwick LinkedIn batch, week 47",
+  "doneMeans": "Three approved posts from the week's shipped work are scheduled on LinkedIn for 2026-11-19 to 2026-11-26.",
+  "evidenceRequirements": [
+    {
+      "id": "er1",
+      "description": "3 or more posts published between 2026-11-19 and 2026-11-26 whose text matches an approved draft",
+      "required": true,
+      "acceptedKinds": ["connector_record"],
+      "check": {
+        "type": "connector_query",
+        "bindingId": "bnd_linkedin_self",
+        "action": "list_recent_posts",
+        "input": {
+          "since": "2026-11-19",
+          "until": "2026-11-26",
+          "textHashIn": "{{approvedTextHashes}}"
+        },
+        "expect": {
+          "path": "posts.length",
+          "op": "gte",
+          "value": 3
+        },
+        "notBefore": "2026-11-25T04:30:00Z",
+        "retry": {
+          "attempts": 3,
+          "intervalMinutes": 60
+        }
+      }
+    }
+  ],
+  "verificationPolicy": "require_review",
+  "ownerId": "per_self",
+  "reviewerId": "per_self",
+  "informIds": [],
+  "due": {
+    "date": "2026-11-19",
+    "timeZone": "Asia/Kolkata"
+  },
+  "lifecycle": "in_progress",
+  "health": "on_track",
+  "execution": {
+    "mode": "mixed",
+    "steps": [
+      {
+        "id": "s1",
+        "order": 1,
+        "title": "Draft 3 posts from the week's shipped notes and the idea list",
+        "performer": {
+          "kind": "agent",
+          "profile": "drafter",
+          "instructions": "Draft 3 LinkedIn posts from this week's 'what shipped' notes and the idea list; save each as an evidence file.",
+          "tools": ["cc_get", "cc_attach_evidence"],
+          "budget": {
+            "maxUsd": 0.5,
+            "maxMinutes": 5,
+            "maxToolCalls": 10
+          }
+        },
+        "dependsOn": [],
+        "satisfies": [],
+        "confirmation": "policy",
+        "status": "succeeded",
+        "runIds": ["run_02"],
+        "output": {
+          "evidenceIds": ["evd_post1", "evd_post2", "evd_post3"]
+        }
+      },
+      {
+        "id": "s2",
+        "order": 2,
+        "title": "Review and approve the posts in the content review",
+        "performer": {
+          "kind": "user"
+        },
+        "dependsOn": ["s1"],
+        "satisfies": [],
+        "confirmation": "policy",
+        "status": "waiting_user",
+        "runIds": []
+      },
+      {
+        "id": "s3",
+        "order": 3,
+        "title": "Schedule the approved posts in LinkedIn's own scheduler",
+        "performer": {
+          "kind": "user"
+        },
+        "dependsOn": ["s2"],
+        "satisfies": ["er1"],
+        "confirmation": "policy",
+        "status": "pending",
+        "runIds": []
+      }
+    ]
+  },
+  "source": {
+    "kind": "template",
+    "templateId": "tpl.marketing.linkedin-batch",
+    "recurrenceKey": "2026-W47"
+  },
+  "links": {
+    "goalIds": [],
+    "measureIds": [],
+    "decisionIds": ["dec_d0008"],
+    "issueIds": []
+  },
+  "privacy": "normal",
+  "replannedCount": 0,
+  "escalationLevel": 0,
+  "externalRefs": [],
+  "carryCount": 0,
+  "createdAt": "2026-11-12T00:30:00Z",
+  "createdBy": {
+    "kind": "system",
+    "component": "rhythm"
+  },
+  "updatedAt": "2026-11-12T08:10:00Z",
+  "updatedBy": {
+    "kind": "system",
+    "component": "scheduler"
+  },
+  "version": 3
+}

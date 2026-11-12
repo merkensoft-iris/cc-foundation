@@ -1,0 +1,32 @@
+{
+  "id": "ser_ceo_weekly",
+  "name": "Weekly CEO review",
+  "cadence": "weekly",
+  "rrule": "FREQ=WEEKLY;BYDAY=FR;BYHOUR=15;BYMINUTE=0",
+  "dtstart": "2026-11-13T15:00",
+  "timeZone": "Asia/Kolkata",
+  "durationMinutes": 60,
+  "workstreamIds": ["ws_ald", "ws_qlm"],
+  "frameworkInstanceIds": ["fwi_ald", "fwi_qlm"],
+  "backboneMeetingKey": "weekly",
+  "agendaTemplateId": "agenda.eos-lite.weekly@1",
+  "agendaOverrides": [],
+  "attendeeIds": ["per_self"],
+  "chairId": "per_self",
+  "mode": "solo",
+  "absorbs": [],
+  "calendars": [],
+  "prereadLeadMinutes": 1440,
+  "reminderMinutes": [15],
+  "graceMinutes": 60,
+  "status": "active",
+  "createdAt": "2026-11-04T04:10:00Z",
+  "createdBy": {
+    "kind": "user"
+  },
+  "updatedAt": "2026-11-04T04:10:00Z",
+  "updatedBy": {
+    "kind": "user"
+  },
+  "version": 1
+}

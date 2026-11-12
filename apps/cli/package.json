@@ -1,0 +1,28 @@
+{
+  "name": "@cc/cli",
+  "version": "0.0.0",
+  "private": true,
+  "description": "cc-axi: the AXI command line of Command Center (07 §4)",
+  "type": "module",
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "@cc/core": "workspace:*",
+    "@cc/schemas": "workspace:*",
+    "@toon-format/toon": "2.3.1",
+    "axi-sdk-js": "0.1.14"
+  },
+  "bin": {
+    "cc-axi": "./dist/bin.js"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  }
+}

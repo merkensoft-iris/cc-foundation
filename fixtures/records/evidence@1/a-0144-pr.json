@@ -1,0 +1,18 @@
+{
+  "id": "evd_a0144_pr",
+  "actionItemId": "act_a0144",
+  "requirementId": "er1",
+  "kind": "external_task",
+  "summary": "Pull request ready for the contact form fix",
+  "externalTask": {
+    "system": "firstmate",
+    "home": "/home/user/firstmate",
+    "taskId": "quillmarsh-contact-form",
+    "pr": "https://github.example/quillmarsh/site/pull/12"
+  },
+  "capturedAt": "2026-11-13T07:00:00Z",
+  "capturedBy": {
+    "kind": "system",
+    "component": "ingest"
+  }
+}
