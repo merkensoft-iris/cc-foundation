@@ -41,6 +41,8 @@ import { emptyData } from '../apps/cli/test/support/fixture-api.ts';
 const ROOT = fileURLToPath(new URL('..', import.meta.url));
 export const BIN = join(ROOT, 'apps', 'cli', 'dist', 'bin.js');
 export const BUDGET_MS = 50;
+/** The sample profile of 01 §3.2, for the onboarding commands. */
+const SAMPLE_PROFILE = join(ROOT, 'fixtures', 'onboarding', 'sample-profile.json');
 
 export interface CheckResult {
   readonly id: 'AC-07-01' | 'AC-07-02';
@@ -151,6 +153,18 @@ export const CASES: Readonly<Record<string, Case>> = {
   'goals list': { run: ['goals', 'list'], empty: ['goals', 'list'], total },
   'workstreams list': { run: ['workstreams', 'list'], total },
   'workstreams view': { run: ['workstreams', 'view', 'alderwick'] },
+  'onboarding status': { run: ['onboarding', 'status'] },
+  'onboarding recommend': { run: ['onboarding', 'recommend', '--file', SAMPLE_PROFILE] },
+  'onboarding apply': { run: ['onboarding', 'apply', '--file', SAMPLE_PROFILE, '--dry-run'] },
+  'onboarding export': {
+    run: [
+      'onboarding',
+      'export',
+      '--out',
+      join(tmpdir(), `cc-axi-profile-${String(process.pid)}.json`),
+    ],
+    repeatNoop: true,
+  },
   update: { run: ['update'] },
 };
 
@@ -548,6 +562,7 @@ export async function runConformance(options: {
     await emptyCore.close();
     rmSync(reference, { recursive: true, force: true });
     rmSync(empty, { recursive: true, force: true });
+    rmSync(CASES['onboarding export']?.run.at(-1) ?? '', { force: true });
   }
   if (options.latency) latencyChecks(checks, options.runs);
   return checks.results;

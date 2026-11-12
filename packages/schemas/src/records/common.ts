@@ -36,6 +36,7 @@ export const ID_PREFIXES = {
   agentPrincipal: 'agt',
   event: 'evt',
   secretRef: 'sec',
+  onboarding: 'onb',
 } as const;
 
 export const WorkspaceId = id('wsp');
@@ -55,6 +56,8 @@ export const ConnectorBindingId = id('bnd');
 export const RunId = id('run');
 export const AgentPrincipalId = id('agt');
 export const EventId = id('evt');
+/** The workspace's one onboarding record (01 §9.1); P1-12. */
+export const OnboardingId = id('onb');
 export const SecretRef = id('sec');
 
 /** The HumanRef letter of each counted kind (03 §3, the Workspace counters of 03 §5.1). */

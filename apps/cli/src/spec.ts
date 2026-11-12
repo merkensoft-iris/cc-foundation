@@ -4,8 +4,8 @@
  * `--help`, the generated CLI reference and `pnpm cc:axi-conformance` all read it, so a
  * command cannot exist without its help or its conformance case.
  *
- * Commands of later build steps (meetings, connectors, sessions, confirmations, onboarding,
- * requests, backups, open, export, mcp, setup, hook, serve, items handoff and items link) are
+ * Commands of later build steps (meetings, connectors, sessions, confirmations, onboarding
+ * rerun, requests, backups, open, export, mcp, setup, hook, serve, items handoff and items link) are
  * absent, not stubbed (07 §4.2). No command performs a human-only operation (C-07-02).
  */
 
@@ -495,6 +495,81 @@ export const COMMANDS: readonly CommandSpec[] = [
       'cc-axi workstreams view quillmarsh --format json',
     ],
     methods: ['workstreams.get'],
+  },
+  {
+    path: 'onboarding status',
+    summary: 'Where onboarding stands: the steps answered, the next one, and the app-only answers',
+    kind: 'view',
+    args: [],
+    flags: [],
+    examples: ['cc-axi onboarding status', 'cc-axi onboarding status --format json'],
+    methods: ['onboarding.status'],
+  },
+  {
+    path: 'onboarding recommend',
+    summary:
+      'Run the framework recommender on a profile.json (01 §6): one recommendation per workstream',
+    kind: 'view',
+    args: [],
+    flags: [
+      {
+        name: '--file',
+        value: '<profile.json>',
+        description: 'An OnboardingProfile (01 §4)',
+        required: true,
+      },
+    ],
+    examples: [
+      'cc-axi onboarding recommend --file profile.json',
+      'cc-axi onboarding recommend --file fixtures/onboarding/sample-profile.json --format json',
+    ],
+    methods: ['onboarding.recommend'],
+  },
+  {
+    path: 'onboarding apply',
+    summary:
+      'Set up the workspace from a profile.json; --dry-run previews every record and writes nothing',
+    kind: 'mutation',
+    args: [],
+    flags: [
+      {
+        name: '--file',
+        value: '<profile.json>',
+        description: 'A whole OnboardingProfile (01 §4, C-01-07)',
+        required: true,
+      },
+      {
+        name: '--dry-run',
+        description: 'Preview every record and outward action; write nothing',
+      },
+    ],
+    examples: [
+      'cc-axi onboarding apply --file profile.json --dry-run',
+      'cc-axi onboarding apply --file profile.json',
+      'cc-axi onboarding apply --file fixtures/onboarding/sample-profile.json --dry-run --format json',
+    ],
+    methods: ['onboarding.preview', 'onboarding.apply'],
+    renamed: { '--dryrun': '--dry-run', '--profile': '--file' },
+  },
+  {
+    path: 'onboarding export',
+    summary:
+      'Write the answers as a profile.json to commit: no records, secrets or person names (01 §9.1)',
+    kind: 'mutation',
+    args: [],
+    flags: [
+      {
+        name: '--out',
+        value: '<profile.json>',
+        description: 'The file to write',
+        required: true,
+      },
+    ],
+    examples: [
+      'cc-axi onboarding export --out profile.json',
+      'cc-axi onboarding export --out engine/profile.json --format json',
+    ],
+    methods: ['onboarding.export'],
   },
   {
     path: 'update',

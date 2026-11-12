@@ -322,3 +322,38 @@ export const OnboardingProfile = z
   })
   .describe('OnboardingProfile (01 §4): every onboarding answer, versioned');
 export type OnboardingProfile = z.infer<typeof OnboardingProfile>;
+
+/**
+ * The calendar mapping (02 §9.6): which workstreams sync to which calendars. It lives in the
+ * engine's `cc.config`; when the engine has none, S7 proposes one and the local store keeps it
+ * beside the answers (02 §9.6 rule 2). It names bindings by label and calendars by name, so it
+ * holds no account data, and workstreams by key, never by name. These are the answers to the
+ * S7 calendar questions (01 §3.1 rows 57 to 59), which a `profile.json` does not carry (§3.2).
+ */
+export const CalendarMapping = z
+  .strictObject({
+    /** Connector IDs allowed for calendar@1, e.g. ["google-calendar"]. */
+    providers: z.array(z.string().min(1)),
+    routes: z.array(
+      z.strictObject({
+        /** Workstream keys, "portfolio" for the daily start and shutdown (02 §4.5), or all. */
+        workstreams: z.union([z.array(z.string().min(1)).min(1), z.literal('all')]),
+        targets: z
+          .array(
+            z.strictObject({
+              /** The binding's label, e.g. "gcal-main". */
+              binding: z.string().min(1),
+              /** The calendar's name in that account. */
+              calendar: z.string().min(1),
+              role: z.enum(['primary', 'mirror']),
+              colour: z.string().min(1).optional(),
+            }),
+          )
+          .min(1),
+      }),
+    ),
+    /** Default "[CC] {{series.name}}"; sensitive workstreams still get neutral titles. */
+    titleTemplate: z.string().min(1).optional(),
+  })
+  .describe('CalendarMapping (02 §9.6): which workstreams sync to which calendars');
+export type CalendarMapping = z.infer<typeof CalendarMapping>;

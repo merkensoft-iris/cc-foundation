@@ -37,6 +37,7 @@ import type { Logger } from './logger.js';
 import { silentLogger } from './logger.js';
 import { registerItemHandlers } from './handlers/items.js';
 import { registerMeetingHandlers } from './handlers/meetings.js';
+import { registerOnboardingHandlers, type CommittedListener } from './handlers/onboarding.js';
 import { registerPrincipalHandlers } from './handlers/principals.js';
 import { registerReadHandlers } from './handlers/reads.js';
 import { registerReviewHandlers } from './handlers/review.js';
@@ -67,6 +68,8 @@ export interface CoreOptions {
   readonly env?: NodeJS.ProcessEnv;
   /** The installed connector actions (INV-03-08); none until the Connector Host (P2). */
   readonly installedActions?: InstalledActions;
+  /** Called after the onboarding commit, with the committed answers (01 §3 S9). */
+  readonly onOnboardingCommitted?: CommittedListener;
   /** Registers the method handlers on the dispatcher. */
   readonly register?: (dispatcher: Dispatcher, core: CoreHandle) => void;
   /** Where fallback directories go; `/tmp` by default (ADR 0002 decision 4). */
@@ -187,6 +190,11 @@ async function serve(options: CoreOptions, basics: Basics): Promise<CoreService>
   registerReviewHandlers(dispatcher, records, store);
   registerMeetingHandlers(dispatcher, new Meetings(store, { clock }), store, clock);
   registerPrincipalHandlers(dispatcher, principals);
+  registerOnboardingHandlers(dispatcher, store, {
+    ...(options.onOnboardingCommitted === undefined
+      ? {}
+      : { onCommitted: options.onOnboardingCommitted }),
+  });
   options.register?.(dispatcher, handle);
 
   const api = new LocalApiServer({

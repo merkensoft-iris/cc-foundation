@@ -31,6 +31,7 @@ import {
   type MeasureValue,
   type MeetingInstance,
   type MeetingSeries,
+  type Onboarding,
   type Person,
   type RecordType,
   type Risk,
@@ -93,6 +94,7 @@ export interface StoreRecords {
   readonly agent_principals: AgentPrincipal;
   readonly development_requests: UnspecifiedRecord;
   readonly backup_runs: UnspecifiedRecord;
+  readonly onboarding: Onboarding;
   readonly events: Versioned<DomainEvent>;
 }
 
@@ -638,6 +640,20 @@ export const tableSpecs: readonly TableSpec[] = [
   },
   unspecified('development_requests', 'P6 connector discovery (06 §10.4)'),
   unspecified('backup_runs', 'P1-17 backups (04 §9.1)'),
+  {
+    // 01 §3, §9.1 (P1-12, migration 0003): the onboarding answers, one row per workspace.
+    table: 'onboarding',
+    primaryKey: ['id'],
+    schema: record('onboarding'),
+    managedFields: [],
+    columns: [
+      { column: 'id', field: 'id', kind: 'text' },
+      { column: 'profile', field: 'profile', kind: 'json' },
+      { column: 'calendar_mapping', field: 'calendarMapping', kind: 'json', optional: true },
+      { column: 'committed_at', field: 'committedAt', kind: 'text', optional: true },
+      ...AUDIT,
+    ],
+  },
   {
     table: 'events',
     primaryKey: ['id'],

@@ -39,6 +39,9 @@ const TABLES_OF_SECTION_12 = [
   'fts_items',
 ];
 
+/** Tables of 03 §12 point 2 that later migrations add: onboarding (0003, P1-12). */
+const ADDED_LATER = ['onboarding'];
+
 describe('migration 0001_init', () => {
   it('applies clean to an empty database', () => {
     const snapshot = openSnapshotDatabase(1);
@@ -95,12 +98,15 @@ describe('migration 0001_init', () => {
     }
   });
 
-  it('creates every table the store registry writes to', () => {
+  it('creates every table the store registry writes to, but those later migrations add', () => {
     const snapshot = openSnapshotDatabase(1);
     try {
-      expect(tableSpecs.map((spec) => spec.table).sort()).toEqual(
-        TABLES_OF_SECTION_12.filter((table) => table !== 'fts_items').sort(),
-      );
+      expect(
+        tableSpecs
+          .map((spec) => spec.table)
+          .filter((table) => !ADDED_LATER.includes(table))
+          .sort(),
+      ).toEqual(TABLES_OF_SECTION_12.filter((table) => table !== 'fts_items').sort());
     } finally {
       snapshot.cleanup();
     }

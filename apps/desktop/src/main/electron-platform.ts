@@ -8,7 +8,7 @@
  * A packaged build reads the build stamp `cc-build` wrote at its app root (inside the asar)
  * for the start check and Rebuild now; an unpackaged run has none (`start-mode.ts`).
  */
-import { writeFileSync } from 'node:fs';
+import { chmodSync, mkdirSync, renameSync, writeFileSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -24,6 +24,7 @@ import {
   nativeImage,
   Notification,
   protocol,
+  safeStorage,
   session,
   Tray,
   utilityProcess,
@@ -168,6 +169,19 @@ export function createElectronPlatform(argv: readonly string[]): ShellPlatform {
     startCheck: app.isPackaged ? stampCheck(stamp) : unpackagedCheck,
     ...(rebuild === undefined ? {} : { rebuild }),
     ...(args.smoke === true ? { smoke: true } : {}),
+    storeSecret: async (name, value) => {
+      if (!/^[a-z][a-z0-9-]*$/.test(name)) throw new Error(`not a secret name: ${name}`);
+      if (!safeStorage.isEncryptionAvailable()) throw new Error('safeStorage is not available');
+      const dir = join(userData, 'secrets');
+      mkdirSync(dir, { recursive: true, mode: 0o700 });
+      chmodSync(dir, 0o700);
+      const file = join(dir, name);
+      const temp = `${file}.tmp`;
+      writeFileSync(temp, safeStorage.encryptString(value), { mode: 0o600 });
+      renameSync(temp, file);
+      log('secrets.stored', { name });
+      return Promise.resolve();
+    },
     requestSingleInstanceLock: () => app.requestSingleInstanceLock(),
     onSecondInstance: (listener) => {
       app.on('second-instance', (_event, secondArgv) => listener(secondArgv));

@@ -59,8 +59,17 @@ class FakeCore extends EventEmitter implements CoreProcess {
     this.received.push(message);
     if (message.type === 'init') {
       this.port = transfer[0] as FakePort;
-      this.port.on('message', ({ data }: { data: { id: number; method: string } }) =>
-        this.port?.postMessage({ id: data.id, result: { method: data.method } }),
+      this.port.on(
+        'message',
+        ({ data }: { data: { id: number; method: string; params?: unknown } }) =>
+          this.port?.postMessage({
+            id: data.id,
+            // The params are echoed for backups.* only, to show what reached the core.
+            result: {
+              method: data.method,
+              ...(data.method.startsWith('backups.') ? { params: data.params } : {}),
+            },
+          }),
       );
       this.port.start();
       queueMicrotask(() => this.emit('message', { type: 'ready' }));
@@ -396,6 +405,38 @@ describe('desktop shell main process (04 §3)', () => {
     });
   });
 
+  it('01 §3.1 row 9: the backup passphrase goes to the secret store, and the core only learns that it is set', async () => {
+    const stored: [string, string][] = [];
+    const fake = fakePlatform({
+      storeSecret: (name, value) => {
+        stored.push([name, value]);
+        return Promise.resolve();
+      },
+    });
+    await started(fake);
+    const short = (await fake.invoke('cc:invoke', 'cc-app://app/', 'backups.passphrase', {
+      passphrase: 'too short',
+    })) as InvokeAnswer;
+    expect(short).toMatchObject({ ok: false, error: { code: 'E_USAGE' } });
+    expect(stored).toEqual([]);
+
+    const passphrase = 'correct horse battery staple';
+    const answer = (await fake.invoke('cc:invoke', 'cc-app://app/', 'backups.passphrase', {
+      passphrase,
+    })) as InvokeAnswer;
+    expect(stored).toEqual([['backup-passphrase', passphrase]]);
+    // The core is called with no params: the passphrase never reaches it.
+    expect(answer).toEqual({ ok: true, result: { method: 'backups.passphrase', params: {} } });
+    expect(JSON.stringify(fake.logs)).not.toContain(passphrase);
+
+    const nowhere = fakePlatform();
+    await started(nowhere);
+    const refused = (await nowhere.invoke('cc:invoke', 'cc-app://app/', 'backups.passphrase', {
+      passphrase,
+    })) as InvokeAnswer;
+    expect(refused).toMatchObject({ ok: false, error: { code: 'E_FORBIDDEN' } });
+  });
+
   it('registers commandcenter:// with the OS only in a packaged build', async () => {
     const dev = fakePlatform();
     await started(dev);
@@ -558,7 +599,7 @@ describe('Rebuild now in the shell (04 §10 rule 2)', () => {
 });
 
 describe('--smoke (09 P1-16: the packaged start on CI)', () => {
-  it('reports the mode once the core is ready, a UI call went through and the window loaded, then stops the core and exits', async () => {
+  it('AC-08-11 reports the mode once the core is ready, a UI call went through and the window loaded, and the first screen, then stops the core and exits', async () => {
     const fake = fakePlatform({
       packaged: true,
       smoke: true,
@@ -574,6 +615,8 @@ describe('--smoke (09 P1-16: the packaged start on CI)', () => {
         packaged: true,
         version: '0.0.0-test',
         uiCall: 'home.get: ok',
+        // A new profile: the window opens on onboarding (AC-08-11).
+        firstScreen: 'onboarding',
         ms: 0,
       },
     ]);

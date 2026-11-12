@@ -295,4 +295,50 @@ td {
 .timer.over {
   color: var(--cc-color-danger, #b3261e);
 }
+/* Onboarding (P1-12): the step list, each question, and its notices. */
+.steps {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  list-style: none;
+  padding: 0;
+}
+.steps .step {
+  border: 1px solid var(--cc-color-border, #8884);
+  border-radius: var(--cc-radius-small, 4px);
+  background: transparent;
+  color: inherit;
+  padding: 4px 8px;
+}
+.steps .step.current {
+  border-color: var(--cc-color-accent, #0b6e4f);
+  font-weight: 600;
+}
+.question {
+  margin: var(--cc-pad) 0;
+  padding-left: calc(var(--cc-pad) * 1.5);
+  border-left: 2px solid var(--cc-color-border, #8884);
+}
+.question-text {
+  margin: 0 0 4px;
+  font-weight: 600;
+}
+.row,
+.days,
+.choices,
+.suggestions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--cc-pad);
+  align-items: flex-end;
+}
+.notices {
+  padding-left: 1.2em;
+}
+.notices.error {
+  color: var(--cc-color-danger, #b3261e);
+}
+.notices.warn {
+  color: var(--cc-color-warning, #8a5a00);
+}
 `;

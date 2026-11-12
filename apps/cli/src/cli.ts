@@ -33,6 +33,12 @@ import {
   workstreamsList,
   workstreamsView,
 } from './commands/records.js';
+import {
+  onboardingApply,
+  onboardingExport,
+  onboardingRecommend,
+  onboardingStatus,
+} from './commands/onboarding.js';
 import { search } from './commands/search.js';
 import type { Handler, Session } from './commands/common.js';
 import { usageError } from './errors.js';
@@ -70,6 +76,10 @@ export const HANDLERS: Readonly<Record<string, Handler>> = {
   'goals list': goalsList,
   'workstreams list': workstreamsList,
   'workstreams view': workstreamsView,
+  'onboarding status': onboardingStatus,
+  'onboarding recommend': onboardingRecommend,
+  'onboarding apply': onboardingApply,
+  'onboarding export': onboardingExport,
   update,
 };
 

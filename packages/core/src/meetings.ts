@@ -26,6 +26,7 @@ import {
   captureOutput,
   closeMeeting,
   confirmReadBack,
+  DEFAULT_ESCALATION_THRESHOLDS,
   ESCALATION_CALLER,
   exportIcs,
   findSection,
@@ -44,6 +45,7 @@ import {
   type CaptureOutcome,
   type CloseOutcome,
   type EscalationResult,
+  type EscalationThresholds,
   type IcsExport,
   type MeetingData,
   type MeetingOutput,
@@ -63,6 +65,7 @@ import type {
   MeasureValue,
   MeetingInstance,
   MeetingSeries,
+  Workstream,
 } from '@cc/schemas';
 import { blobPath, type ReadTx, type Store } from '@cc/store';
 
@@ -183,6 +186,31 @@ function historian(tx: ReadTx): (itemId: string) => readonly DomainEvent[] {
 /** The workspace's time zone (03 §5.1); UTC before onboarding sets one. */
 function workspaceTimeZone(tx: ReadTx): string {
   return tx.list('workspace', { limit: 1 })[0]?.timeZone ?? 'UTC';
+}
+
+/**
+ * Each workstream's escalation thresholds: its Q-T08 answers from onboarding (01 §8, 02 §7.2),
+ * the defaults of `runEscalation` for a workstream onboarding did not tailor. An R5 child, with
+ * no tailoring of its own, takes its parent's.
+ */
+function escalationThresholds(
+  tx: ReadTx,
+): (workstreamId: string) => EscalationThresholds | undefined {
+  const tailoring = tx.list('onboarding', { limit: 1 })[0]?.profile.tailoring ?? [];
+  const bySlug = new Map(tailoring.map((entry) => [entry.workstreamKey, entry.escalation]));
+  return (workstreamId) => {
+    for (
+      let id: string | undefined = workstreamId, hops = 0;
+      id !== undefined && hops < 8;
+      hops += 1
+    ) {
+      const workstream: Workstream | undefined = tx.get('workstreams', id);
+      const found = workstream === undefined ? undefined : bySlug.get(workstream.slug);
+      if (found !== undefined) return found;
+      id = workstream?.parentId;
+    }
+    return undefined;
+  };
 }
 
 /** The health each item had at a review, as an event with no record change (02 §7.2). */
@@ -626,6 +654,8 @@ export class Meetings {
           goals: tx.list('goals'),
           issues: tx.list('issues').filter((issue) => issue.status === 'open'),
           workspaceTimeZone: workspaceTimeZone(tx),
+          thresholds: (workstreamId) =>
+            escalationThresholds(tx)(workstreamId) ?? DEFAULT_ESCALATION_THRESHOLDS,
           counted: (itemId) =>
             history(itemId).some(
               (event) =>
@@ -745,7 +775,7 @@ export class Meetings {
         agendaTemplateId: series.agendaTemplateId,
         timeZone: workspaceTimeZone(tx),
         workstreams: series.workstreamIds.flatMap((id) => {
-          const workstream = tx.get('workstreams', id);
+          const workstream: Workstream | undefined = tx.get('workstreams', id);
           return workstream === undefined
             ? []
             : [{ id: workstream.id, slug: workstream.slug, name: workstream.name }];
@@ -813,11 +843,13 @@ export class Meetings {
       const { tx } = view;
       const ctx = domainContext(view, this.#options.clock);
       const history = historian(tx);
+      const thresholdsOf = escalationThresholds(tx);
       const result = runEscalation(ctx, ESCALATION_CALLER, {
         items: tx.list('action_items'),
         goals: tx.list('goals'),
         issues: tx.list('issues').filter((issue) => issue.status === 'open'),
         workspaceTimeZone: workspaceTimeZone(tx),
+        thresholds: (workstreamId) => thresholdsOf(workstreamId) ?? DEFAULT_ESCALATION_THRESHOLDS,
         history: (item) => itemHistory(history(item.id)),
       });
       return { result, changes: result.changes };

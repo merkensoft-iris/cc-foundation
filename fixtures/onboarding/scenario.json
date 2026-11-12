@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "completedSteps": ["workspace", "workstreams", "profiles", "tools", "ai"],
+  "completedSteps": ["workspace", "workstreams", "profiles", "rhythm", "tools", "ai"],
   "workspace": {
     "displayName": "Main",
     "timeZone": "Asia/Kolkata",
@@ -194,6 +194,36 @@
       }
     }
   ],
+  "rhythm": {
+    "dailyStart": true,
+    "dailyShutdown": true,
+    "acceptedOverlaps": [
+      {
+        "workstreamKey": "alderwick",
+        "meetingKey": "quarterly",
+        "blockId": "pb_deep_a",
+        "reason": "soft_block"
+      },
+      {
+        "workstreamKey": "alderwick",
+        "meetingKey": "yearly",
+        "blockId": "pb_deep_a",
+        "reason": "soft_block"
+      },
+      {
+        "workstreamKey": "quillmarsh",
+        "meetingKey": "quarterly",
+        "blockId": "pb_deep_a",
+        "reason": "soft_block"
+      },
+      {
+        "workstreamKey": "quillmarsh",
+        "meetingKey": "yearly",
+        "blockId": "pb_deep_a",
+        "reason": "soft_block"
+      }
+    ]
+  },
   "ai": {
     "provider": "claude_cli",
     "model": "claude-opus-5-5",

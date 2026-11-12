@@ -192,7 +192,7 @@ jobs:
           pnpm install --no-frozen-lockfile
           git -c user.name=ci -c user.email=ci@example.invalid commit -qam "test: pin the packed foundation"
           test -z "$(git status --porcelain)"
-      - name: AC-08-11 a fresh template copy installs, builds and starts (pnpm install, pnpm build, pnpm start; its onboarding part waits for P1-12)
+      - name: AC-08-11 a fresh template copy installs, builds and starts (pnpm install, pnpm build, pnpm start) and opens onboarding
         run: |
           cd "$ENGINE"
           pnpm install --frozen-lockfile
@@ -217,7 +217,8 @@ jobs:
             if (r.packaged !== true) fail("the smoke run was not the packaged app");
             if (r.mode.kind !== "normal") fail("start mode " + JSON.stringify(r.mode) + ", expected normal for a clean build");
             if (r.offerRebuild !== false) fail("Rebuild now offered for a build at HEAD");
-            console.log("packaged app: mode normal, " + r.uiCall + ", ready in " + r.ms + " ms");
+            if (r.firstScreen !== "onboarding") fail("AC-08-11: a fresh profile opened " + r.firstScreen + ", expected onboarding");
+            console.log("packaged app: mode normal, " + r.uiCall + ", opens " + r.firstScreen + ", ready in " + r.ms + " ms");
           ' "$PROFILE/smoke.json"
           test "$(pnpm exec cc-build start-check)" = "mode: normal"
           case "$RUNNER_OS" in

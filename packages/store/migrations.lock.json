@@ -10,6 +10,11 @@
       "number": 2,
       "file": "0002_meetings.sql",
       "sha256": "be74e0f17670035737b7176ed3be1665d390c94930ce3bd6174993569ccc08c9"
+    },
+    {
+      "number": 3,
+      "file": "0003_onboarding.sql",
+      "sha256": "4b698df16285fc5dc26a27405b091dd8af83ad2ae7c74c2d1a07509b2fec9bea"
     }
   ]
 }
