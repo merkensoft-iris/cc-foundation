@@ -18,6 +18,9 @@ import { QUESTIONS, STEPS } from '../../src/renderer/screens/onboarding/question
 import { allByTest, byTest, queryByTest, textOf, type VNode } from '../../src/renderer/ui/vnode.js';
 import { click, startApp, type, type Answer, type Harness } from './harness.js';
 
+/** These tests run a real core and compose the whole rhythm; slow CI runners need longer than vitest's 5 s. */
+const SLOW_MS = 60_000;
+
 const ROOT = fileURLToPath(new URL('../../../..', import.meta.url));
 const NOW = '2026-11-04T04:10:00.000Z';
 
@@ -96,7 +99,7 @@ function tick(node: VNode, checked: boolean): void {
   onCheck(checked);
 }
 
-describe('the first start (01 §1 item 7)', () => {
+describe('the first start (01 §1 item 7)', { timeout: SLOW_MS }, () => {
   it('AC-08-11 the app opens onboarding on first start, and Home once onboarding is committed', async () => {
     const { app, core } = await live();
     await app.app.start();
@@ -111,7 +114,7 @@ describe('the first start (01 §1 item 7)', () => {
   });
 });
 
-describe('S1 to S9 (01 §3)', () => {
+describe('S1 to S9 (01 §3)', { timeout: SLOW_MS }, () => {
   it('asks all 67 questions of 01 §3.1, each in its step', async () => {
     expect(QUESTIONS.map((q) => q.row)).toEqual(Array.from({ length: 67 }, (_, i) => i + 1));
     const counts = Object.fromEntries(
@@ -297,7 +300,7 @@ describe('S1 to S9 (01 §3)', () => {
   });
 });
 
-describe('S1 backups (01 §3.1 rows 9 and 10, 04 §9.1)', () => {
+describe('S1 backups (01 §3.1 rows 9 and 10, 04 §9.1)', { timeout: SLOW_MS }, () => {
   it('the passphrase goes to the secret store and the destination is recorded; both stay out of a profile.json', async () => {
     const { app, core, secrets } = await live();
     await app.app.start();
@@ -336,7 +339,7 @@ describe('S1 backups (01 §3.1 rows 9 and 10, 04 §9.1)', () => {
   });
 });
 
-describe('S6 and the time budget (01 §6.4)', () => {
+describe('S6 and the time budget (01 §6.4)', { timeout: SLOW_MS }, () => {
   it('AC-01-04 over the budget, Confirm stays disabled until one of the four fixes is picked', async () => {
     const scenario = fixture('scenario.json');
     const tight = {

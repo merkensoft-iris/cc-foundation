@@ -14,6 +14,9 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { Meetings } from '../src/meetings.js';
 import { ALL_SCOPES, rejection, repoRoot, startTestCore, type TestCore } from './helpers.js';
 
+/** These tests run a real core and compose the whole rhythm; slow CI runners need longer than vitest's 5 s. */
+const SLOW_MS = 60_000;
+
 const NOW = '2026-11-04T04:10:00.000Z';
 
 function fixture(name: string): OnboardingProfile {
@@ -145,7 +148,7 @@ function expectScenarioRhythm(preview: Preview): void {
   expect(preview.blockers).toEqual([]);
 }
 
-describe('onboarding status and the saved answers (01 §3)', () => {
+describe('onboarding status and the saved answers (01 §3)', { timeout: SLOW_MS }, () => {
   it('a new profile has not started; each saved step persists and names the next one', async () => {
     const test = await core();
     expect(await test.core.callAsUser('onboarding.status', {})).toMatchObject({
@@ -191,7 +194,7 @@ describe('onboarding status and the saved answers (01 §3)', () => {
   });
 });
 
-describe('the recommender over the API (01 §6, C-01-02)', () => {
+describe('the recommender over the API (01 §6, C-01-02)', { timeout: SLOW_MS }, () => {
   it('AC-01-01 recommends the 01 §7.2 templates for the saved answers and for a file alike', async () => {
     const test = await core();
     const client = await test.connect();
@@ -209,7 +212,7 @@ describe('the recommender over the API (01 §6, C-01-02)', () => {
   });
 });
 
-describe('apply --dry-run and apply (C-01-07, C-01-01)', () => {
+describe('apply --dry-run and apply (C-01-07, C-01-01)', { timeout: SLOW_MS }, () => {
   it('AC-01-10 previewing fixtures/onboarding/sample-profile.json on a fresh profile writes nothing and shows the templates of 01 §7.2 and the series of 01 §7.3', async () => {
     const test = await core();
     const client = await test.connect();
@@ -390,7 +393,7 @@ describe('apply --dry-run and apply (C-01-07, C-01-01)', () => {
   });
 });
 
-describe('export (01 §9.1, C-01-09)', () => {
+describe('export (01 §9.1, C-01-09)', { timeout: SLOW_MS }, () => {
   it('AC-01-09 the export of the committed scenario holds no person name, client name or secret, and applying it on a fresh profile previews the same instances and series', async () => {
     const person = makeCanary('person');
     const client = makeCanary('client');
@@ -465,7 +468,7 @@ describe('export (01 §9.1, C-01-09)', () => {
   });
 });
 
-describe('the app-only answers (01 §3.1 rows 9 and 10, 04 §4.3)', () => {
+describe('the app-only answers (01 §3.1 rows 9 and 10, 04 §4.3)', { timeout: SLOW_MS }, () => {
   it('the backup passphrase and destination are human-only, and a profile from an agent cannot carry them', async () => {
     const test = await core();
     await grant(test, ...ALL_SCOPES);
@@ -524,7 +527,7 @@ describe('the app-only answers (01 §3.1 rows 9 and 10, 04 §4.3)', () => {
   });
 });
 
-describe('the Q-T08 answers drive escalation (01 §8, 02 §7.2)', () => {
+describe('the Q-T08 answers drive escalation (01 §8, 02 §7.2)', { timeout: SLOW_MS }, () => {
   it("an item escalates to E3 after its workstream's own overdue days, not the default 30", async () => {
     const levelAfter = async (overdueDays: number | undefined): Promise<number> => {
       const test = await startTestCore({

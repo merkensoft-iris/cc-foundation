@@ -15,6 +15,9 @@ import { emptyData } from './support/fixture-api.ts';
 import { cli } from './support/run.ts';
 import { startTestCore, type TestCore } from './support/core.ts';
 
+/** These tests run a real core and compose the whole rhythm; slow CI runners need longer than vitest's 5 s. */
+const SLOW_MS = 60_000;
+
 const ROOT = fileURLToPath(new URL('../../..', import.meta.url));
 const SAMPLE = join(ROOT, 'fixtures', 'onboarding', 'sample-profile.json');
 const SCENARIO = join(ROOT, 'fixtures', 'onboarding', 'scenario.json');
@@ -48,7 +51,7 @@ function rowCount(core: TestCore): number {
   );
 }
 
-describe('cc-axi onboarding status', () => {
+describe('cc-axi onboarding status', { timeout: SLOW_MS }, () => {
   it('shows a committed workspace, the steps answered and the app-only answers', async () => {
     const { dir } = await start();
     const run = await cli(dir, ['onboarding', 'status']);
@@ -78,7 +81,7 @@ describe('cc-axi onboarding status', () => {
   });
 });
 
-describe('cc-axi onboarding recommend', () => {
+describe('cc-axi onboarding recommend', { timeout: SLOW_MS }, () => {
   it('AC-01-01 recommends the 01 §7.2 templates for a profile.json', async () => {
     const { dir } = await start(emptyData());
     const run = await cli(dir, ['onboarding', 'recommend', '--file', SCENARIO]);
@@ -118,7 +121,7 @@ describe('cc-axi onboarding recommend', () => {
   });
 });
 
-describe('cc-axi onboarding apply', () => {
+describe('cc-axi onboarding apply', { timeout: SLOW_MS }, () => {
   it('AC-01-10 apply --file sample-profile.json --dry-run on a fresh profile exits 0, writes nothing, and previews the templates, modes, packs and rules of 01 §7.2 and the series of 01 §7.3', async () => {
     const { dir, core } = await start(null);
     const before = rowCount(core);
@@ -183,7 +186,7 @@ describe('cc-axi onboarding apply', () => {
   });
 });
 
-describe('cc-axi onboarding export', () => {
+describe('cc-axi onboarding export', { timeout: SLOW_MS }, () => {
   it('AC-01-09 writes the answers with workstreams by key and no names, notes or app-only answers; the same export again is a no-op', async () => {
     const { dir } = await start();
     const out = mkdtempSync(join(tmpdir(), 'cc-export-'));
