@@ -7,20 +7,28 @@
  * MCP and AI layer call the same handlers, C-07-03), results carry the records of 03 §5, and
  * list results carry the minimal summaries and total counts of 07 §4.1 rules 2 and 4.
  *
- * The namespaces in `pendingNamespaces` return records specified outside 03 §5 (meetings,
+ * The namespaces in `pendingNamespaces` return records specified outside 03 §5 (
  * connectors, sessions, confirmations, onboarding, development requests, backups). Their
  * methods are added here by the build steps named there, with their record types.
  */
 import { z } from 'zod';
 
 import { ActionItem, ActionKind, Lifecycle } from '../records/action-item.js';
-import { AgentPrincipal, PrincipalName, type Scope } from '../records/agent-principal.js';
-import { HumanRef, humanRef, LocalDate, LocalTime, Health } from '../records/common.js';
+import { AgentPrincipal, PrincipalName, Scope } from '../records/agent-principal.js';
+import {
+  HumanRef,
+  humanRef,
+  LocalDate,
+  LocalTime,
+  Health,
+  UtcTimestamp,
+} from '../records/common.js';
 import { Decision, DecisionStatus } from '../records/decision.js';
 import { DomainEvent } from '../records/event.js';
 import { Evidence } from '../records/evidence.js';
 import { Goal, GoalKind } from '../records/goal.js';
-import { Issue } from '../records/issue.js';
+import { Issue, Risk } from '../records/issue.js';
+import { InstanceState, MeetingInstance } from '../records/meeting.js';
 import { Measure, MeasureValue } from '../records/measure.js';
 import { Slug, Workstream, WorkstreamKind } from '../records/workstream.js';
 import { Limit, MutationStatus, PersonRef, recordRef, WorkstreamRef } from './common.js';
@@ -601,6 +609,407 @@ export const exportRun = method({
   }),
 });
 
+// The review queue and the item detail (09 P1-11; 03 §7, §9.2)
+
+/**
+ * What the review queue offers for a claimed item (03 §9.2 step 4, owner decision Q5): Confirm
+ * only when every required requirement has checkable evidence, otherwise disabled with its
+ * reason, and Attest offered instead.
+ */
+export const ReviewOptions = z.strictObject({
+  confirm: z.strictObject({ enabled: z.boolean(), reason: z.string().min(1).optional() }),
+  attest: z.strictObject({ enabled: z.boolean() }),
+  reject: z.strictObject({ enabled: z.boolean() }),
+  /** Required requirements backed only by a note, or by nothing checkable. */
+  notCheckable: z.array(z.string().min(1)),
+});
+export type ReviewOptions = z.infer<typeof ReviewOptions>;
+
+export const itemsReview = method({
+  method: 'items.review',
+  spec: '03 §9.2, owner decision Q5, 09 P1-11',
+  description:
+    "Returns an item with its evidence and the review queue's options: Confirm, Attest, Reject.",
+  scope: 'read',
+  humanOnly: false,
+  params: z.strictObject({ ref: ItemRef }),
+  result: z.strictObject({ item: ActionItem, evidence: z.array(Evidence), review: ReviewOptions }),
+});
+
+export const itemsAccept = method({
+  method: 'items.accept',
+  spec: '04 §4.3, 03 §7',
+  description:
+    'Accepts a draft item (draft → open), also on behalf of an absent owner with a note.',
+  humanOnly: true,
+  params: z.strictObject({ ref: ItemRef, note: z.string().min(1).optional() }),
+  result: z.strictObject({ status: MutationStatus, item: ActionItem }),
+});
+
+export const itemsConfirm = method({
+  method: 'items.confirm',
+  spec: '04 §4.3, 03 §9.2, owner decision Q5',
+  description: 'Confirms a claim; refused while a required requirement has no checkable evidence.',
+  humanOnly: true,
+  params: z.strictObject({ ref: ItemRef }),
+  result: z.strictObject({ status: MutationStatus, item: ActionItem }),
+});
+
+export const itemsAttest = method({
+  method: 'items.attest',
+  spec: '04 §4.3, 03 §9.2, §9.3, owner decision Q5',
+  description: 'Attests a claim with a note: verified_done with method attested, counted apart.',
+  humanOnly: true,
+  params: z.strictObject({ ref: ItemRef, note: z.string().min(1) }),
+  result: z.strictObject({ status: MutationStatus, item: ActionItem }),
+});
+
+export const itemsReject = method({
+  method: 'items.reject',
+  spec: '04 §4.3, 03 §7, §9.2 step 5',
+  description: 'Rejects a claim with a reason: back to in_progress, health at_risk.',
+  humanOnly: true,
+  params: z.strictObject({ ref: ItemRef, reason: z.string().min(1) }),
+  result: z.strictObject({ status: MutationStatus, item: ActionItem }),
+});
+
+// decisions (human-only decide)
+
+export const decisionsDecide = method({
+  method: 'decisions.decide',
+  spec: '04 §4.3, 03 §10, INV-03-02',
+  description: 'Decides an open decision with the outcome and why.',
+  humanOnly: true,
+  params: z.strictObject({
+    ref: DecisionRef,
+    /** One of the decision's options, when the outcome is one of them. */
+    optionId: z.string().min(1).optional(),
+    text: z.string().min(1),
+    why: z.string().min(1),
+    /** Waives the memo of a one-way door (03 §10). */
+    waiverNote: z.string().min(1).optional(),
+  }),
+  result: z.strictObject({ status: MutationStatus, decision: Decision }),
+});
+
+// goals (the Scorecard's Goals tab, owner decision Q2)
+
+export const goalsUpdate = method({
+  method: 'goals.update',
+  spec: '03 §5.3, owner decision Q2, AC-03-10',
+  description: 'Changes a goal outside any meeting; one goal.updated event with before and after.',
+  humanOnly: true,
+  params: z.strictObject({
+    ref: GoalRef,
+    title: z.string().min(1).optional(),
+    doneMeans: z.string().min(1).optional(),
+    target: Goal.shape.target.unwrap().optional(),
+    health: z.strictObject({ value: Health, note: z.string().min(1).optional() }).optional(),
+    /** The version read; a stale one fails with E_CONFLICT (03 §12). */
+    version: z.int().min(1).optional(),
+  }),
+  result: z.strictObject({ status: MutationStatus, goal: Goal }),
+});
+
+export const goalsHistory = method({
+  method: 'goals.history',
+  spec: '03 §5.3, owner decision Q2, C-03-04',
+  description: "Lists a goal's domain events with their actors, oldest first.",
+  scope: 'read',
+  humanOnly: false,
+  params: z.strictObject({ ref: GoalRef, limit: Limit.optional() }),
+  result: z.strictObject({ events: z.array(DomainEvent), total: z.int().min(0) }),
+});
+
+// risks (03 §5.6, §11; workspace-level risks on the Workspace pseudo-workstream, Q4)
+
+const RiskRef = recordRef('R', 'rsk');
+
+export const risksList = method({
+  method: 'risks.list',
+  spec: '03 §5.6, §11, owner decision Q4',
+  description: 'Lists risks, filtered by workstream or status.',
+  scope: 'read',
+  humanOnly: false,
+  params: z.strictObject({
+    workstream: WorkstreamRef.optional(),
+    status: Risk.shape.status.optional(),
+    limit: Limit.optional(),
+  }),
+  result: z.strictObject({
+    risks: z.array(
+      z.strictObject({
+        ref: humanRef('R'),
+        description: z.string(),
+        trigger: z.string(),
+        status: Risk.shape.status,
+        workstream: Slug,
+      }),
+    ),
+    total: z.int().min(0),
+  }),
+});
+
+export const risksRecord = method({
+  method: 'risks.record',
+  spec: '03 §5.6, §11 rule 4, owner decision Q4',
+  description: 'Records a risk; workspace-wide ones go on the workspace pseudo-workstream.',
+  scope: 'items:write',
+  humanOnly: false,
+  params: z.strictObject({
+    workstream: WorkstreamRef,
+    description: z.string().min(1),
+    trigger: z.string().min(1),
+    watcher: PersonRef.optional(),
+  }),
+  result: z.strictObject({ status: MutationStatus, risk: Risk }),
+});
+
+export const risksGet = method({
+  method: 'risks.get',
+  spec: '03 §5.6',
+  description: 'Returns one risk by ref or ID.',
+  scope: 'read',
+  humanOnly: false,
+  params: z.strictObject({ ref: RiskRef }),
+  result: z.strictObject({ risk: Risk }),
+});
+
+// meetings (02 §4.7, §5, §6; the Meetings screen)
+
+const MeetingRef = recordRef('M', 'mtg');
+
+/** A row of the week view. */
+export const MeetingSummary = z.strictObject({
+  ref: humanRef('M'),
+  /** The series name, e.g. "Weekly CEO review". */
+  title: z.string().min(1),
+  start: UtcTimestamp,
+  end: UtcTimestamp,
+  state: InstanceState,
+  agendaTemplateId: z.string().min(1),
+});
+export type MeetingSummary = z.infer<typeof MeetingSummary>;
+
+export const meetingsList = method({
+  method: 'meetings.list',
+  spec: '04 §4.1, 07 §4.2, 02 §4.7',
+  description:
+    'Lists meeting instances between two local dates (default: this week, Monday to Sunday).',
+  scope: 'read',
+  humanOnly: false,
+  params: z.strictObject({
+    from: LocalDate.optional(),
+    /** Inclusive. */
+    to: LocalDate.optional(),
+    limit: Limit.optional(),
+  }),
+  result: z.strictObject({
+    from: LocalDate,
+    to: LocalDate,
+    timeZone: z.string().min(1),
+    meetings: z.array(MeetingSummary),
+    total: z.int().min(0),
+  }),
+});
+
+/** One agenda row of a running meeting, with its timebox and the rows its inputs found. */
+export const MeetingSection = z.strictObject({
+  sectionId: z.string().min(1),
+  workstreamId: z.string().min(1).optional(),
+  absorbedFrom: z.string().min(1).optional(),
+  title: z.string().min(1),
+  type: z.string().min(1),
+  timeboxMinutes: z.int().min(0),
+  status: z.enum(['pending', 'done', 'skipped']),
+  allowedOutputs: z.array(z.string().min(1)),
+  rows: z.array(
+    z.strictObject({
+      ref: z.string().min(1),
+      title: z.string(),
+      flags: z.array(z.string()),
+    }),
+  ),
+});
+export type MeetingSection = z.infer<typeof MeetingSection>;
+
+/** A line of the conclude section's read-back (02 §6.4 rule 1). */
+export const ReadBackLine = z.strictObject({
+  kind: z.enum(['action_item', 'decision']),
+  ref: z.string().min(1),
+  owner: z.string().min(1),
+  ownerPresent: z.boolean(),
+  deliverable: z.string(),
+  due: z.string().optional(),
+  doneMeans: z.string().optional(),
+  state: z.string().min(1),
+});
+
+export const meetingsGet = method({
+  method: 'meetings.get',
+  spec: '04 §4.1, 07 §4.2, 02 §5.7, §6',
+  description:
+    'Returns a meeting with its agenda sections, timeboxes, input rows and read-back list.',
+  scope: 'read',
+  humanOnly: false,
+  params: z.strictObject({ ref: MeetingRef }),
+  result: z.strictObject({
+    meeting: MeetingInstance,
+    title: z.string().min(1),
+    agendaTemplateId: z.string().min(1),
+    timeZone: z.string().min(1),
+    sections: z.array(MeetingSection),
+    readBack: z.array(ReadBackLine),
+  }),
+});
+
+export const meetingsStart = method({
+  method: 'meetings.start',
+  spec: '02 §4.7, §4.2',
+  description: 'Starts a meeting; only the user starts one (02 §4.2), so agents are refused.',
+  scope: 'meetings:capture',
+  humanOnly: false,
+  params: z.strictObject({ ref: MeetingRef }),
+  result: z.strictObject({ meeting: MeetingInstance }),
+});
+
+/** The section an output belongs to (`SectionKey` of @cc/rhythm). */
+const SectionKeyParams = z.strictObject({
+  sectionId: z.string().min(1),
+  workstreamId: z.string().min(1).optional(),
+  absorbedFrom: z.string().min(1).optional(),
+});
+
+export const meetingsCapture = method({
+  method: 'meetings.capture',
+  spec: '02 §6.3, 02 §5.7 rule 3 (owner decision Q7), 07 §4.2',
+  description: 'Captures a draft action item or a note into a section of a meeting in progress.',
+  scope: 'meetings:capture',
+  humanOnly: false,
+  params: z.strictObject({
+    ref: MeetingRef,
+    section: SectionKeyParams,
+    output: z.discriminatedUnion('kind', [
+      z.strictObject({ kind: z.literal('note'), text: z.string().min(1) }),
+      z.strictObject({
+        kind: z.literal('action_item'),
+        title: z.string().min(1),
+        due: LocalDate,
+        doneMeans: z.string().min(1),
+        owner: PersonRef.optional(),
+        workstream: WorkstreamRef.optional(),
+      }),
+    ]),
+  }),
+  result: z.strictObject({ status: MutationStatus, meeting: MeetingInstance }),
+});
+
+export const meetingsConfirm = method({
+  method: 'meetings.confirm',
+  spec: '04 §4.3, 02 §6.4 rule 1',
+  description: 'Confirms the read-back: accepts the drafts of present owners.',
+  humanOnly: true,
+  params: z.strictObject({
+    ref: MeetingRef,
+    /** Drafts of absent owners accepted on their behalf, each with a note. */
+    acceptances: z
+      .array(z.strictObject({ ref: humanRef('A'), note: z.string().min(1) }))
+      .optional(),
+  }),
+  result: z.strictObject({
+    status: MutationStatus,
+    meeting: MeetingInstance,
+    accepted: z.array(z.string()),
+    pending: z.array(z.string()),
+  }),
+});
+
+export const meetingsClose = method({
+  method: 'meetings.close',
+  spec: '02 §4.7, §6.4 rule 3, §7',
+  description: 'Closes a meeting after its read-back: carries items and runs the escalation job.',
+  scope: 'meetings:capture',
+  humanOnly: false,
+  params: z.strictObject({ ref: MeetingRef }),
+  result: z.strictObject({
+    status: MutationStatus,
+    meeting: MeetingInstance,
+    carried: z.array(z.string()),
+  }),
+});
+
+export const meetingsDismiss = method({
+  method: 'meetings.dismiss',
+  spec: '02 §5.7 rule 2 (owner decision Q6)',
+  description:
+    "Dismisses a daily-start attention entry: snoozed to tomorrow's daily start, not resolved.",
+  scope: 'meetings:capture',
+  humanOnly: false,
+  params: z.strictObject({ ref: MeetingRef, entry: z.string().min(1) }),
+  result: z.strictObject({ status: MutationStatus, until: LocalDate }),
+});
+
+// principals (Settings → Agent access, 07 §5)
+
+/** A principal as Settings → Agent access lists it; never its token. */
+export const PrincipalSummary = AgentPrincipal.pick({
+  name: true,
+  kind: true,
+  scopes: true,
+  workstreamFilter: true,
+  sensitiveAccess: true,
+  lastUsedAt: true,
+  revokedAt: true,
+});
+
+export const principalsList = method({
+  method: 'principals.list',
+  spec: '07 §5, 04 §4.2',
+  description: 'Lists the agent principals with their scopes; never their tokens.',
+  scope: 'read',
+  humanOnly: false,
+  params: z.strictObject({}),
+  result: z.strictObject({ principals: z.array(PrincipalSummary), total: z.int().min(0) }),
+});
+
+export const principalsCreate = method({
+  method: 'principals.create',
+  spec: '04 §4.3, 07 §5 rule 1, 04 §4.2',
+  description: 'Creates an agent principal and writes its token file.',
+  humanOnly: true,
+  params: z.strictObject({
+    name: PrincipalName,
+    kind: AgentPrincipal.shape.kind,
+    scopes: z.array(Scope),
+    workstreamFilter: AgentPrincipal.shape.workstreamFilter.optional(),
+    sensitiveAccess: z.boolean().optional(),
+  }),
+  result: z.strictObject({ principal: PrincipalSummary, tokenPath: z.string().min(1) }),
+});
+
+export const principalsUpdate = method({
+  method: 'principals.update',
+  spec: '04 §4.3, 07 §5 rules 1 and 3',
+  description: "Grants or revokes a principal's scopes, or changes its workstreams.",
+  humanOnly: true,
+  params: z.strictObject({
+    name: PrincipalName,
+    scopes: z.array(Scope).optional(),
+    workstreamFilter: AgentPrincipal.shape.workstreamFilter.optional(),
+    sensitiveAccess: z.boolean().optional(),
+  }),
+  result: z.strictObject({ principal: PrincipalSummary }),
+});
+
+export const principalsRevoke = method({
+  method: 'principals.revoke',
+  spec: '04 §4.3, 04 §4.2 rule 2',
+  description: 'Revokes a principal and deletes its token file.',
+  humanOnly: true,
+  params: z.strictObject({ name: PrincipalName }),
+  result: z.strictObject({ principal: PrincipalSummary }),
+});
+
 /** Every method `pnpm cc:gen` writes a schema for, in 04 §4.1 order. */
 export const apiMethods: readonly ApiMethod[] = [
   authHello,
@@ -615,21 +1024,43 @@ export const apiMethods: readonly ApiMethod[] = [
   itemsHistory,
   itemsHandoff,
   itemsLink,
+  itemsReview,
+  itemsAccept,
+  itemsConfirm,
+  itemsAttest,
+  itemsReject,
   evidenceAdd,
   searchQuery,
   decisionsList,
   decisionsGet,
   decisionsPropose,
+  decisionsDecide,
   issuesList,
   issuesGet,
   issuesRaise,
+  risksList,
+  risksGet,
+  risksRecord,
+  meetingsList,
+  meetingsGet,
+  meetingsStart,
+  meetingsCapture,
+  meetingsConfirm,
+  meetingsClose,
+  meetingsDismiss,
   measuresList,
   measuresGet,
   measuresRecord,
   goalsList,
   goalsGet,
+  goalsUpdate,
+  goalsHistory,
   workstreamsList,
   workstreamsGet,
+  principalsList,
+  principalsCreate,
+  principalsUpdate,
+  principalsRevoke,
   exportRun,
 ];
 
@@ -638,7 +1069,6 @@ export const apiMethods: readonly ApiMethod[] = [
  * added, with its records, by the build step named here (09 §6.1).
  */
 export const pendingNamespaces: readonly { namespace: string; spec: string; step: string }[] = [
-  { namespace: 'meetings.*', spec: '02 §4 to §6', step: 'P1-07, P1-08' },
   { namespace: 'connectors.*', spec: '05', step: 'P1-13 (empty results), P2-02' },
   { namespace: 'sessions.*', spec: '04 §5', step: 'P4 (browser sandbox)' },
   { namespace: 'confirmations.*', spec: '04 §7.3', step: 'P1-13, P2-01' },

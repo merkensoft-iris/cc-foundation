@@ -166,9 +166,21 @@ describe('local API methods (04 §4.1)', () => {
     }
   });
 
-  it('the human-only operations of 04 §4.3 that 04 §4.1 names are marked human-only', () => {
+  it('the human-only operations of 04 §4.3 the API serves are marked human-only', () => {
     const humanOnly = apiMethods.filter((definition) => definition.humanOnly);
-    expect(humanOnly.map((definition) => definition.method)).toEqual(['items.drop']);
+    expect(humanOnly.map((definition) => definition.method)).toEqual([
+      'items.drop',
+      'items.accept',
+      'items.confirm',
+      'items.attest',
+      'items.reject',
+      'decisions.decide',
+      'meetings.confirm',
+      'goals.update',
+      'principals.create',
+      'principals.update',
+      'principals.revoke',
+    ]);
   });
 
   it('claim params take every --evidence form of 07 §4.2', () => {

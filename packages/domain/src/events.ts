@@ -31,7 +31,8 @@ export type EntityKind =
   | 'goal'
   | 'measure_value'
   | 'meeting_series'
-  | 'meeting_instance';
+  | 'meeting_instance'
+  | 'workstream';
 
 export interface Change<T = unknown> {
   readonly kind: EntityKind;

@@ -28,6 +28,6 @@ describe('every API method of @cc/schemas has a handler (04 §4.1, C-07-03)', ()
     // Nothing is served that the schemas do not define.
     expect([...served].filter((m) => !apiMethods.some((d) => d.method === m))).toEqual([]);
     // The namespaces still to come are named in @cc/schemas with their steps.
-    expect(pendingNamespaces.map((p) => p.namespace)).toContain('meetings.*');
+    expect(pendingNamespaces.map((p) => p.namespace)).toContain('connectors.*');
   });
 });
