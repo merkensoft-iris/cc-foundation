@@ -284,6 +284,7 @@ describe('hook helpers', () => {
       },
       items: [],
       counts: { dueSoon: 0, open: 0 },
+      backup: { state: 'not_configured' },
     };
     const item = {
       ref: 'A-0144',
