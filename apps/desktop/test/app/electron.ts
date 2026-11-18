@@ -39,7 +39,7 @@ export interface RunningApp {
  * as Windows and Linux pass one in argv (04 §3).
  */
 export async function launchApp(profileDir: string, link?: string): Promise<RunningApp> {
-  const app = await _electron.launch({
+  const options = {
     executablePath: electronBinary(),
     args: [
       path.join(desktop, 'dist', 'main', 'index.js'),
@@ -51,7 +51,17 @@ export async function launchApp(profileDir: string, link?: string): Promise<Runn
     // Playwright turns Chromium's sandbox off on Linux unless asked; the app keeps it on.
     chromiumSandbox: true,
     timeout: 60_000,
-  });
+  };
+  let app: ElectronApplication;
+  try {
+    app = await _electron.launch(options);
+  } catch (error) {
+    // The first start of a freshly downloaded Electron on a CI runner (Windows above all) can
+    // miss Playwright's attach; Playwright has killed that process, so start once more.
+    if (!(error instanceof Error && error.name === 'TimeoutError')) throw error;
+    await new Promise((resolve) => setTimeout(resolve, 2_000));
+    app = await _electron.launch(options);
+  }
   const page = await app.firstWindow();
   await page.waitForLoadState('domcontentloaded');
   const byTest = (id: string) => page.locator(`[data-test="${id}"]`);
