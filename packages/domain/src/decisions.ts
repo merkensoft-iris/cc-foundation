@@ -4,7 +4,9 @@
  * 1. `proposed` (agent or user drafted) → `open` (accepted onto the agenda, decider set) →
  *    `decided` → optionally `superseded` (by a later decision) or `reversed`. `dropped` needs
  *    a reason.
- * 2. Only the decider (a person) moves `open → decided`; in solo mode, the user.
+ * 2. Only the user opens a proposed decision, setting its decider (human-only, 04 §4.3; owner
+ *    decision, 18 Nov 2026). Only the decider (a person) moves `open → decided`; in solo mode,
+ *    the user.
  * 3. One-way doors need a memo, or a waiver note (see `oneWayDoorViolations`).
  * 4. Deciding creates the action items listed in the outcome in the same transaction, each
  *    with `source = { kind: 'decision' }`.
@@ -13,7 +15,7 @@
  */
 import type { ActionItem, Decision, ItemSource } from '@cc/schemas';
 
-import { type Caller, type DomainContext, hasScope, isSystem, isUser } from './context.js';
+import { type Caller, type DomainContext, hasScope, isUser } from './context.js';
 import {
   assertNoViolations,
   DomainError,
@@ -159,8 +161,9 @@ export function adviseDecision(
 }
 
 /**
- * Open (`proposed → open`): accepted onto the agenda with its decider set. The user, or the
- * system when a meeting puts it on the agenda.
+ * Open (`proposed → open`): accepted onto the agenda with its decider, a person, set (rule 2).
+ * Human-only (04 §4.3): the user opens it on the Decisions screen, or by capturing it in a
+ * meeting; an agent proposes and recommends, never opens.
  */
 export function openDecision(
   ctx: DomainContext,
@@ -168,9 +171,7 @@ export function openDecision(
   decision: Decision,
   deciderId?: PersonId,
 ): Outcome<Decision> {
-  if (!isUser(caller) && !isSystem(caller)) {
-    throw forbidden('03 §10', 'only the user or the system opens a decision');
-  }
+  if (!isUser(caller)) throw humanRequired('Opening a decision', decisionLink(decision));
   requireStatus(decision, 'open', ['proposed']);
   const next: Decision = {
     ...decision,

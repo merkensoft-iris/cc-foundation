@@ -69,6 +69,14 @@ export const HUMAN_ONLY_OPERATIONS: readonly HumanOnlyOperation[] = [
     target: 'ref',
   }),
   op({
+    method: 'decisions.open',
+    operation: 'opening a proposed decision',
+    spec: '04 §4.3, 03 §10 rule 2',
+    link: 'app',
+    target: 'ref',
+    screen: 'the decision',
+  }),
+  op({
     method: 'decisions.decide',
     operation: 'deciding a decision',
     spec: '04 §4.3, 03 §10, INV-03-02',

@@ -477,7 +477,7 @@ Each is enforced in the core service on every write. A violation returns `E_INVA
 4. **INV-03-04** An item outside `draft` has a non-empty `title`, `doneMeans` and `due`, and at least one evidence requirement with `required = true`.
 5. **INV-03-05** `dropped` requires `dropReason`. Records are never hard-deleted. The only exception is a user-initiated workspace purge (OQ-03-03).
 6. **INV-03-06** `verified_done` requires a `VerificationRecord`. For `auto`, every required requirement has a `pass` check, and `verificationPolicy` is `auto_close_on_checks`. For `confirmed` or `attested`, `decidedBy.kind == 'user'`. `attested` requires `attestationNote`.
-7. **INV-03-07** Only an actor of kind `user` can set `confirmed` or `attested`, reject a claim, decide a decision, or drop an item another actor created. Agents and connectors can only add evidence, run checks, and claim (when the principal has scope `items:claim`).
+7. **INV-03-07** Only an actor of kind `user` can set `confirmed` or `attested`, reject a claim, open or decide a decision, or drop an item another actor created. Agents and connectors can only add evidence, run checks, and claim (when the principal has scope `items:claim`).
 8. **INV-03-08** An `agent` step has a `budget` and a tool allowlist. A `connector` step names an action that exists in the bound connector's installed manifest. Its risk class comes from that manifest, never from the step.
 9. **INV-03-09** Every write appends exactly one `DomainEvent` in the same SQLite transaction.
 10. **INV-03-10** `privacy = 'sensitive'` content (in the scenario, the confidential item A-0152) never appears in calendar event text, and is sent to AI providers only under the workstream's `aiDataPolicy` (04 §6.5).
@@ -666,7 +666,7 @@ These are derived nightly and shown in `register_health` (02 §5.2):
 ## 10. Decisions
 
 1. Lifecycle: `proposed` (agent or user drafted) → `open` (accepted onto the agenda, decider set) → `decided` → optionally `superseded` (by a later decision) or `reversed`. `dropped` needs a reason.
-2. Only the decider (a person) moves `open` → `decided`. In solo mode, that is the user.
+2. Only the user moves `proposed` → `open` (owner decision, 18 Nov 2026). It is human-only ([04 §4.3](04-platform.md#43-who-counts-as-the-user)): the user opens a proposed decision from the Decisions screen and picks its decider, a person (INV-03-02), through `decisions.open`; a decision the user captures in a meeting is opened as it is captured. An agent may propose a decision and add options or a recommendation, but `decisions.open` refuses it with `E_HUMAN_REQUIRED` and a deep link. Only the decider (a person) moves `open` → `decided`. In solo mode, that is the user.
 3. `one_way` decisions need a memo blob, or a waiver note if `decision.memoForOneWayDoors` is false. The waiver note has no field of its own: it is kept in the `decision.decided` event. They are put on the monthly or quarterly agenda unless the user overrides that.
 4. Deciding creates the action items listed in the outcome in the same transaction. Each has `source = { kind: 'decision' }`.
 5. `reviewOn` creates a `follow_up` item for the decider, due on that date, or an ingest rule for a trigger.

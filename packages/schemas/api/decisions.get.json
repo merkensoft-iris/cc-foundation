@@ -166,9 +166,21 @@
           ],
           "additionalProperties": false,
           "description": "Decision (03 §5.5): a question, its one decider, options and outcome"
+        },
+        "deciders": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": { "type": "string", "minLength": 1 },
+              "name": { "type": "string", "minLength": 1 }
+            },
+            "required": ["id", "name"],
+            "additionalProperties": false
+          }
         }
       },
-      "required": ["decision"],
+      "required": ["decision", "deciders"],
       "additionalProperties": false
     }
   },

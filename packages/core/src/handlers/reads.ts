@@ -291,7 +291,19 @@ export function registerReadHandlers(
   );
 
   dispatcher.register(methods.decisionsGet, (params, context) =>
-    read(context, (r) => ({ decision: findByRef(r.tx, r.visibility, 'decisions', params.ref) })),
+    read(context, (r) => {
+      const decision = findByRef(r.tx, r.visibility, 'decisions', params.ref);
+      const self = workspaceOf(r.tx).selfPersonId;
+      // INV-03-02: the decider is a person; the user first, then by name.
+      const deciders = [...r.tx.list('persons')]
+        .sort(
+          (a, b) =>
+            Number(b.id === self) - Number(a.id === self) ||
+            a.displayName.localeCompare(b.displayName),
+        )
+        .map((person) => ({ id: person.id, name: person.displayName }));
+      return { decision, deciders };
+    }),
   );
 
   dispatcher.register(methods.issuesList, (params, context) =>

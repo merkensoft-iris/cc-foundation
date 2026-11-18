@@ -148,6 +148,26 @@ describe('03 §10 decisions', () => {
     ).toBe('E_HUMAN_REQUIRED');
   });
 
+  it('only the user opens a proposed decision, setting its decider, a person (04 §4.3, INV-03-02)', () => {
+    const { ctx } = harness();
+    const proposed = checked(
+      proposeDecision(ctx, agent('decisions:propose'), {
+        workstreamId: 'ws_ald',
+        question: 'Which social scheduler from week 3?',
+      }),
+    ).record;
+    for (const caller of [agent('decisions:propose'), system('rhythm')]) {
+      const refused = failure(() => openDecision(ctx, caller, proposed));
+      expect(refused.code).toBe('E_HUMAN_REQUIRED');
+      expect(refused.help).toContain(`commandcenter://decisions/${proposed.ref}`);
+    }
+    expect(failure(() => openDecision(ctx, user, proposed, 'per_nobody')).rule).toBe('INV-03-02');
+    const opened = checked(openDecision(ctx, user, proposed, 'per_client'));
+    expect(opened.record).toMatchObject({ status: 'open', deciderId: 'per_client' });
+    expect(opened.changes.map((c) => c.event.type)).toEqual(['decision.opened']);
+    expect(failure(() => openDecision(ctx, user, opened.record)).rule).toBe('03 §10');
+  });
+
   it('dropping needs a reason; an agent may withdraw only its own proposal', () => {
     const { ctx } = harness();
     const mine = checked(

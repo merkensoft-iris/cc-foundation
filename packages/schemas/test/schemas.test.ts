@@ -175,6 +175,7 @@ describe('local API methods (04 §4.1)', () => {
       'items.confirm',
       'items.attest',
       'items.reject',
+      'decisions.open',
       'decisions.decide',
       'meetings.confirm',
       'goals.update',
