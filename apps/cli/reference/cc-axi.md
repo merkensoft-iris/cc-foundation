@@ -638,6 +638,23 @@ cc-axi hook session-start
 cc-axi hook session-start --principal claude-code
 ```
 
+## `cc-axi mcp`
+
+The stdio MCP server (07 §7): 14 tools over the local API as --principal; register it with `claude mcp add command-center -- cc-axi mcp --principal <name>`.
+
+```text
+cc-axi mcp
+```
+
+Local API: `home.get`, `search.query`, `items.list`, `decisions.list`, `issues.list`, `meetings.list`, `measures.list`, `goals.list`, `workstreams.list`, `items.get`, `decisions.get`, `issues.get`, `meetings.get`, `measures.get`, `goals.get`, `workstreams.get`, `items.create`, `items.update`, `items.claim`, `evidence.add`, `decisions.propose`, `meetings.capture`, `measures.record`, `connectors.actions`, `connectors.invoke`, `confirmations.get`, `confirmations.wait`.
+
+Examples:
+
+```text
+cc-axi mcp --principal claude-code
+cc-axi mcp --principal firstmate-main
+```
+
 ## `cc-axi update`
 
 Report the cc-axi version; cc-axi ships inside the Command Center app and updates with it.

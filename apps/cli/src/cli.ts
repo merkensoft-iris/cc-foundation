@@ -3,6 +3,7 @@
  * Loaded by bin.ts only when the `--version` fast path did not answer.
  */
 import os from 'node:os';
+import type { Readable } from 'node:stream';
 
 import { encode } from '@toon-format/toon';
 import { runAxiCli } from 'axi-sdk-js';
@@ -43,7 +44,7 @@ import { search } from './commands/search.js';
 import { hookSessionStart } from './commands/hook.js';
 import { setupHooks, setupStatus } from './commands/setup.js';
 import type { Handler, Session } from './commands/common.js';
-import { usageError } from './errors.js';
+import { CliError, usageError } from './errors.js';
 import { commandHelp, DESCRIPTION, groupHelp, HUMAN_ONLY_VERBS, topLevelHelp } from './help.js';
 import { defaultUserData } from './profile.js';
 import { emit, formatError, type Output } from './render.js';
@@ -55,6 +56,11 @@ const update: Handler = async () => ({
   status: 'cc-axi ships inside the Command Center app and updates with it',
   help: ['Update or rebuild Command Center to update cc-axi'],
 });
+
+/** `cc-axi mcp` runs before the SDK (runCli), since it serves stdio until the input ends. */
+const mcp: Handler = async () => {
+  throw new CliError('E_INTERNAL', 'cc-axi mcp is served by runCli, not as a command handler');
+};
 
 /** One handler per catalogue entry; a unit test checks the two match. */
 export const HANDLERS: Readonly<Record<string, Handler>> = {
@@ -85,6 +91,7 @@ export const HANDLERS: Readonly<Record<string, Handler>> = {
   'setup hooks': setupHooks,
   'setup status': setupStatus,
   'hook session-start': hookSessionStart,
+  mcp,
   update,
 };
 
@@ -93,6 +100,8 @@ export interface RunOptions {
   readonly env?: NodeJS.ProcessEnv;
   readonly cwd?: string;
   readonly stdout?: { write(chunk: string): unknown };
+  /** What `cc-axi mcp` reads its MCP messages from; defaults to process.stdin. */
+  readonly stdin?: Readable;
   /** The `bin:` path of the home header; defaults to the running script. */
   readonly bin?: string;
 }
@@ -100,6 +109,49 @@ export interface RunOptions {
 function collapseHome(file: string): string {
   const home = os.homedir();
   return file.startsWith(home) ? `~${file.slice(home.length)}` : file;
+}
+
+function userDataOf(env: NodeJS.ProcessEnv): string {
+  return env['CC_PROFILE_DIR'] || defaultUserData(process.platform, env);
+}
+
+function principalOf(globals: Globals, env: NodeJS.ProcessEnv): string {
+  return globals.principal ?? (env['CC_PRINCIPAL'] || 'cli-default');
+}
+
+/**
+ * `cc-axi mcp` (04 §8): parses its flags like any command, then serves MCP on stdin and stdout
+ * until stdin ends. `--help` and flag errors go through the SDK as for every command.
+ */
+async function serveMcp(
+  options: RunOptions,
+  env: NodeJS.ProcessEnv,
+  cwd: string,
+  execPath: string,
+): Promise<number> {
+  const stdout = options.stdout ?? process.stdout;
+  const command = findCommand('mcp')!;
+  let globals: Globals;
+  try {
+    globals = parseArgs(command, options.argv.slice(1)).globals;
+  } catch (error) {
+    const formatted = formatError(error, peekFormat(options.argv));
+    stdout.write(formatted.output);
+    return formatted.exitCode;
+  }
+  // Loaded here, so other commands never load the tool schemas (zod) at start.
+  const { runMcpRelay } = await import('./mcp/relay.js');
+  await runMcpRelay({
+    input: options.stdin ?? process.stdin,
+    output: stdout,
+    userData: userDataOf(env),
+    principal: principalOf(globals, env),
+    cwd,
+    env,
+    execPath,
+    handlers: HANDLERS,
+  });
+  return 0;
 }
 
 function createSession(
@@ -116,8 +168,8 @@ function createSession(
     execPath,
     api() {
       client ??= connectLocalApi({
-        userData: env['CC_PROFILE_DIR'] || defaultUserData(process.platform, env),
-        principal: globals.principal ?? (env['CC_PRINCIPAL'] || 'cli-default'),
+        userData: userDataOf(env),
+        principal: principalOf(globals, env),
       });
       return client;
     },
@@ -137,6 +189,12 @@ export async function runCli(options: RunOptions): Promise<number> {
   const format = peekFormat(options.argv);
   const execPath = options.bin ?? process.argv[1] ?? 'cc-axi';
   const bin = collapseHome(execPath);
+  if (
+    options.argv[0] === 'mcp' &&
+    !options.argv.slice(1).some((arg) => arg === '--help' || arg === '-h')
+  ) {
+    return serveMcp(options, env, cwd, execPath);
+  }
 
   const run = async (path: string, argv: readonly string[]): Promise<Output | string> => {
     const command = findCommand(path);

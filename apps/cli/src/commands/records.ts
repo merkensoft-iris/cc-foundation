@@ -1,9 +1,9 @@
 /**
  * `cc-axi decisions | issues | measures | goals | workstreams` (07 §4.2).
  */
-import { dateValue, many, positiveInt, single, type Parsed } from '../args.js';
+import { dateValue, flag, many, positiveInt, single, type Parsed } from '../args.js';
 import { usageError } from '../errors.js';
-import { countLine, table, type Output } from '../render.js';
+import { countLine, table, truncate, type Output } from '../render.js';
 import { DEFAULT_LIMIT } from '../spec.js';
 import {
   actorText,
@@ -15,12 +15,14 @@ import {
   type DecisionMutationResult,
   type DecisionResult,
   type DecisionsListResult,
+  type GoalResult,
   type GoalsListResult,
   type Handler,
   type IssueMutationResult,
   type IssueResult,
   type IssuesListResult,
   type MeasureRecordResult,
+  type MeasureResult,
   type MeasuresListResult,
   type WorkstreamResult,
   type WorkstreamsListResult,
@@ -275,7 +277,71 @@ export const measuresRecord: Handler = async (parsed, session) => {
   };
 };
 
+/**
+ * One measure (`cc_get` on a K- ref, 07 §7). `cc-axi measures view` is not in the 07 §4.2
+ * catalogue, so only the MCP relay runs this view.
+ */
+export const measuresView: Handler = async (parsed, session) => {
+  const ref = refValue(parsed.positionals[0] ?? '', 'K');
+  const api = await session.api();
+  const { measure } = await api.call<MeasureResult>('measures.get', { ref });
+  const workstreams: string[] = [];
+  for (const id of measure.workstreamIds) workstreams.push(await workstreamSlug(api, id));
+  const view: Output = {
+    ref: measure.ref,
+    name: measure.name,
+    workstreams: workstreams.join(','),
+    owner: measure.ownerId,
+    unit: measure.currency === undefined ? measure.unit : `${measure.unit} ${measure.currency}`,
+    role: measure.role,
+    cadence: measure.cadence,
+    aggregation: measure.aggregation,
+    target: targetText(measure.target, measure.unit),
+    source: measure.source.kind,
+    active: measure.active,
+  };
+  return { measure: view };
+};
+
 // goals
+
+/**
+ * One goal (`cc_get` on a G- ref, 07 §7). `cc-axi goals view` is not in the 07 §4.2 catalogue,
+ * so only the MCP relay runs this view. Goals are edited only in the app (04 §4.3).
+ */
+export const goalsView: Handler = async (parsed, session) => {
+  const ref = refValue(parsed.positionals[0] ?? '', 'G');
+  const full = flag(parsed, '--full');
+  const api = await session.api();
+  const { goal } = await api.call<GoalResult>('goals.get', { ref });
+  const view: Output = {
+    ref: goal.ref,
+    title: goal.title,
+    workstream: await workstreamSlug(api, goal.workstreamId),
+    kind: goal.kind,
+    owner: goal.ownerId,
+    period: goal.period.label,
+    status: goal.status,
+    health: goal.health,
+  };
+  if (goal.healthNote !== undefined) view['health_note'] = goal.healthNote;
+  let truncated = false;
+  if (goal.doneMeans !== undefined) {
+    const cut = truncate(goal.doneMeans, full);
+    view['done_means'] = cut.text;
+    truncated = cut.truncated;
+  }
+  if (goal.target !== undefined) {
+    view['target'] =
+      `from ${String(goal.target.from)} to ${String(goal.target.to)} ${goal.target.unit} by ${goal.target.by}`;
+  }
+  view['commitment'] = goal.commitment;
+  if (goal.grade !== undefined) view['grade'] = goal.grade;
+  view['measures'] = goal.measureIds.length;
+  const output: Output = { goal: view };
+  if (truncated) output['help'] = [`Call cc_get with ref ${goal.ref} and full: true for all of it`];
+  return output;
+};
 
 export const goalsList: Handler = async (parsed, session) => {
   const workstream = single(parsed, '--workstream');

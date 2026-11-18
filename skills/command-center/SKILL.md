@@ -90,6 +90,10 @@ Item refs look like `A-0142`, decisions `D-0008`, issues `I-0012`, measures `K-0
 
 - `cc-axi hook session-start`: What an installed hook prints at session start: today's meetings, attention counts and the top items of this directory's workstream.
 
+### mcp
+
+- `cc-axi mcp`: The stdio MCP server (07 §7): 14 tools over the local API as --principal; register it with `claude mcp add command-center -- cc-axi mcp --principal <name>`.
+
 ### update
 
 - `cc-axi update [--check]`: Report the cc-axi version; cc-axi ships inside the Command Center app and updates with it.
