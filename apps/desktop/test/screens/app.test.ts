@@ -6,8 +6,9 @@
 import type { Decision } from '@cc/schemas';
 import { describe, expect, it } from 'vitest';
 
+import { App } from '../../src/renderer/app/app.js';
 import { NAV, routeOfLink } from '../../src/renderer/app/routes.js';
-import { allByTest, byTest, queryByTest, textOf } from '../../src/renderer/ui/vnode.js';
+import { allByTest, byTest, queryByTest, textOf, type VNode } from '../../src/renderer/ui/vnode.js';
 import { apiError, click, startApp, type } from './harness.js';
 
 const home = {
@@ -55,6 +56,30 @@ describe('the frame and deep links', () => {
     expect(textOf(byTest(app.tree(), 'confirmation-prompt'))).toMatch(
       /Confirmation cfm_7q2.*decided inline.*Confirmations screen arrives in phase 2/,
     );
+  });
+
+  it('a deep link that arrives while the first screen is chosen wins over Home (a cold start from a link)', async () => {
+    let answerStatus: (value: unknown) => void = () => undefined;
+    let tree: VNode | undefined;
+    const app = new App({
+      call: async (method) => {
+        if (method === 'onboarding.status') {
+          return new Promise((resolve) => (answerStatus = resolve));
+        }
+        if (method === 'meetings.get') throw apiError('E_NOT_FOUND', 'not in this fake');
+        return home;
+      },
+      render: (node) => {
+        tree = node;
+      },
+      now: () => Date.parse('2026-11-13T09:30:00Z'),
+    });
+    const started = app.start();
+    await app.go({ screen: 'meetings', ref: 'M-0010' });
+    answerStatus({ state: 'committed' });
+    await started;
+    expect(app.route).toEqual({ screen: 'meetings', ref: 'M-0010' });
+    expect(tree).toBeDefined();
   });
 
   it('shows why a screen could not load, and loads again', async () => {

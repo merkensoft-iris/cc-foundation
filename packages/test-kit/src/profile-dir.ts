@@ -33,6 +33,7 @@ export function createProfileDir(): ProfileDir {
   const path = mkdtempSync(join(profileBaseDir(), 'cc-test-'));
   return {
     path,
-    cleanup: () => rmSync(path, { recursive: true, force: true }),
+    // On Windows a process that just exited may hold its files a moment longer.
+    cleanup: () => rmSync(path, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 }),
   };
 }

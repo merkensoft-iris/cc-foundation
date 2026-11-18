@@ -85,9 +85,11 @@ export class App {
 
   /**
    * The first screen: onboarding until it is committed (01 §1 item 7, AC-08-11), else Home.
-   * When the status cannot be read, Home shows why.
+   * When the status cannot be read, Home shows why. A deep link that opened a screen while the
+   * status was being read wins: the app was started to show it (04 §3, 02 §9.2 rule 2).
    */
   async start(): Promise<void> {
+    const generation = this.#generation;
     let route: AppRoute = { screen: 'home' };
     try {
       const status = await this.ui.call<{ state: string }>('onboarding.status', {});
@@ -95,6 +97,7 @@ export class App {
     } catch {
       // Home loads next and shows the failure.
     }
+    if (generation !== this.#generation) return;
     await this.go(route);
   }
 

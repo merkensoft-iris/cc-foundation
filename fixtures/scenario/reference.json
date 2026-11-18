@@ -1,0 +1,92 @@
+{
+  "version": 1,
+  "scenario": "reference",
+  "description": "The reference scenario of 01 §7, 02 §8 and 03 §13, seeded by pnpm cc:seed: onboarding commits the scenario's answers with their S5 tailoring (fixtures/onboarding/sample-profile.json, 01 §3.2), then these local API calls add the worked-example records. All names are fictional.",
+  "today": "2026-11-04",
+  "seededAt": "09:40",
+  "onboarding": "fixtures/onboarding/sample-profile.json",
+  "agent": {
+    "name": "scenario-agent",
+    "kind": "cli",
+    "scopes": [
+      "read",
+      "items:write",
+      "items:claim",
+      "decisions:propose",
+      "meetings:capture",
+      "measures:write"
+    ]
+  },
+  "steps": [
+    {
+      "plays": "A-0142",
+      "as": "user",
+      "method": "items.create",
+      "params": {
+        "workstream": "alderwick",
+        "title": "Send revised proposal with phased pricing to the consulting lead",
+        "due": "2026-11-13",
+        "doneMeans": "The revised proposal is sent from the Alderwick mailbox to the lead and filed in the client folder.",
+        "evidence": ["Sent message to the lead with the proposal attached"]
+      }
+    },
+    { "as": "user", "method": "items.accept", "params": { "ref": "{{A-0142}}" } },
+    {
+      "plays": "A-0144",
+      "as": "agent",
+      "method": "items.create",
+      "params": {
+        "workstream": "quillmarsh",
+        "title": "Fix the contact form on the Quillmarsh site",
+        "due": "2026-11-18",
+        "doneMeans": "The contact form sends messages again and shows its confirmation after a submission.",
+        "evidence": [
+          "PR merged in the site repository",
+          "Contact page returns 200 and shows \"Thank you\" after a test submission"
+        ]
+      }
+    },
+    { "as": "user", "method": "items.accept", "params": { "ref": "{{A-0144}}" } },
+    {
+      "plays": "A-0160",
+      "as": "user",
+      "method": "items.create",
+      "params": {
+        "workstream": "alderwick",
+        "title": "Alderwick LinkedIn batch, week 47",
+        "due": "2026-11-19",
+        "doneMeans": "Three approved posts from the week's shipped work are scheduled on LinkedIn for 2026-11-19 to 2026-11-26.",
+        "evidence": [
+          "3 or more posts published between 2026-11-19 and 2026-11-26 whose text matches an approved draft"
+        ]
+      }
+    },
+    { "as": "user", "method": "items.accept", "params": { "ref": "{{A-0160}}" } },
+    {
+      "plays": "D-0008",
+      "as": "agent",
+      "method": "decisions.propose",
+      "params": {
+        "workstream": "alderwick",
+        "question": "Which scheduler should run Alderwick and Quillmarsh posting from week 3?",
+        "options": [
+          "Keep LinkedIn's built-in scheduler only",
+          "A scheduler with an API connector",
+          "A browser-based scheduler"
+        ],
+        "reversibility": "two_way",
+        "dueBy": "2026-11-27"
+      }
+    },
+    {
+      "plays": "R-0002",
+      "as": "user",
+      "method": "risks.record",
+      "params": {
+        "workstream": "workspace",
+        "description": "Laptop failure: if the machine is lost before an off-machine backup is set, the store is lost",
+        "trigger": "No off-machine backup destination 7 days after onboarding"
+      }
+    }
+  ]
+}
