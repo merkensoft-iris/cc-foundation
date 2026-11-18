@@ -4,7 +4,8 @@
  * Each entry of `recordTypes` in @cc/schemas becomes packages/schemas/records/<type>@<major>.json,
  * each entry of `apiMethods` becomes packages/schemas/api/<method>.json, each entry of
  * `frameworkFileTypes` becomes packages/schemas/frameworks/<type>@<major>.json, and the `cc-axi`
- * command catalogue becomes apps/cli/reference/cc-axi.md. The framework
+ * command catalogue becomes apps/cli/reference/cc-axi.md and the product skill
+ * skills/command-center/SKILL.md (07 §8). The framework
  * templates and packs (packages/frameworks/templates/<id>/<version>.yaml and
  * packs/<id>/<version>.yaml, 01 §4) are checked with @cc/frameworks and compiled into
  * packages/frameworks/src/generated/catalogue.ts; the onboarding fixtures
@@ -24,7 +25,7 @@ import { Ajv2020 } from 'ajv/dist/2020.js';
 import * as prettier from 'prettier';
 import { parse as parseYaml } from 'yaml';
 
-import { renderReference } from '@cc/cli';
+import { renderReference, renderSkill, SKILL_NAME } from '@cc/cli';
 import { checkPack, checkTemplate, templateDir } from '@cc/frameworks';
 import {
   apiMethods,
@@ -66,6 +67,7 @@ export const PACKS_DIR = 'packages/frameworks/packs';
 export const CATALOGUE_DIR = 'packages/frameworks/src/generated';
 export const ONBOARDING_FIXTURES_DIR = 'fixtures/onboarding';
 export const CLI_REFERENCE_DIR = 'apps/cli/reference';
+export const SKILL_DIR = `skills/${SKILL_NAME}`;
 
 export function recordFileName(record: Pick<RecordType, 'type' | 'major'>): string {
   return `${record.type}@${record.major}.json`;
@@ -223,7 +225,6 @@ export const frameworkCatalogue: Generator = {
   },
 };
 
-/**
 /** The `cc-axi` command reference (07 §4), from the command catalogue in apps/cli/src/spec.ts. */
 export const cliReference: Generator = {
   name: 'CLI reference',
@@ -235,6 +236,19 @@ export const cliReference: Generator = {
 };
 
 /**
+ * The product skill for users' agents (07 §8 item 3, C-07-06), from the help text of `cc-axi`
+ * with no live data. `npx skills add <org>/cc-foundation --skill command-center` installs it.
+ */
+export const productSkill: Generator = {
+  name: 'product skill',
+  dir: SKILL_DIR,
+  async generate(root) {
+    const path = `${SKILL_DIR}/SKILL.md`;
+    return [{ path, content: await formatted(root, path, renderSkill()) }];
+  },
+};
+
+/**
  * Every generator `pnpm cc:gen` runs. Extension points, each a new Generator here with its
  * own output directory and its source in packages/schemas, added by the build step whose
  * spec defines its input (09 §6.1):
@@ -242,7 +256,6 @@ export const cliReference: Generator = {
  * - MCP tool definitions, with the 12 KB budget check (07 §7; P1-13), which also need the
  *   meetings, connectors and confirmations methods (`pendingNamespaces` in @cc/schemas)
  * - AI tool definitions (04 §6; P3-01)
- * - skills/command-center/SKILL.md, from the home-view help text (07 §8; P1-14)
  */
 export const generators: readonly Generator[] = [
   recordSchemas,
@@ -250,6 +263,7 @@ export const generators: readonly Generator[] = [
   frameworkSchemas,
   frameworkCatalogue,
   cliReference,
+  productSkill,
 ];
 
 function listFiles(root: string, dir: string): string[] {

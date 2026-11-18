@@ -26,7 +26,7 @@
  * Exit codes follow 08 §6: 0 every check passed, 1 a check failed, 2 usage error.
  */
 import { execFile, spawnSync } from 'node:child_process';
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -43,6 +43,12 @@ export const BIN = join(ROOT, 'apps', 'cli', 'dist', 'bin.js');
 export const BUDGET_MS = 50;
 /** The sample profile of 01 §3.2, for the onboarding commands. */
 const SAMPLE_PROFILE = join(ROOT, 'fixtures', 'onboarding', 'sample-profile.json');
+/**
+ * The project directory and home of the `setup` commands, so they write only under a
+ * temporary directory (AGENTS.md rule 8): `$HOME` and `%USERPROFILE%` both point at it.
+ */
+const SETUP_DIR = join(tmpdir(), `cc-axi-setup-${String(process.pid)}`);
+const SETUP_ENV: NodeJS.ProcessEnv = { HOME: SETUP_DIR, USERPROFILE: SETUP_DIR };
 
 export interface CheckResult {
   readonly id: 'AC-07-01' | 'AC-07-02';
@@ -63,6 +69,10 @@ interface Case {
   /** Running it again changes nothing: the output is `status: no-op`. */
   readonly repeatNoop?: boolean;
   readonly principal?: string;
+  /** The working directory; the script's own by default. */
+  readonly cwd?: string;
+  /** Variables added to the test environment. */
+  readonly env?: NodeJS.ProcessEnv;
 }
 
 const total = (result: Record<string, unknown>): number => Number(result['total']);
@@ -165,6 +175,14 @@ export const CASES: Readonly<Record<string, Case>> = {
     ],
     repeatNoop: true,
   },
+  'setup hooks': {
+    run: ['setup', 'hooks', '--scope', 'project'],
+    repeatNoop: true,
+    cwd: SETUP_DIR,
+    env: SETUP_ENV,
+  },
+  'setup status': { run: ['setup', 'status'], cwd: SETUP_DIR, env: SETUP_ENV },
+  'hook session-start': { run: ['hook', 'session-start'] },
   update: { run: ['update'] },
 };
 
@@ -174,12 +192,12 @@ interface Run {
   readonly stderr: string;
 }
 
-function runBin(args: readonly string[], env: NodeJS.ProcessEnv): Promise<Run> {
+function runBin(args: readonly string[], env: NodeJS.ProcessEnv, cwd?: string): Promise<Run> {
   return new Promise((resolve) => {
     execFile(
       process.execPath,
       [BIN, ...args],
-      { env, encoding: 'utf8', timeout: 30_000 },
+      { env, encoding: 'utf8', timeout: 30_000, ...(cwd === undefined ? {} : { cwd }) },
       (error, stdout, stderr) => {
         const code = error === null ? 0 : typeof error.code === 'number' ? error.code : 1;
         resolve({ code, stdout, stderr });
@@ -236,17 +254,18 @@ async function commandChecks(
     );
     return;
   }
-  const env = testEnv(
-    profiles.reference,
-    spec.principal === undefined ? {} : { CC_PRINCIPAL: spec.principal },
-  );
+  const env = testEnv(profiles.reference, {
+    ...spec.env,
+    ...(spec.principal === undefined ? {} : { CC_PRINCIPAL: spec.principal }),
+  });
+  const cwd = spec.cwd;
   const words = command.path.split(' ');
 
   await checks.check(
     'AC-07-01',
     name('--help gives flags, defaults and 2 or 3 examples'),
     async () => {
-      const run = await runBin([...words, '--help'], env);
+      const run = await runBin([...words, '--help'], env, cwd);
       const help = toon(run.stdout);
       const examples = help['examples'];
       const flags = help['flags'] as { flag: string; default: string }[] | undefined;
@@ -264,7 +283,7 @@ async function commandChecks(
     name('unknown flag exits 2 and lists the valid flags'),
     async () => {
       const args = [...words, '--no-such-flag'];
-      const run = await runBin(args, env);
+      const run = await runBin(args, env, cwd);
       const output = toon(run.stdout);
       const help = (output['help'] as string[] | undefined)?.join('\n') ?? '';
       const missing = flagsOf(command).filter((flag) => !help.includes(flag.name));
@@ -281,7 +300,7 @@ async function commandChecks(
   );
 
   const before = profiles.core.results.length;
-  const run = await runBin(spec.run, env);
+  const run = await runBin(spec.run, env, cwd);
   const after = profiles.core.results.slice(before);
   let output: Record<string, unknown> = {};
   await checks.check('AC-07-01', name('output parses as TOON, exit 0, nothing on stderr'), () => {
@@ -348,7 +367,7 @@ async function commandChecks(
     );
     if (spec.repeatNoop === true) {
       await checks.check('AC-07-01', name('repeat is a no-op, exit 0'), async () => {
-        const again = await runBin(spec.run, env);
+        const again = await runBin(spec.run, env, cwd);
         return again.code === 0 && toon(again.stdout)['status'] === 'no-op'
           ? true
           : showRun(spec.run, again);
@@ -357,7 +376,7 @@ async function commandChecks(
   }
   await checks.check('AC-07-01', name('--format json parses as JSON'), async () => {
     const args = [...spec.run, '--format', 'json'];
-    const json = await runBin(args, env);
+    const json = await runBin(args, env, cwd);
     JSON.parse(json.stdout);
     return json.code === 0 ? true : showRun(args, json);
   });
@@ -543,6 +562,7 @@ export async function runConformance(options: {
   const empty = mkdtempSync(join(base, 'cc-test-'));
   const core = await startTestCore({ profileDir: reference });
   const emptyCore = await startTestCore({ profileDir: empty, data: emptyData() });
+  mkdirSync(SETUP_DIR, { recursive: true });
   try {
     await suiteChecks(checks, reference);
     for (const command of COMMANDS)
@@ -563,6 +583,7 @@ export async function runConformance(options: {
     rmSync(reference, { recursive: true, force: true });
     rmSync(empty, { recursive: true, force: true });
     rmSync(CASES['onboarding export']?.run.at(-1) ?? '', { force: true });
+    rmSync(SETUP_DIR, { recursive: true, force: true });
   }
   if (options.latency) latencyChecks(checks, options.runs);
   return checks.results;

@@ -5,8 +5,8 @@
  * command cannot exist without its help or its conformance case.
  *
  * Commands of later build steps (meetings, connectors, sessions, confirmations, onboarding
- * rerun, requests, backups, open, export, mcp, setup, hook, serve, items handoff and items link) are
- * absent, not stubbed (07 §4.2). No command performs a human-only operation (C-07-02).
+ * rerun, requests, backups, open, export, mcp, setup skill, serve, items handoff and items link)
+ * are absent, not stubbed (07 §4.2). No command performs a human-only operation (C-07-02).
  */
 
 /** Value lists the parser checks before calling the API; a unit test keeps them equal to @cc/schemas. */
@@ -35,6 +35,8 @@ export const REVERSIBILITIES = ['two_way', 'one_way'] as const;
 export const GOAL_PERIODS = ['current', 'previous', 'next'] as const;
 export const SEARCH_TYPES = ['items', 'decisions', 'issues', 'meetings'] as const;
 export const FORMATS = ['toon', 'json'] as const;
+/** `setup hooks --scope` (07 §8 item 1); `--agents` is checked by its handler. */
+export const HOOK_SCOPE_CHOICES = ['user', 'project'] as const;
 
 /** Lists show 50 entries unless `--limit` says otherwise (07 §4.1 rule 2). */
 export const DEFAULT_LIMIT = 50;
@@ -570,6 +572,55 @@ export const COMMANDS: readonly CommandSpec[] = [
       'cc-axi onboarding export --out engine/profile.json --format json',
     ],
     methods: ['onboarding.export'],
+  },
+  {
+    path: 'setup hooks',
+    summary:
+      'Install or repair the SessionStart hooks that run `cc-axi hook session-start` in new agent sessions',
+    kind: 'mutation',
+    args: [],
+    flags: [
+      {
+        name: '--agents',
+        value: '<list>',
+        description: 'Agents, comma-separated: claude-code, codex, opencode',
+        default: 'claude-code,codex,opencode',
+      },
+      {
+        name: '--scope',
+        value: '<user|project>',
+        description:
+          'user: the home-directory config of each agent; project: the current directory',
+        choices: HOOK_SCOPE_CHOICES,
+        default: 'user',
+      },
+    ],
+    examples: [
+      'cc-axi setup hooks',
+      'cc-axi setup hooks --scope project',
+      'cc-axi setup hooks --agents claude-code,codex --scope project',
+    ],
+    methods: [],
+    renamed: { '--agent': '--agents' },
+  },
+  {
+    path: 'setup status',
+    summary: 'Show which agents have the SessionStart hook, at user and project scope',
+    kind: 'meta',
+    args: [],
+    flags: [],
+    examples: ['cc-axi setup status', 'cc-axi setup status --format json'],
+    methods: [],
+  },
+  {
+    path: 'hook session-start',
+    summary:
+      "What an installed hook prints at session start: today's meetings, attention counts and the top items of this directory's workstream",
+    kind: 'meta',
+    args: [],
+    flags: [],
+    examples: ['cc-axi hook session-start', 'cc-axi hook session-start --principal claude-code'],
+    methods: ['home.get', 'workstreams.list', 'workstreams.get', 'items.list'],
   },
   {
     path: 'update',

@@ -20,6 +20,7 @@ import {
   RECORDS_DIR,
   recordSchemas,
   runGen,
+  SKILL_DIR,
   TEMPLATES_DIR,
   validateFixtures,
 } from '../gen.ts';
@@ -40,6 +41,7 @@ function copyRepo(): { path: string; cleanup(): void } {
     CATALOGUE_DIR,
     ONBOARDING_FIXTURES_DIR,
     CLI_REFERENCE_DIR,
+    SKILL_DIR,
   ]) {
     cpSync(join(root, path), join(dir.path, path), { recursive: true });
   }
@@ -52,6 +54,23 @@ describe('cc:gen', { timeout: 30_000 }, () => {
     const result = await runGen(root, true);
     expect(result.lines.join('\n')).not.toContain('DRIFT');
     expect(result.exitCode).toBe(0);
+  });
+
+  it('C-07-06 the product skill is generated: a hand edit of SKILL.md fails cc:gen --check', async () => {
+    const copy = copyRepo();
+    try {
+      const file = join(copy.path, SKILL_DIR, 'SKILL.md');
+      const text = readFileSync(file, 'utf8');
+      expect(text).toContain(
+        'description: Use when the user asks about their action items, decisions, meetings, scorecards, or Command Center.',
+      );
+      writeFileSync(file, `${text}\nA hand-written line.\n`);
+      const result = await runGen(copy.path, true);
+      expect(result.exitCode).toBe(1);
+      expect(result.lines.join('\n')).toContain(`DRIFT ${SKILL_DIR}/SKILL.md: changed`);
+    } finally {
+      copy.cleanup();
+    }
   });
 
   it('AC-08-03 hand-editing a file under packages/schemas/records/ fails cc:gen --check', async () => {
