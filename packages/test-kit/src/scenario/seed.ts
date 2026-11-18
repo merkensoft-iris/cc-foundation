@@ -16,8 +16,8 @@
  *    gives it the next free ref, and later steps name it as `{{A-0142}}`.
  *
  * A-0152 is left out: its owner is the client contact, and P1 has no API that adds a person.
- * The scenario's clock is a `FakeTimerClock`; `Scenario.advanceTo` moves it and runs the
- * rhythm jobs that fall due on the way (`RhythmJobs`).
+ * The scenario's clock is a `FakeTimerClock`; `Scenario.advanceTo` moves it, and the core's
+ * scheduler runs the rhythm jobs that fall due on the way (`RhythmJobs` keeps their reports).
  */
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
@@ -108,13 +108,14 @@ export class Scenario {
     core: CoreService,
     clock: FakeTimerClock,
     timeZone: string,
+    runs: JobRun[],
   ) {
     this.fixture = fixture;
     this.profileDir = profileDir;
     this.core = core;
     this.clock = clock;
     this.timeZone = timeZone;
-    this.jobs = new RhythmJobs(core, clock, () => timeZone);
+    this.jobs = new RhythmJobs(core, clock, runs);
   }
 
   /** One local API call as the user, as the app's UI path makes it (04 §4.3 rule 1). */
@@ -158,7 +159,7 @@ export class Scenario {
     return localDateTime(this.clock.now().toISOString(), this.timeZone).slice(0, 16);
   }
 
-  /** Moves the clock to a local date-time, running the rhythm jobs due on the way. */
+  /** Moves the clock to a local date-time; the core runs the rhythm jobs due on the way. */
   advanceTo(local: string): Promise<JobRun[]> {
     return this.jobs.advanceTo(this.instant(local));
   }
@@ -219,14 +220,16 @@ export async function seedScenario(options: SeedOptions): Promise<Scenario> {
   const clock = new FakeTimerClock(
     wallClockInstantCompatible(`${today}T${fixture.seededAt}`, timeZone),
   );
+  const runs: JobRun[] = [];
   const core = await startHeadless({
     profileDir: options.profileDir,
     clock,
+    onRhythmRun: (run) => void runs.push(run),
     logger: options.logger ?? silentLogger,
     env: options.env ?? {},
     validateResults: true,
   });
-  const scenario = new Scenario(fixture, options.profileDir, core, clock, timeZone);
+  const scenario = new Scenario(fixture, options.profileDir, core, clock, timeZone, runs);
   try {
     await scenario.user('onboarding.apply', { profile });
     await scenario.user('principals.create', {

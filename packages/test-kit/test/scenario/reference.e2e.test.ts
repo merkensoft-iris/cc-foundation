@@ -1,7 +1,8 @@
 /**
  * P1-15, the reference scenario end to end (09 §6.1; 08 §8 item 3): `cc:seed` seeds the
- * scenario on Wed 2026-11-04, then the fake clock runs through Fri 2026-12-04. The rhythm jobs
- * run at their spec times on the way (`RhythmJobs`); the user acts through the UI's path
+ * scenario on Wed 2026-11-04, then the fake clock runs through Fri 2026-12-04. The core's
+ * scheduler runs the rhythm jobs at their spec times on the way, and `RhythmJobs` keeps what
+ * each did; the user acts through the UI's path
  * (`callAsUser`, 04 §4.3 rule 1) and the scenario's agent through the local API socket, so
  * human-only operations stay out of the agent's reach.
  *
@@ -13,6 +14,7 @@
  * | Mon 11-09 | first daily start: pre-read, start, capture, dismiss, close; the unheld shutdown is missed | 02 §5.7 (Q6, Q7), 02 §4.2 |
  * | Tue 11-10 | the agent claims A-0144 and cannot confirm it | AC-03-02 |
  * | Fri 11-13 15:00 | first weekly review: the agent cannot open or decide D-0008, the user opens and decides it; an item captured, read back, closed | 03 §10, C-02-04 |
+ * | Sat 11-14 00:05 | the nightly jobs: the horizon extends; A-0142, overdue, rises to E1 | 02 §4.1, §7.2 |
  * | Mon 11-16 | the user edits a goal on the Goals tab, and rejects the A-0144 claim | AC-03-10, AC-03-05 |
  * | Thu 11-19 | the agent claims A-0160 with a note only; the user attests | AC-03-09 |
  * | Fri 11-20 15:00 | weekly review: A-0144 on the action review, A-0142 carried once | AC-03-05, AC-02-05 |
@@ -234,6 +236,15 @@ describe(
           expect(own.length, one.name).toBe(expansion.occurrences.length);
         }
         expect(s.jobs.extendHorizon()).toEqual([]);
+      });
+
+      it("the core's scheduler holds the rhythm jobs: the nightly run at 00:05 IST on Thu 2026-11-05, and the meetings job at the first pre-read, Mon 2026-11-09 08:30 (02 §4.1 rule 2, §4.7)", () => {
+        const due = (job: string) => s.core.scheduler.status(job)?.nextDueAt?.toISOString();
+        const at = (local: string) => new Date(s.instant(local)).toISOString();
+        expect(due('rhythm-nightly')).toBe(at('2026-11-05T00:05'));
+        expect(due('rhythm-meetings')).toBe(at('2026-11-09T08:30'));
+        // Nothing ran on the seed day: no meeting was due and no night had passed.
+        expect(s.jobs.log).toEqual([]);
       });
 
       it('AC-01-05 no composed series overlaps a hard protected block in any week from 2026-11-09 to 2027-02-05, expanding every RRULE', async () => {
@@ -503,6 +514,24 @@ describe(
         expect(closed.meeting.state).toBe('completed');
         expect(closed.carried).not.toContain(s.ref('A-0142'));
         expect((await h.item('A-0142')).carryCount).toBe(0);
+      });
+
+      it('Sat 2026-11-14 00:05 the core runs the nightly jobs on its own: the horizon extends and the escalation run raises A-0142, due 11-13 and still open, to E1 (02 §4.1 rule 2, §7.2 rule 1)', async () => {
+        const runs = await s.advanceTo('2026-11-14T00:05');
+        const nightly = s.instant('2026-11-14T00:05');
+        expect(runs).toContainEqual(expect.objectContaining({ job: 'horizon', at: nightly }));
+        expect(runs).toContainEqual(
+          expect.objectContaining({
+            job: 'escalation',
+            at: nightly,
+            refs: [s.ref('A-0142')],
+            notify: [s.ref('A-0142')],
+          }),
+        );
+        expect(await h.item('A-0142')).toMatchObject({ escalationLevel: 1, carryCount: 0 });
+        expect(s.core.scheduler.status('rhythm-nightly')?.nextDueAt?.toISOString()).toBe(
+          new Date(s.instant('2026-11-15T00:05')).toISOString(),
+        );
       });
     });
 

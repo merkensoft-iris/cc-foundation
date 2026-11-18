@@ -5,8 +5,10 @@
  *
  * Start-up: make `<userData>` and `<userData>/run` private, make sure `cli-default` exists,
  * plan and prepare the endpoint (ADR 0002), listen, write the endpoint record, and start the
- * endpoint watchdog on the scheduler. Stop reverses it: stop the scheduler, close the
- * listener and connections, remove the record (if ours) and the fallback directory.
+ * endpoint watchdog and the rhythm jobs on the scheduler (rhythm-jobs.ts: the horizon
+ * extension, pre-reads, the missed check and the nightly escalation). Stop reverses it: stop
+ * the scheduler, close the listener and connections, remove the record (if ours) and the
+ * fallback directory.
  *
  * Records: the core opens the workspace store in `<userData>` (@cc/store, 04 §9) unless the
  * caller hands it one, keeps the principals in its `agent_principals` table and serves the
@@ -54,6 +56,7 @@ import { registerReviewHandlers } from './handlers/review.js';
 import { registerWriteHandlers } from './handlers/writes.js';
 import { Meetings } from './meetings.js';
 import { Principals } from './principals.js';
+import { scheduleRhythmJobs, type RhythmJobs, type RhythmListener } from './rhythm-jobs.js';
 import { StorePrincipalDirectory } from './store-principals.js';
 import { StoreRecordStore, type InstalledActions } from './store-records.js';
 import { Scheduler } from './scheduler.js';
@@ -88,6 +91,8 @@ export interface CoreOptions {
   /** Where fallback directories go; `/tmp` by default (ADR 0002 decision 4). */
   readonly tmpRoot?: string;
   readonly watchdogIntervalMs?: number;
+  /** Called after each rhythm job that changed something (rhythm-jobs.ts). */
+  readonly onRhythmRun?: RhythmListener;
   readonly authTimeoutMs?: number;
   readonly validateResults?: boolean;
   /**
@@ -132,6 +137,8 @@ export interface CoreService extends CoreHandle {
   callAsUser(method: string, params?: unknown): Promise<unknown>;
   /** Serves UI calls from a port as the user (P1-10 passes the MessagePort from main). */
   serveUi(port: UiPort): void;
+  /** The rhythm jobs the scheduler runs (02 §4.1 rule 2, §4.2 rule 2, §4.7, §7.2 rule 1). */
+  readonly rhythm: RhythmJobs;
   /** One watchdog pass (ADR 0002 decision 4); the scheduler runs it every interval. */
   checkEndpoint(): Promise<WatchdogOutcome>;
   /**
@@ -303,10 +310,14 @@ async function serve(options: CoreOptions, basics: Basics): Promise<CoreService>
   registerMeetingHandlers(dispatcher, meetings, store, clock);
   registerPrincipalHandlers(dispatcher, principals);
   registerConnectorHandlers(dispatcher, store, clock);
+  // The commit writes the series and their instances: the rhythm jobs plan around them.
+  // They are scheduled once the core listens, below.
+  let replanRhythm = (): void => undefined;
   registerOnboardingHandlers(dispatcher, store, {
-    ...(options.onOnboardingCommitted === undefined
-      ? {}
-      : { onCommitted: options.onOnboardingCommitted }),
+    onCommitted: (profile) => {
+      replanRhythm();
+      options.onOnboardingCommitted?.(profile);
+    },
   });
   registerBackupHandlers(dispatcher, backups);
   options.register?.(dispatcher, handle);
@@ -390,6 +401,15 @@ async function serve(options: CoreOptions, basics: Basics): Promise<CoreService>
     const outcome = await checkEndpoint();
     if (outcome !== 'ok') logger.info('endpoint.watchdog', { outcome });
   });
+  const rhythm = scheduleRhythmJobs(scheduler, {
+    store,
+    records,
+    meetings,
+    clock,
+    logger,
+    ...(options.onRhythmRun === undefined ? {} : { onRun: options.onRhythmRun }),
+  });
+  replanRhythm = () => rhythm.replan();
 
   const stop = async (): Promise<void> => {
     if (stopped) return;
@@ -407,6 +427,7 @@ async function serve(options: CoreOptions, basics: Basics): Promise<CoreService>
   return {
     ...handle,
     dispatcher,
+    rhythm,
     get endpoint() {
       return record;
     },

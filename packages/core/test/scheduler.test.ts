@@ -1,7 +1,7 @@
 import { FakeTimerClock } from '@cc/test-kit';
 import { describe, expect, it } from 'vitest';
 
-import { Scheduler } from '../src/scheduler.js';
+import { MAX_TIMER_MS, Scheduler } from '../src/scheduler.js';
 
 const START = '2026-11-04T00:00:00Z';
 
@@ -138,5 +138,92 @@ describe('Scheduler on an injected clock (09 P1-04)', () => {
     await clock.advance(1_000);
     await scheduler.stop();
     expect(finished).toBe(true);
+  });
+
+  it('runs a planned job at the instants its next function gives, asking again after each run (rule 4)', async () => {
+    const clock = new FakeTimerClock(START);
+    const scheduler = new Scheduler({ clock });
+    const due = ['2026-11-04T00:10:00Z', '2026-11-04T00:30:00Z'];
+    const runs: string[] = [];
+    scheduler.plan(
+      'planned',
+      () => (due[0] === undefined ? undefined : new Date(due[0])),
+      (dueAt) => {
+        runs.push(dueAt.toISOString());
+        due.shift();
+      },
+    );
+    expect(scheduler.status('planned')?.nextDueAt).toEqual(new Date('2026-11-04T00:10:00Z'));
+    await clock.advanceTo('2026-11-04T01:00:00Z');
+    expect(runs).toEqual(['2026-11-04T00:10:00.000Z', '2026-11-04T00:30:00.000Z']);
+    // Nothing due: no timer, until a replan finds something.
+    expect(scheduler.status('planned')?.nextDueAt).toBeUndefined();
+    expect(clock.pending).toBe(0);
+    due.push('2026-11-04T00:59:00Z');
+    scheduler.replan('planned');
+    await clock.advance(0);
+    expect(runs).toEqual([
+      '2026-11-04T00:10:00.000Z',
+      '2026-11-04T00:30:00.000Z',
+      '2026-11-04T00:59:00.000Z',
+    ]);
+    await scheduler.stop();
+  });
+
+  it('replan brings a planned job closer; a failing next function is recorded and plans nothing', async () => {
+    const clock = new FakeTimerClock(START);
+    const scheduler = new Scheduler({ clock });
+    let next = new Date('2026-11-05T00:00:00Z');
+    const runs: string[] = [];
+    scheduler.plan(
+      'planned',
+      () => next,
+      (dueAt) => {
+        runs.push(dueAt.toISOString());
+        next = new Date('2026-11-06T00:00:00Z');
+      },
+    );
+    next = new Date('2026-11-04T06:00:00Z');
+    scheduler.replan('planned');
+    await clock.advanceTo('2026-11-04T12:00:00Z');
+    expect(runs).toEqual(['2026-11-04T06:00:00.000Z']);
+    expect(clock.pending).toBe(1);
+
+    const failing = new Scheduler({ clock });
+    failing.plan(
+      'broken',
+      () => {
+        throw new Error('no store');
+      },
+      () => undefined,
+    );
+    expect(failing.status('broken')).toMatchObject({ failures: 1, lastError: 'no store' });
+    expect(failing.status('broken')?.nextDueAt).toBeUndefined();
+    await scheduler.stop();
+    await failing.stop();
+  });
+
+  it('reaches a due time beyond the longest platform timer in steps (rule 5)', async () => {
+    const clock = new FakeTimerClock(START);
+    const delays: number[] = [];
+    const scheduler = new Scheduler({
+      clock: {
+        now: () => clock.now(),
+        setTimeout: (callback, ms) => {
+          delays.push(ms);
+          return clock.setTimeout(callback, ms);
+        },
+        clearTimeout: (handle) => clock.clearTimeout(handle),
+      },
+    });
+    const runs: string[] = [];
+    const when = new Date(Date.parse(START) + 40 * 86_400_000);
+    scheduler.at('far', when, (dueAt) => void runs.push(dueAt.toISOString()));
+    await clock.advance(MAX_TIMER_MS);
+    expect(runs).toEqual([]);
+    await clock.advanceTo(when);
+    expect(runs).toEqual([when.toISOString()]);
+    expect(Math.max(...delays)).toBeLessThanOrEqual(MAX_TIMER_MS);
+    await scheduler.stop();
   });
 });

@@ -10,6 +10,11 @@
  * 3. Repeating jobs keep a fixed rate: the next run is due one interval after the previous
  *    due time, not after the previous run ended. Ticks missed while the process was
  *    suspended collapse into one run.
+ * 4. A planned job (`plan`) is due when its `next` function says: asked when it is added,
+ *    after each run ends, and on `replan`. The rhythm jobs (rhythm-jobs.ts) are planned jobs:
+ *    their due times come from the records.
+ * 5. A due time beyond the longest timer a platform keeps (about 24.8 days) is reached in
+ *    steps; a timer that fires before its due time only re-arms.
  */
 import type { Clock, TimerHandle } from './clock.js';
 import type { Logger } from './logger.js';
@@ -17,6 +22,12 @@ import { silentLogger } from './logger.js';
 
 /** A job receives the instant it was due. */
 export type Job = (dueAt: Date) => Promise<void> | void;
+
+/** A planned job's next due time after `now`, or undefined when nothing is due until a replan. */
+export type NextDue = (now: Date) => Date | undefined;
+
+/** Node keeps a timer for at most 2^31 - 1 ms; a longer delay would fire at once. */
+export const MAX_TIMER_MS = 2 ** 31 - 1;
 
 export interface JobStatus {
   readonly name: string;
@@ -35,6 +46,7 @@ interface Entry {
   readonly name: string;
   readonly job: Job;
   readonly intervalMs: number | undefined;
+  readonly next: NextDue | undefined;
   nextDueAt: Date | undefined;
   timer: TimerHandle | undefined;
   running: Promise<void> | undefined;
@@ -70,12 +82,46 @@ export class Scheduler {
       throw new RangeError(`Job ${name}: the interval must be a positive number of milliseconds`);
     }
     const now = this.#clock.now().getTime();
-    this.#add(name, job, intervalMs, new Date(options.immediate ? now : now + intervalMs));
+    this.#add(name, job, { intervalMs }, new Date(options.immediate ? now : now + intervalMs));
   }
 
   /** Runs `job` once at `when` (at once if `when` has passed). */
   at(name: string, when: Date, job: Job): void {
-    this.#add(name, job, undefined, when);
+    this.#add(name, job, {}, when);
+  }
+
+  /**
+   * Runs `job` at the instants `next` gives (rule 4): `next(now)` is asked now, after each run
+   * ends and on `replan`. An instant that has passed runs at once.
+   */
+  plan(name: string, next: NextDue, job: Job): void {
+    this.#add(name, job, { next }, undefined);
+    this.replan(name);
+  }
+
+  /**
+   * Asks a planned job for its next due time again, after a change that may bring it closer.
+   * A job that is running plans its next run when the run ends.
+   */
+  replan(name: string): void {
+    const entry = this.#entries.get(name);
+    if (entry?.next === undefined || entry.running !== undefined || this.#stopped) return;
+    if (entry.timer !== undefined) this.#clock.clearTimeout(entry.timer);
+    entry.timer = undefined;
+    entry.nextDueAt = this.#nextOf(entry, entry.next);
+    this.#arm(entry);
+  }
+
+  /** A planned job's next due time; a failing `next` is logged and plans nothing (rule 2). */
+  #nextOf(entry: Entry, next: NextDue): Date | undefined {
+    try {
+      return next(this.#clock.now());
+    } catch (error) {
+      entry.failures += 1;
+      entry.lastError = error instanceof Error ? error.message : String(error);
+      this.#logger.error('scheduler.plan_failed', { job: entry.name, error: entry.lastError });
+      return undefined;
+    }
   }
 
   /** Stops a job's future runs; a run in progress finishes. */
@@ -120,13 +166,19 @@ export class Scheduler {
     await Promise.all(running);
   }
 
-  #add(name: string, job: Job, intervalMs: number | undefined, dueAt: Date): void {
+  #add(
+    name: string,
+    job: Job,
+    kind: { intervalMs?: number; next?: NextDue },
+    dueAt: Date | undefined,
+  ): void {
     if (this.#stopped) throw new Error(`Scheduler stopped; cannot add job ${name}`);
     if (this.#entries.has(name)) throw new Error(`Job ${name} is already scheduled`);
     const entry: Entry = {
       name,
       job,
-      intervalMs,
+      intervalMs: kind.intervalMs,
+      next: kind.next,
       nextDueAt: dueAt,
       timer: undefined,
       running: undefined,
@@ -143,15 +195,23 @@ export class Scheduler {
   #arm(entry: Entry): void {
     if (entry.nextDueAt === undefined || this.#stopped) return;
     const delay = Math.max(0, entry.nextDueAt.getTime() - this.#clock.now().getTime());
-    entry.timer = this.#clock.setTimeout(() => this.#fire(entry), delay);
+    entry.timer = this.#clock.setTimeout(() => this.#fire(entry), Math.min(delay, MAX_TIMER_MS));
   }
 
   #fire(entry: Entry): void {
     entry.timer = undefined;
     const dueAt = entry.nextDueAt;
     if (dueAt === undefined || this.#entries.get(entry.name) !== entry) return;
+    // Rule 5: a capped timer fired before the due time; wait the rest.
+    if (this.#clock.now().getTime() < dueAt.getTime()) {
+      this.#arm(entry);
+      return;
+    }
 
-    if (entry.intervalMs === undefined) {
+    if (entry.next !== undefined) {
+      // Rule 4: the next due time is asked for when this run ends.
+      entry.nextDueAt = undefined;
+    } else if (entry.intervalMs === undefined) {
       entry.nextDueAt = undefined;
     } else {
       // Fixed rate (rule 3): skip whole intervals that already passed.
@@ -167,7 +227,10 @@ export class Scheduler {
     } else {
       const run: Promise<void> = this.#run(entry, dueAt).finally(() => {
         if (entry.running === run) entry.running = undefined;
-        if (entry.intervalMs === undefined && this.#entries.get(entry.name) === entry) {
+        if (this.#entries.get(entry.name) !== entry) return;
+        if (entry.next !== undefined) {
+          this.replan(entry.name);
+        } else if (entry.intervalMs === undefined) {
           this.#entries.delete(entry.name);
         }
       });
