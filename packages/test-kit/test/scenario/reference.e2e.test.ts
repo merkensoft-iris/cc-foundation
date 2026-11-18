@@ -27,7 +27,9 @@
  * Checks of steps not yet built are pending at the point in the timeline where they belong,
  * one per criterion, so the step that builds them enables them in place: P1-13 (MCP relay,
  * AC-07-03), P1-14 (hooks, AC-07-05, AC-07-06) and P1-17 (backups, AC-04-10 to AC-04-12).
- * `cc:trace` does not count a pending test.
+ * `cc:trace` does not count a pending test. Two more wait for work no P1 step names yet: the
+ * calendar mapping validator (AC-02-12), and a way for the user to open a proposed decision,
+ * without which D-0008 cannot be decided (`meetings.capture` takes only notes and items).
  *
  * The scenario stands in for the 03 §13 records with what P1's API can create: A-0142, A-0144
  * and A-0160 (created and accepted), D-0008 (proposed by the agent) and R-0002 (on the
@@ -293,6 +295,10 @@ describe(
         );
         expect(risk).toMatchObject({ workstreamId: workspaceId, status: 'watching' });
       });
+
+      it.todo(
+        'AC-02-12 a calendar mapping route whose binding does not implement calendar@1, or a series with no primary target, fails validation with E_INVARIANT and writes nothing (no P1 step builds the 02 §9.6 rule 4 validator yet)',
+      );
 
       it.todo(
         'AC-07-05 cc-axi setup hooks --agents claude-code,codex,opencode --scope project run twice leaves one hook per agent (P1-14)',
