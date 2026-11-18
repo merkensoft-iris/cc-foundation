@@ -194,6 +194,68 @@ describe('Settings', () => {
     );
   });
 
+  it('AC-07-03 Add client creates an mcp_client principal with the MCP defaults and prints its registration command (04 §8 rule 3)', async () => {
+    const registered = {
+      name: 'claude-code',
+      kind: 'mcp_client',
+      scopes: ['read', 'items:write'],
+      workstreamFilter: 'all',
+      sensitiveAccess: false,
+    };
+    const listed = [...principals];
+    const app = await startApp(
+      {
+        'principals.list': () => ({ principals: listed, total: listed.length }),
+        'principals.create': () => {
+          listed.push(registered);
+          return { principal: registered, tokenPath: '/tmp/x/run/tokens/claude-code.token' };
+        },
+      },
+      { screen: 'settings' },
+    );
+    // The revoked MCP client gets no command.
+    expect(textOf(byTest(app.tree(), 'mcp-registrations'))).toBe('No MCP client yet.');
+    const form = byTest(app.tree(), 'add-mcp-client');
+    await click(app, byTest(form, 'add-mcp-client-submit'));
+    expect(app.callsOf('principals.create')).toEqual([
+      {
+        name: 'claude-code',
+        kind: 'mcp_client',
+        scopes: [
+          'read',
+          'items:write',
+          'items:claim',
+          'decisions:propose',
+          'meetings:capture',
+          'connectors:read',
+        ],
+      },
+    ]);
+    const command = 'claude mcp add command-center -- cc-axi mcp --principal claude-code';
+    expect(textOf(byTest(app.tree(), 'flash'))).toBe(
+      `claude-code added. Register it with: ${command}`,
+    );
+    expect(textOf(byTest(app.tree(), 'mcp-command-claude-code'))).toBe(command);
+
+    type(byTest(app.tree(), 'mcp-client'), 'codex');
+    await app.settle();
+    expect(textOf(byTest(app.tree(), 'mcp-command-claude-code'))).toBe(
+      'codex mcp add command-center -- cc-axi mcp --principal claude-code',
+    );
+    type(byTest(app.tree(), 'mcp-client'), 'other');
+    await app.settle();
+    expect(JSON.parse(textOf(byTest(app.tree(), 'mcp-command-claude-code')))).toEqual({
+      mcpServers: {
+        'command-center': { command: 'cc-axi', args: ['mcp', '--principal', 'claude-code'] },
+      },
+    });
+
+    type(byTest(app.tree(), 'mcp-client-name'), 'Not Valid');
+    await click(app, byTest(app.tree(), 'add-mcp-client-submit'));
+    expect(app.callsOf('principals.create')).toHaveLength(1);
+    expect(textOf(byTest(app.tree(), 'flash'))).toMatch(/lower-case letters/);
+  });
+
   it('lists the pushed notification kinds and shows the AI placeholder without calling anything', async () => {
     const notifications = await startApp({}, { screen: 'settings', tab: 'notifications' });
     expect(allByTest(notifications.tree(), 'pushed-escalation')).toHaveLength(1);

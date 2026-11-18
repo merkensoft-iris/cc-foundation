@@ -281,6 +281,12 @@ td {
   font-family: var(--cc-font-mono, ui-monospace, monospace);
   color: var(--cc-color-text-muted, GrayText);
 }
+.command {
+  display: block;
+  font-family: var(--cc-font-mono, ui-monospace, monospace);
+  user-select: all;
+  overflow-wrap: anywhere;
+}
 .agenda-section {
   margin-bottom: var(--cc-pad);
 }
