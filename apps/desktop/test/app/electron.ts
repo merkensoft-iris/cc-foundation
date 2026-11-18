@@ -38,10 +38,25 @@ export interface RunningApp {
  * Starts the built app on `profileDir`; `link` is a `commandcenter://` deep link it opens with,
  * as Windows and Linux pass one in argv (04 §3).
  */
+/**
+ * Playwright's Electron loader. It holds the app's `ready` until Playwright has attached to the
+ * browser, so the first window never opens before the attach; Playwright adds it only when it
+ * picks the Electron binary itself, so it is passed here with the binary we name. Without it
+ * the attach raced the window and hung on Windows.
+ */
+function playwrightLoader(): string {
+  const manifest = createRequire(path.join(desktop, 'package.json')).resolve(
+    'playwright-core/package.json',
+  );
+  return path.join(path.dirname(manifest), 'lib', 'server', 'electron', 'loader.js');
+}
+
 export async function launchApp(profileDir: string, link?: string): Promise<RunningApp> {
-  const options = {
+  const app = await _electron.launch({
     executablePath: electronBinary(),
     args: [
+      '-r',
+      playwrightLoader(),
       path.join(desktop, 'dist', 'main', 'index.js'),
       '--profile-dir',
       profileDir,
@@ -51,17 +66,7 @@ export async function launchApp(profileDir: string, link?: string): Promise<Runn
     // Playwright turns Chromium's sandbox off on Linux unless asked; the app keeps it on.
     chromiumSandbox: true,
     timeout: 60_000,
-  };
-  let app: ElectronApplication;
-  try {
-    app = await _electron.launch(options);
-  } catch (error) {
-    // The first start of a freshly downloaded Electron on a CI runner (Windows above all) can
-    // miss Playwright's attach; Playwright has killed that process, so start once more.
-    if (!(error instanceof Error && error.name === 'TimeoutError')) throw error;
-    await new Promise((resolve) => setTimeout(resolve, 2_000));
-    app = await _electron.launch(options);
-  }
+  });
   const page = await app.firstWindow();
   await page.waitForLoadState('domcontentloaded');
   const byTest = (id: string) => page.locator(`[data-test="${id}"]`);
