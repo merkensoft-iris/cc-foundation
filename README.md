@@ -20,7 +20,9 @@ pnpm cc:doctor        # check the toolchain
 pnpm typecheck        # tsc --noEmit across the workspace
 pnpm lint             # ESLint, Prettier check, dependency rules D1-D7
 pnpm test             # build, then unit, integration and fixture tests (offline)
-pnpm e2e              # headless-core scenario tests
+pnpm e2e              # headless-core scenario tests (the reference scenario, P1-15)
+pnpm e2e:app          # Playwright runs of the human-only screens in the Electron app
+pnpm cc:seed --scenario reference --profile-dir <dir>   # seed the reference scenario
 pnpm scan:canaries    # canary denylist scan (CI also runs gitleaks)
 ```
 

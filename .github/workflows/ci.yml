@@ -1,8 +1,9 @@
 # CI for cc-foundation (docs/design/08-repository-and-automation.md §9). P0-01 runs the jobs
 # the scaffold can run, P0-02 adds cc:gen --check and cc:trace, and P1-05 adds
 # cc:axi-conformance, and P1-16 the engine-template job (a fresh cc-engine copy installs,
-# builds and starts on the packed foundation on all three OSes); later phases add pnpm audit
-# and OSV, and the app end-to-end smoke as their scripts land.
+# builds and starts on the packed foundation on all three OSes); P1-15 adds the reference
+# scenario's Playwright runs of the human-only screens in the Electron app (pnpm e2e:app) on
+# all three OSes; later phases add pnpm audit and OSV as their scripts land.
 name: ci
 
 on:
@@ -44,6 +45,17 @@ jobs:
         run: pnpm test
       - name: E2E (headless scenario tests)
         run: pnpm e2e
+      - name: App end-to-end (Playwright on the Electron app, the human-only screens of the reference scenario)
+        shell: bash
+        run: |
+          if [ "$RUNNER_OS" = Linux ]; then
+            # As in the engine-template job: Ubuntu 24.04 blocks the unprivileged user namespaces
+            # Chromium's sandbox uses, and the app keeps its sandbox on; the app needs a display.
+            sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+            xvfb-run -a pnpm e2e:app
+          else
+            pnpm e2e:app
+          fi
       - name: Generated files have not drifted (cc:gen --check, C-08-03)
         run: pnpm cc:gen --check
       - name: AC-07-01 AC-07-02 AXI conformance over every cc-axi command, --version within 50 ms of node (cc:axi-conformance, C-07-01)

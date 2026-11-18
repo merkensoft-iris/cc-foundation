@@ -13,7 +13,7 @@
     "dev": "node scripts/dev.ts",
     "test": "pnpm build && vitest run --project unit",
     "e2e": "vitest run --project e2e",
-    "e2e:app": "node scripts/not-yet.ts e2e:app P1",
+    "e2e:app": "pnpm --silent --filter \"@cc/desktop...\" build && pnpm --silent --filter @cc/desktop exec install-electron && vitest run --project app",
     "lint": "pnpm lint:eslint && pnpm lint:format && pnpm lint:deps",
     "lint:eslint": "eslint --max-warnings 0 .",
     "lint:format": "prettier --check .",

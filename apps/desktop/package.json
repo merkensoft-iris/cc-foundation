@@ -18,6 +18,7 @@
     "@cc/schemas": "workspace:*"
   },
   "devDependencies": {
-    "electron": "45.2.3"
+    "electron": "45.2.3",
+    "playwright-core": "1.64.1"
   }
 }
