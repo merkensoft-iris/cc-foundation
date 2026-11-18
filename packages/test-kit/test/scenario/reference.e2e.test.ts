@@ -22,7 +22,7 @@
  * | Fri 12-04 18:00 | export and re-preview of the answers; month metrics | AC-01-09, AC-03-08 |
  *
  * A second run (`the user who misses two weekly reviews`) leaves the 11-13 and 11-20 reviews
- * unheld: one rhythm escalation (AC-02-07).
+ * unheld: one rhythm escalation (AC-02-07), on the next daily start's attention list.
  *
  * Checks of steps not yet built are pending at the point in the timeline where they belong,
  * one per criterion, so the step that builds them enables them in place: P1-13 (MCP relay,
@@ -739,7 +739,7 @@ async function seedFreshPreview(
 }
 
 describe('P1-15 the user who misses two weekly reviews', { timeout: SLOW_MS }, () => {
-  it("AC-02-07 the unheld 2026-11-13 and 2026-11-20 weekly reviews raise exactly one rhythm escalation with the three options, on the next review's agenda", async () => {
+  it("AC-02-07 the unheld 2026-11-13 and 2026-11-20 weekly reviews raise exactly one rhythm escalation with the three options, on the next daily start's attention list and the next review's agenda", async () => {
     const profile = createProfileDir();
     const s = await seedScenario({ profileDir: profile.path });
     try {
@@ -760,6 +760,14 @@ describe('P1-15 the user who misses two weekly reviews', { timeout: SLOW_MS }, (
       for (const local of ['2026-11-13T15:00', '2026-11-20T15:00']) {
         expect(missed).toContain((await h.meeting(local, 'Weekly CEO review')).ref);
       }
+      // The next daily start's attention list shows it in the escalations category, ahead of
+      // today's meetings (02 §5.7 rule 1).
+      const daily = await h.meeting('2026-11-23T09:00', 'Daily start');
+      expect(daily.state).toBe('prepared');
+      const entries = (await h.view(daily.ref)).sections
+        .filter((section) => section.type === 'attention')
+        .flatMap((section) => section.rows.map((row) => row.ref));
+      expect(entries[0]).toBe(ref);
       // The next review's issues section lists it: the monthly review that absorbs 11-27's weekly.
       await s.advanceTo('2026-11-26T15:00');
       const monthly = await h.meeting('2026-11-27T15:00', 'Monthly review');

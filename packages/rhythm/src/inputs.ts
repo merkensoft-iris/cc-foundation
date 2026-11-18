@@ -641,9 +641,10 @@ function resolveRhythmHealth(
 
 /**
  * The attention list (02 §5.7): the categories in their fixed order, oldest first within each
- * (owner decision Q6). Escalations at level 2 or higher come from the items; today's other
- * meetings and their overlaps from the instances; the US daylight-saving check line from
- * dst.ts (ADR 0001 decision 8); the rest from `data.attention`.
+ * (owner decision Q6). Escalations are the items at level 2 or higher and the open rhythm
+ * escalations (02 §4.2 rule 3), oldest first together; today's other meetings and their
+ * overlaps come from the instances; the US daylight-saving check line from dst.ts (ADR 0001
+ * decision 8); the rest from `data.attention`.
  */
 function resolveAttention(
   query: Extract<InputQuery, { source: 'attention' }>,
@@ -664,6 +665,17 @@ function resolveAttention(
       since: item.createdAt,
       workstreamIds: [item.workstreamId],
       flags: [`escalation_${String(item.escalationLevel)}`],
+    });
+  }
+  for (const issue of data.issues) {
+    if (issue.raisedFrom.kind !== 'rhythm' || issue.status !== 'open') continue;
+    entries.push({
+      category: 'escalation',
+      ref: issue.ref,
+      title: issue.title,
+      since: issue.createdAt,
+      workstreamIds: [issue.workstreamId],
+      flags: ['rhythm_escalation'],
     });
   }
   const seriesById = new Map(data.series.map((s) => [s.id as string, s]));
