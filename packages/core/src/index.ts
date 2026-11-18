@@ -120,8 +120,21 @@ export {
   type MeetingsOptions,
   type PrereadResult,
 } from './meetings.js';
+export {
+  nextNightly,
+  NIGHTLY_AT,
+  RHYTHM_MEETINGS_JOB,
+  RHYTHM_NIGHTLY_JOB,
+  rfc3339,
+  runHorizonExtension,
+  runMissedJob,
+  type RhythmJobName,
+  type RhythmJobs,
+  type RhythmListener,
+  type RhythmRun,
+} from './rhythm-jobs.js';
 export { storeRhythmStore } from './rhythm-store.js';
-export { Scheduler, type Job, type JobStatus } from './scheduler.js';
+export { MAX_TIMER_MS, Scheduler, type Job, type JobStatus, type NextDue } from './scheduler.js';
 export {
   BACKUP_CHECK_INTERVAL_MS,
   BACKUP_JOB,
