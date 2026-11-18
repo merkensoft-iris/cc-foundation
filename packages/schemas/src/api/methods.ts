@@ -509,7 +509,11 @@ export const decisionsGet = method({
   scope: 'read',
   humanOnly: false,
   params: z.strictObject({ ref: DecisionRef }),
-  result: z.strictObject({ decision: Decision }),
+  result: z.strictObject({
+    decision: Decision,
+    /** Every person who may be its decider (INV-03-02), for the app's decider picker. */
+    deciders: z.array(z.strictObject({ id: z.string().min(1), name: z.string().min(1) })),
+  }),
 });
 
 export const decisionsPropose = method({
@@ -780,7 +784,20 @@ export const itemsReject = method({
   result: z.strictObject({ status: MutationStatus, item: ActionItem }),
 });
 
-// decisions (human-only decide)
+// decisions (human-only open and decide)
+
+export const decisionsOpen = method({
+  method: 'decisions.open',
+  spec: '04 §4.3, 03 §10 rule 2, INV-03-02',
+  description: 'Opens a proposed decision onto the agenda with its decider, a person.',
+  humanOnly: true,
+  params: z.strictObject({
+    ref: DecisionRef,
+    /** The decider; default the one it was proposed with. */
+    decider: PersonRef.optional(),
+  }),
+  result: z.strictObject({ status: MutationStatus, decision: Decision }),
+});
 
 export const decisionsDecide = method({
   method: 'decisions.decide',
@@ -1539,6 +1556,7 @@ export const apiMethods: readonly ApiMethod[] = [
   decisionsList,
   decisionsGet,
   decisionsPropose,
+  decisionsOpen,
   decisionsDecide,
   issuesList,
   issuesGet,

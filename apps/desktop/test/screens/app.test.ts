@@ -136,6 +136,34 @@ describe('Home', () => {
 });
 
 describe('Decisions', () => {
+  it('opens a proposed decision with the decider picked; deciding waits until it is open', async () => {
+    const decision = {
+      ref: 'D-0008',
+      question: 'Which social scheduler from week 3?',
+      status: 'proposed',
+      deciderId: 'per_self',
+      reversibility: 'two_way',
+      options: [{ id: 'o1', text: 'Buffer', proposedBy: { kind: 'agent' } }],
+    } as unknown as Decision;
+    const deciders = [
+      { id: 'per_self', name: 'Self' },
+      { id: 'per_client', name: 'Client contact' },
+    ];
+    const app = await startApp(
+      {
+        'decisions.get': () => ({ decision, deciders }),
+        'decisions.open': () => ({ status: 'ok' }),
+      },
+      { screen: 'decisions', ref: 'D-0008' },
+    );
+    expect(textOf(byTest(app.tree(), 'decider'))).toBe('Self');
+    expect(queryByTest(app.tree(), 'decide-form')).toBeUndefined();
+    const form = byTest(app.tree(), 'open-form');
+    type(byTest(form, 'open-decider'), 'per_client');
+    await click(app, byTest(byTest(app.tree(), 'open-form'), 'open-decision'));
+    expect(app.callsOf('decisions.open')).toEqual([{ ref: 'D-0008', decider: 'per_client' }]);
+  });
+
   it('decides an open decision with its outcome and why', async () => {
     const decision = {
       ref: 'D-0008',

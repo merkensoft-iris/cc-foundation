@@ -52,6 +52,7 @@ const HUMAN_ONLY_VERBS: readonly [RegExp, string][] = [
   [/^cc_reject(?:_|$)/, 'items.reject'],
   [/^cc_accept(?:_|$)/, 'items.accept'],
   [/^cc_drop(?:_|$)/, 'items.drop'],
+  [/^cc_open_decision(?:_|$)/, 'decisions.open'],
   [/^cc_decide(?:_|$)/, 'decisions.decide'],
   [/^cc_approve(?:_|$)/, 'confirmations.approve'],
   [/^cc_deny(?:_|$)/, 'confirmations.deny'],

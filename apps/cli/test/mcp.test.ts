@@ -154,6 +154,7 @@ describe(
         ['cc_drop_item', { ref: 'A-0163' }, 'commandcenter://items/A-0163'],
         ['cc_approve_confirmation', { id: 'cfm_7q2' }, 'commandcenter://confirmations/cfm_7q2'],
         ['cc_deny', { id: 'cfm_7q2' }, 'commandcenter://confirmations/cfm_7q2'],
+        ['cc_open_decision', { ref: 'D-0008' }, 'commandcenter://'],
         ['cc_decide', { ref: 'D-0008' }, 'commandcenter://'],
       ];
       for (const [name, args, link] of cases) {
@@ -164,6 +165,7 @@ describe(
       }
       expect(humanOnlyMethodOf('cc_confirm_read_back')).toBe('meetings.confirm');
       expect(humanOnlyMethodOf('cc_approve_request')).toBe('requests.approve');
+      expect(humanOnlyMethodOf('cc_open_decision')).toBe('decisions.open');
       expect(humanOnlyMethodOf('cc_list')).toBeUndefined();
     });
   },

@@ -1,10 +1,10 @@
 /**
  * The methods the screens of 09 P1-11 need beyond the P1-04 surface: the review queue (03 §9.2,
- * owner decision Q5), accepting drafts (03 §7), deciding (03 §10), editing goals on the
+ * owner decision Q5), accepting drafts (03 §7), opening and deciding (03 §10), editing goals on the
  * Scorecard's Goals tab with their history (owner decision Q2), and risks, workspace-level ones
  * on the Workspace pseudo-workstream (owner decision Q4).
  *
- * Accept, confirm, attest, reject, decide and the goal edit are human-only (04 §4.3): the
+ * Accept, confirm, attest, reject, open, decide and the goal edit are human-only (04 §4.3): the
  * dispatcher refuses an agent before these handlers run, and the domain refuses again.
  */
 import {
@@ -12,6 +12,7 @@ import {
   attestItem,
   confirmItem,
   decide,
+  openDecision,
   recordRisk,
   rejectClaim,
   reviewOptions,
@@ -102,6 +103,19 @@ export function registerReviewHandlers(
       const item = findByRef(view.tx, visibility, 'action_items', params.ref);
       const outcome = rejectClaim(ctx, caller, item, params.reason);
       return { result: { status: outcome.status, item: outcome.record }, changes: outcome.changes };
+    }),
+  );
+
+  dispatcher.register(methods.decisionsOpen, (params, context) =>
+    command(context, (view, { ctx, visibility, caller }) => {
+      const decision = findByRef(view.tx, visibility, 'decisions', params.ref);
+      const deciderId =
+        params.decider === undefined ? undefined : findPerson(view.tx, params.decider).id;
+      const outcome = openDecision(ctx, caller, decision, deciderId);
+      return {
+        result: { status: outcome.status, decision: outcome.record },
+        changes: outcome.changes,
+      };
     }),
   );
 

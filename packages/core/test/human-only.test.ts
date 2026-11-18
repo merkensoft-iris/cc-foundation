@@ -31,7 +31,7 @@ describe('the human-only catalogue (04 §4.3)', () => {
     const names = HUMAN_ONLY_OPERATIONS.map((entry) => entry.method);
     expect(new Set(names).size).toBe(names.length);
     for (const name of names) expect(name).toMatch(/^[a-z]+\.[a-z]+$/);
-    // 04 §4.3 rule 3, in order: confirmations; claims (confirm, attest, reject); decisions;
+    // 04 §4.3 rule 3, in order: confirmations; claims (confirm, attest, reject); decisions (open, decide);
     // draft items and drops; meeting read-back; connector install, update, uninstall;
     // scopes; browser sessions; discovery start and path; lock activation and rollback;
     // the ticket-run standing approval; development requests; backups (passphrase,
@@ -44,6 +44,7 @@ describe('the human-only catalogue (04 §4.3)', () => {
       'items.confirm',
       'items.attest',
       'items.reject',
+      'decisions.open',
       'decisions.decide',
       'items.accept',
       'items.drop',

@@ -67,7 +67,7 @@ type Actor =
   | { kind: 'system'; component: 'rhythm' | 'review' | 'escalation' | 'ingest' | 'scheduler' | 'migration' };
 ```
 
-Every CLI and MCP call is an `agent` actor, even when a person typed it. Human-only operations (approving confirmations, verifying claims, deciding decisions, accepting and dropping items, confirming meeting read-back, installing connectors, granting scopes, creating browser sessions, starting discovery and choosing its path, activating or rolling back connectors and adapters, granting the ticket-run standing approval, approving, rejecting or deferring development requests, setting the backup passphrase or destination, restoring a backup) happen only in the app UI ([04 §4.3](04-platform.md#43-who-counts-as-the-user)).
+Every CLI and MCP call is an `agent` actor, even when a person typed it. Human-only operations (approving confirmations, verifying claims, opening and deciding decisions, accepting and dropping items, confirming meeting read-back, installing connectors, granting scopes, creating browser sessions, starting discovery and choosing its path, activating or rolling back connectors and adapters, granting the ticket-run standing approval, approving, rejecting or deferring development requests, setting the backup passphrase or destination, restoring a backup) happen only in the app UI ([04 §4.3](04-platform.md#43-who-counts-as-the-user)).
 
 ### 3.4 Risk classes
 

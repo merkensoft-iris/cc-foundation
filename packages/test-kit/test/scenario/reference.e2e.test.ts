@@ -12,7 +12,7 @@
  * | Wed 11-04 09:40 | `cc:seed`: onboarding commit, the agent principal, the worked examples | AC-01-01, AC-01-06, AC-02-01, AC-01-05, AC-03-11, AC-02-12 |
  * | Mon 11-09 | first daily start: pre-read, start, capture, dismiss, close; the unheld shutdown is missed | 02 §5.7 (Q6, Q7), 02 §4.2 |
  * | Tue 11-10 | the agent claims A-0144 and cannot confirm it | AC-03-02 |
- * | Fri 11-13 15:00 | first weekly review: the agent cannot decide D-0008; an item captured, read back, closed | C-02-04 |
+ * | Fri 11-13 15:00 | first weekly review: the agent cannot open or decide D-0008, the user opens and decides it; an item captured, read back, closed | 03 §10, C-02-04 |
  * | Mon 11-16 | the user edits a goal on the Goals tab, and rejects the A-0144 claim | AC-03-10, AC-03-05 |
  * | Thu 11-19 | the agent claims A-0160 with a note only; the user attests | AC-03-09 |
  * | Fri 11-20 15:00 | weekly review: A-0144 on the action review, A-0142 carried once | AC-03-05, AC-02-05 |
@@ -27,10 +27,8 @@
  * Checks of steps not yet built are pending at the point in the timeline where they belong,
  * one per criterion, so the step that builds them enables them in place: P1-13 (MCP relay,
  * AC-07-03), P1-14 (hooks, AC-07-05, AC-07-06) and P1-17 (backups, AC-04-10 to AC-04-12).
- * `cc:trace` does not count a pending test. One more waits for work no P1 step names yet: a
- * way for the user to open a proposed decision, without which D-0008 cannot be decided
- * (`meetings.capture` takes only notes and items). The calendar mapping check (AC-02-12, P1-20)
- * runs beside the seed on a fresh profile, since the seeded one is already committed.
+ * `cc:trace` does not count a pending test. The calendar mapping check (AC-02-12, P1-20) runs
+ * beside the seed on a fresh profile, since the seeded one is already committed.
  *
  * The scenario stands in for the 03 §13 records with what P1's API can create: A-0142, A-0144
  * and A-0160 (created and accepted), D-0008 (proposed by the agent) and R-0002 (on the
@@ -434,11 +432,7 @@ describe(
         "AC-07-06 in a directory listed in Quillmarsh's repoPaths, the session-start hook shows Quillmarsh's top items only, never an item of a sensitive workstream (P1-14)",
       );
 
-      it.todo(
-        'Fri 2026-11-13 the user opens D-0008 onto the review and decides it (needs a P1 path from proposed to open: meetings.capture takes only notes and action items, and no method opens a proposed decision)',
-      );
-
-      it('Fri 2026-11-13 the first weekly review: only the user can decide D-0008, a new item is captured and read back, and the close does not carry A-0142 due that day', async () => {
+      it('Fri 2026-11-13 the first weekly review: only the user can open and decide D-0008, a new item is captured and read back, and the close does not carry A-0142 due that day', async () => {
         const weekly = await h.meeting('2026-11-13T15:00', 'Weekly CEO review');
         await s.advanceTo('2026-11-13T15:00');
         await s.user('meetings.start', { ref: weekly.ref });
@@ -450,6 +444,33 @@ describe(
         );
         expect(agentDecides.code).toBe('E_HUMAN_REQUIRED');
         expect(agentDecides.help.join('\n')).toContain('commandcenter://');
+
+        // Opening a proposed decision is human-only too (03 §10 rule 2, 04 §4.3); deciding
+        // it before it is open fails.
+        const agentOpens = await rejection(s.agent('decisions.open', { ref: decision }));
+        expect(agentOpens.code).toBe('E_HUMAN_REQUIRED');
+        expect(agentOpens.help.join('\n')).toContain('commandcenter://');
+        const tooEarly = await rejection(
+          s.user('decisions.decide', { ref: decision, text: 'Built-in', why: 'Fewer tools' }),
+        );
+        expect(tooEarly.code).toBe('E_INVARIANT');
+
+        // The user opens D-0008 onto the review from the Decisions screen, decider the user,
+        // and decides it.
+        const opened = await s.user<{ decision: { status: string; deciderId: string } }>(
+          'decisions.open',
+          { ref: decision, decider: 'me' },
+        );
+        expect(opened.decision.status).toBe('open');
+        const decided = await s.user<{
+          decision: { status: string; outcome?: { optionId?: string; text: string } };
+        }>('decisions.decide', {
+          ref: decision,
+          optionId: 'o2',
+          text: 'A scheduler with an API connector, from week 3',
+          why: 'Posts for both workstreams go out on time without a browser session',
+        });
+        expect(decided.decision).toMatchObject({ status: 'decided', outcome: { optionId: 'o2' } });
 
         await s.agent('meetings.capture', {
           ref: weekly.ref,

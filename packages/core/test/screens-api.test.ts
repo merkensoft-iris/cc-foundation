@@ -11,7 +11,7 @@ import {
   workspaceWorkstreamOf,
 } from '@cc/domain';
 import { extendHorizon } from '@cc/rhythm';
-import type { ActionItem, DomainEvent, Goal, MeetingSeries, Risk } from '@cc/schemas';
+import type { ActionItem, Decision, DomainEvent, Goal, MeetingSeries, Risk } from '@cc/schemas';
 import { FakeTimerClock } from '@cc/test-kit';
 import { afterEach, describe, expect, it } from 'vitest';
 
@@ -207,6 +207,60 @@ describe('the Goals tab (03 §5.3, owner decision Q2)', () => {
       health: { value: 'off_track', note: 'Two clients paused' },
     });
     expect(done.goal).toMatchObject({ health: 'off_track', healthNote: 'Two clients paused' });
+  });
+});
+
+describe('the Decisions screen (03 §10, 04 §4.3)', () => {
+  it('only the user opens a proposed decision, picking its decider from the people listed; then decides it', async () => {
+    const { test, user } = await core('2026-11-12T05:30:00Z');
+    const { decision: proposed } = await user<{ decision: Decision }>('decisions.propose', {
+      workstream: 'alderwick',
+      question: 'Which scheduler should run the posting from week 3?',
+      options: ['The built-in scheduler', 'A scheduling tool'],
+    });
+    expect(proposed.status).toBe('proposed');
+    const ref = proposed.ref;
+
+    const cli = await test.connect('cli-default');
+    const refused = await rejection(cli.call('decisions.open', { ref }));
+    expect(refused.code).toBe('E_HUMAN_REQUIRED');
+    expect(refused.help.join('\n')).toContain('commandcenter://');
+    // Deciding a proposed decision is refused: it must be opened first.
+    const early = await rejection(user('decisions.decide', { ref, text: 'x', why: 'y' }));
+    expect(early.code).toBe('E_INVARIANT');
+
+    const viewed = await user<{ deciders: { id: string; name: string }[] }>('decisions.get', {
+      ref,
+    });
+    expect(viewed.deciders[0]?.id).toBe('per_self');
+    const other = viewed.deciders.find((person) => person.id !== 'per_self');
+    expect(other).toBeDefined();
+    const opened = await user<{ status: string; decision: Decision }>('decisions.open', {
+      ref,
+      decider: other?.id,
+    });
+    expect(opened).toMatchObject({
+      status: 'ok',
+      decision: { status: 'open', deciderId: other?.id },
+    });
+    const notAPerson = await rejection(user('decisions.open', { ref, decider: 'per_nobody' }));
+    expect(notAPerson.code).toBe('E_NOT_FOUND');
+
+    const decided = await user<{ decision: Decision }>('decisions.decide', {
+      ref,
+      optionId: 'o1',
+      text: 'The built-in scheduler',
+      why: 'One tool fewer',
+    });
+    expect(decided.decision.status).toBe('decided');
+    const events = test.core.store.read((tx) =>
+      tx.events().filter((event) => event.entity.ref === ref),
+    );
+    expect(events.map((event) => [event.type, event.actor.kind])).toEqual([
+      ['decision.proposed', 'user'],
+      ['decision.opened', 'user'],
+      ['decision.decided', 'user'],
+    ]);
   });
 });
 
