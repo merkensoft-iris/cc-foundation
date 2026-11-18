@@ -1039,7 +1039,8 @@ export const principalsRevoke = method({
 
 /** A warning or a blocker of the onboarding preview: a W- code of 01 §6.4, or a rule. */
 export const OnboardingNotice = z.strictObject({
-  /** `W-TIME-BUDGET`, `W-NO-SLOT`, `W-NOT-BUILT`, `W-PLACEMENT`, `W-INVARIANT`, `W-DEFERRED`. */
+  /** `W-TIME-BUDGET`, `W-NO-SLOT`, `W-NOT-BUILT`, `W-PLACEMENT`, `W-INVARIANT`, `W-DEFERRED`,
+   *  `W-CALENDAR-MAPPING`. */
   code: z.string().regex(/^W-[A-Z-]+$/),
   text: z.string().min(1),
   /** What the user can do about it: the options of T1, the confirmation to give. */

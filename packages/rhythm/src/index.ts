@@ -30,6 +30,7 @@ export * from './escalation.js';
 export * from './expand.js';
 export * from './horizon.js';
 export * from './ics.js';
+export * from './mapping.js';
 export * from './inputs.js';
 export * from './materialise.js';
 export * from './missed.js';
