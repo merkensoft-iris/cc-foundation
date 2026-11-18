@@ -11,7 +11,16 @@
  * quitting stops the core gracefully first. A packaged build whose checkout moved on gets the
  * Rebuild now offer (`rebuild-offer.ts`); `--smoke` runs the start once and exits
  * (`args.ts`).
+ *
+ * Backups (04 §9.1, P1-17): main loads the backup keys from the secret store before the core
+ * starts and hands them over (`backup-keys.ts`); a passphrase the user sets is turned into a
+ * key here and never reaches the core. Rebuild now takes its pre-update backup through the
+ * core. A staged restore asks for a core restart. A core that refuses to open the store
+ * (`<userData>` inside a synced folder, 04 §9 rule 5) is not restarted: the shell shows the
+ * help and exits (AC-04-12).
  */
+import type { BackupKey } from '@cc/core/backup-keys';
+
 import type { HostToMain, StartMode } from '../shared/protocol.js';
 import type { Clock, TimerHandle } from './clock.js';
 import {
@@ -21,6 +30,7 @@ import {
   type CoreState,
   type SupervisorTiming,
 } from './core-supervisor.js';
+import { BackupKeyring, type SecretStore } from './backup-keys.js';
 import { deepLinkInArgv, parseDeepLink, type Route } from './deep-links.js';
 import {
   NAVIGATE_CHANNEL,
@@ -85,15 +95,27 @@ export interface ShellPlatform {
   readonly ipc: IpcMainLike;
   readonly launcher: CoreLauncher;
   readonly startCheck: StartCheck;
-  /** Rebuild now for this build (04 §10 rule 2); absent without a build stamp. */
-  readonly rebuild?: () => Promise<RebuildOutcome>;
+  /**
+   * Rebuild now for this build (04 §10 rule 2), which takes `backup` first; absent without a
+   * build stamp.
+   */
+  readonly rebuild?: (backup: () => Promise<void>) => Promise<RebuildOutcome>;
   /** `--smoke`: start once, report and exit. */
   readonly smoke?: boolean;
   /**
-   * Keeps a secret in `<userData>/secrets/<name>`, encrypted with the OS keychain
-   * (`safeStorage`, 04 §9 rule 1); absent where the OS offers none.
+   * Secrets in `<userData>/secrets/<name>`, encrypted with the OS keychain (`safeStorage`,
+   * 04 §9 rule 1); absent where the OS offers none.
    */
-  readonly storeSecret?: (name: string, value: string) => Promise<void>;
+  readonly secrets?: SecretStore;
+  /**
+   * The core refused to start in a way no restart can fix (04 §9 rule 5): shows why, with
+   * the help lines, and exits with status 1.
+   */
+  refuseStart(refusal: {
+    readonly code: string;
+    readonly message: string;
+    readonly help: readonly string[];
+  }): void;
   requestSingleInstanceLock(): boolean;
   onSecondInstance(listener: (argv: readonly string[]) => void): void;
   /** macOS delivers deep links as `open-url`; register before ready. */
@@ -119,6 +141,8 @@ export interface ShellPlatform {
 
 export interface ShellOptions {
   readonly timing?: Partial<SupervisorTiming>;
+  /** Derives a backup key from a passphrase; ADR 0007's scrypt by default. */
+  readonly deriveBackupKey?: (passphrase: string) => Promise<BackupKey>;
 }
 
 export interface Shell {
@@ -176,10 +200,31 @@ export async function startShell(
         }
         notifications.setPolicy(message.policy);
         break;
+      case 'restart':
+        platform.log('core.restart_requested', { reason: message.reason });
+        core.restart();
+        break;
+      case 'refused':
+        platform.log('shell.refused', { code: message.code });
+        if (platform.smoke === true) {
+          platform.finishSmoke({ ok: false, reason: `${message.code}: ${message.message}`, ms: 0 });
+        } else {
+          platform.refuseStart(message);
+        }
+        break;
       case 'fatal':
         break;
     }
   };
+
+  const keyring =
+    platform.secrets === undefined
+      ? undefined
+      : new BackupKeyring({
+          secrets: platform.secrets,
+          ...(options.deriveBackupKey === undefined ? {} : { derive: options.deriveBackupKey }),
+          log: (event, fields) => platform.log(event, fields),
+        });
 
   const coreStateListeners = new Set<(state: CoreState) => void>();
   const core = new CoreSupervisor({
@@ -192,6 +237,7 @@ export async function startShell(
       for (const listener of coreStateListeners) listener(state);
     },
     log: (event, fields) => platform.log(event, fields),
+    backupKeys: () => keyring?.serialized ?? [],
     ...(options.timing === undefined ? {} : { timing: options.timing }),
   });
 
@@ -256,6 +302,13 @@ export async function startShell(
 
   await platform.whenReady();
   platform.prepare();
+  // safeStorage works only once the app is ready; the core starts after the keys are loaded.
+  const keysLoaded = (keyring?.load() ?? Promise.resolve([])).catch((error: unknown) => {
+    platform.log('backups.keys_unavailable', {
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return [];
+  });
   if (platform.packaged) platform.registerProtocolClient();
 
   const verdictPromise = resolveStartMode(platform.startCheck);
@@ -264,7 +317,14 @@ export async function startShell(
   const rebuild = new RebuildOffer({
     clock: platform.clock,
     check: platform.startCheck,
-    rebuild: platform.smoke === true ? undefined : platform.rebuild,
+    rebuild:
+      platform.smoke === true || platform.rebuild === undefined
+        ? undefined
+        : () =>
+            (platform.rebuild as NonNullable<ShellPlatform['rebuild']>)(async () => {
+              // The pre-update backup (04 §10 rule 2, §9.1 rule 1); Rebuild stops if it fails.
+              await core.call('backups.run', { trigger: 'pre_update' });
+            }),
     activity: () => core.activity(),
     relaunch: (executable) => {
       platform.relaunch(executable);
@@ -291,14 +351,13 @@ export async function startShell(
         return Promise.resolve(rebuild.state);
       },
     },
-    ...(platform.storeSecret === undefined
+    ...(keyring === undefined
       ? {}
       : {
-          storeBackupPassphrase: (passphrase: string) =>
-            (platform.storeSecret as NonNullable<ShellPlatform['storeSecret']>)(
-              'backup-passphrase',
-              passphrase,
-            ),
+          setBackupPassphrase: async (passphrase: string) => {
+            await keysLoaded;
+            core.sendBackupKeys(await keyring.setPassphrase(passphrase));
+          },
         }),
     log: (event, fields) => platform.log(event, fields),
   });
@@ -325,7 +384,7 @@ export async function startShell(
   refreshTray();
   showWindow();
 
-  void verdictPromise.then((verdict) => {
+  void Promise.all([verdictPromise, keysLoaded]).then(([verdict]) => {
     const resolved = verdict.mode;
     mode = resolved;
     platform.log('shell.mode', {

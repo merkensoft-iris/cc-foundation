@@ -667,6 +667,15 @@ export const COMMANDS: readonly CommandSpec[] = [
     methods: MCP_METHODS,
   },
   {
+    path: 'backups status',
+    summary: 'The backup state, the last good backup and the last restore test (04 §9.1)',
+    kind: 'view',
+    args: [],
+    flags: [],
+    examples: ['cc-axi backups status', 'cc-axi backups status --format json'],
+    methods: ['backups.status'],
+  },
+  {
     path: 'update',
     summary:
       'Report the cc-axi version; cc-axi ships inside the Command Center app and updates with it',

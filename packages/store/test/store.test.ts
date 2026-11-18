@@ -2,7 +2,7 @@
  * Opening the store: one SQLite database per workspace in WAL mode in `<userData>`
  * (03 §12 point 1, 04 §9), refused inside a synced folder (04 §9 rule 5).
  */
-import { existsSync } from 'node:fs';
+import { existsSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 
@@ -86,6 +86,23 @@ describe('openStore', () => {
       'E_GUARD_SYNCED_FOLDER',
     );
     expect(error.message).toContain('OneDrive');
+  });
+
+  it('AC-04-12 refuses a data directory inside a fixture sync root found by its marker, whatever the folder is called', () => {
+    for (const marker of ['.dropbox', '.tmp.drivedownload']) {
+      const root = createProfileDir();
+      profiles.push(root);
+      writeFileSync(join(root.path, marker), '');
+      const inside = join(root.path, 'work', 'Command Center');
+      const error = expectStoreError(() => open(inside), 'E_GUARD_SYNCED_FOLDER');
+      expect(error.message).toMatch(marker === '.dropbox' ? /Dropbox/ : /Google Drive/);
+      expect(error.help.join(' ')).toContain('move the data directory');
+      expect(existsSync(inside)).toBe(false);
+      expect(syncedFolderMatch(root.path, {})).toMatchObject({ matched: root.path });
+    }
+    const plain = createProfileDir();
+    profiles.push(plain);
+    expect(syncedFolderMatch(join(plain.path, 'Command Center'), {})).toBeUndefined();
   });
 
   it('allows a directory that merely mentions a sync product in a longer name', () => {

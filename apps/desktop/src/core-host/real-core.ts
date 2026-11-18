@@ -7,8 +7,11 @@
  * hours and the hard protected blocks, sent to main at start once onboarding is committed and
  * again after the commit. The start mode and the notification producers are not yet read by the
  * core: developer mode in core approvals and the producers arrive with the work that owns them.
+ *
+ * Backups (04 §9.1, P1-17): the core gets the keys main sent, pushes `backup_failing` through
+ * main, and asks main for a restart once a restore is staged.
  */
-import { startCore, stderrLogger, systemClock, type CoreOptions } from '@cc/core';
+import { parseKeys, startCore, stderrLogger, systemClock, type CoreOptions } from '@cc/core';
 import type { OnboardingProfile } from '@cc/schemas';
 
 import type { NotificationPolicy } from '../shared/protocol.js';
@@ -24,10 +27,13 @@ export function notificationPolicy(profile: OnboardingProfile): NotificationPoli
 }
 
 export function realCore(overrides: Omit<CoreOptions, 'userData'> = {}): StartCore {
-  return async ({ userData, events }): Promise<CoreLike> => {
+  return async ({ userData, events, backupKeys }): Promise<CoreLike> => {
     const core = await startCore({
       logger: stderrLogger(systemClock),
       onOnboardingCommitted: (profile) => events.setNotificationPolicy(notificationPolicy(profile)),
+      backupKeys: parseKeys(backupKeys),
+      notify: (push) => events.notify(push),
+      requestRestart: (reason) => events.requestRestart(reason),
       ...overrides,
       userData,
     });
@@ -35,6 +41,12 @@ export function realCore(overrides: Omit<CoreOptions, 'userData'> = {}): StartCo
     if (committed?.committedAt !== undefined) {
       events.setNotificationPolicy(notificationPolicy(committed.profile));
     }
-    return core;
+    return {
+      endpoint: core.endpoint,
+      serveUi: (port) => core.serveUi(port),
+      busy: () => core.busy(),
+      setBackupKeys: (keys) => core.setBackupKeys(parseKeys(keys)),
+      stop: () => core.stop(),
+    };
   };
 }

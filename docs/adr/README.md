@@ -27,3 +27,4 @@ on `main`; if two open PRs take the same number, the one merged later renumbers.
 | 0004   | P0-11 | S7 Clean-tree start                                      | accepted |
 | 0005   | P0-13 | S9 Harness deny rules                                    | accepted |
 | 0006   | P0-12 | [S8 Verifiable packages](0006-s8-verifiable-packages.md) | accepted |
+| 0007   | P1-17 | [Backup encryption](0007-backup-encryption.md)           | accepted |

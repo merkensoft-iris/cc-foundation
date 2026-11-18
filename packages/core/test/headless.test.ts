@@ -44,6 +44,29 @@ function waitExit(child: ChildProcess): Promise<number | null> {
   });
 }
 
+describe('the synced-folder check at start (04 §9 rule 5)', () => {
+  it('AC-04-12 starting CC with a profile directory inside a fixture sync root refuses to open the store and exits with help to move it', async () => {
+    for (const marker of ['.dropbox', '.tmp.drivedownload']) {
+      const root = createProfileDir();
+      try {
+        fs.writeFileSync(path.join(root.path, marker), '');
+        const profileDir = path.join(root.path, 'Command Center');
+        const child = spawnHeadless(profileDir);
+        let stderr = '';
+        child.stderr?.on('data', (chunk: Buffer) => (stderr += chunk.toString()));
+        expect(await waitExit(child)).toBe(1);
+        expect(stderr).toMatch(/^E_GUARD_SYNCED_FOLDER: /);
+        expect(stderr).toMatch(marker === '.dropbox' ? /inside Dropbox/ : /inside Google Drive/);
+        expect(stderr).toContain('move the data directory to a path that no sync client watches');
+        // Nothing was written there: no store, no WAL, not even the directory.
+        expect(fs.existsSync(profileDir)).toBe(false);
+      } finally {
+        root.cleanup();
+      }
+    }
+  });
+});
+
 describe('headless mode (04 §3 rule 2, D7)', () => {
   it('refuses to start when NODE_ENV=production', async () => {
     expect(() => assertHeadlessAllowed({ NODE_ENV: 'production' })).toThrow(/NODE_ENV=production/);

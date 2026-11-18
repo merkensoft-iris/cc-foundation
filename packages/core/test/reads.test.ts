@@ -145,6 +145,8 @@ describe('home.get (07 §4.3)', () => {
         expect.objectContaining({ ref: 'A-0160', state: 'in_progress' }),
       ],
       counts: { dueSoon: 3, open: 3 },
+      // No backup yet and no off-machine destination (04 §9.1 rule 8).
+      backup: { state: 'not_configured' },
     });
     // One workstream only.
     const ald = await cli.call<{ counts: { open: number } }>('home.get', {

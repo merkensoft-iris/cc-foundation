@@ -169,6 +169,7 @@ export const CASES: Readonly<Record<string, Case>> = {
   'onboarding status': { run: ['onboarding', 'status'] },
   'onboarding recommend': { run: ['onboarding', 'recommend', '--file', SAMPLE_PROFILE] },
   'onboarding apply': { run: ['onboarding', 'apply', '--file', SAMPLE_PROFILE, '--dry-run'] },
+  'backups status': { run: ['backups', 'status'] },
   'onboarding export': {
     run: [
       'onboarding',

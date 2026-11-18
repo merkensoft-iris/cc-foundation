@@ -1,5 +1,7 @@
 /**
- * Home (07 §4.3, 09 P1-11): today's meetings, what needs the user, and the most urgent items.
+ * Home (07 §4.3, 09 P1-11): today's meetings, what needs the user, the most urgent items, and
+ * "Last good backup" with the backup state (04 §9.1 rule 8, P1-17); `warning` and `failing`
+ * are listed under Needs you.
  *
  * A `commandcenter://confirmations/<id>` link opens here, with its inline prompt (owner
  * decision Q3, 10 Nov 2026): phase 1 has no Confirmations screen, and until the confirmations
@@ -43,9 +45,21 @@ function attention(home: HomeResult, ui: Ui): VNode {
       test: 'attention-sessions',
     },
   ];
+  const backup = home.backup;
+  const backupEntry =
+    backup.state === 'warning' || backup.state === 'failing'
+      ? h(
+          'li',
+          { test: 'attention-backup', class: 'due' },
+          h('strong', null, `Backups ${backup.state}`),
+          ' ',
+          link('Open Settings → Backups', () => ui.go({ screen: 'settings', tab: 'backups' })),
+        )
+      : null;
   return h(
     'ul',
     { class: 'attention' },
+    backupEntry,
     entries.map((entry) =>
       h(
         'li',
@@ -123,6 +137,21 @@ export const homeScreen: Screen<HomeState> = {
             ),
       ),
       section('Needs you', attention(home, ui)),
+      h(
+        'p',
+        { class: 'muted', test: 'home-backup' },
+        'Last good backup: ',
+        home.backup.lastGood === undefined
+          ? 'none yet'
+          : `${home.backup.lastGood.at.slice(0, 16).replace('T', ' ')} UTC · ${home.backup.lastGood.destination}`,
+        home.backup.state === 'ok' ? '' : ` (backups ${home.backup.state.replace('_', ' ')})`,
+        ' · ',
+        link(
+          'Settings → Backups',
+          () => ui.go({ screen: 'settings', tab: 'backups' }),
+          'home-backup-open',
+        ),
+      ),
       section(
         `Due soon (${String(home.counts.dueSoon)} of ${String(home.counts.open)} open)`,
         table(

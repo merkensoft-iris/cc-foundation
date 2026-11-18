@@ -183,6 +183,9 @@ describe('local API methods (04 §4.1)', () => {
       'principals.revoke',
       'backups.destination',
       'backups.passphrase',
+      'backups.run',
+      'backups.test',
+      'backups.restore',
     ]);
   });
 

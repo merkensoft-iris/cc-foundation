@@ -11,12 +11,20 @@
  * Records: the core opens the workspace store in `<userData>` (@cc/store, 04 §9) unless the
  * caller hands it one, keeps the principals in its `agent_principals` table and serves the
  * domain-backed handlers (P1-03) over it. More handlers can be added through `register`.
+ *
+ * Backups (04 §9.1, P1-17): a staged restore is applied before the store opens; the backup
+ * check runs on the scheduler every ten minutes; the keys come from the caller (main hands
+ * them over from `safeStorage`, 04 §3), never from a file the core reads.
  */
 import fs from 'node:fs';
 import type net from 'node:net';
 import path from 'node:path';
 
-import { openStore, type Store } from '@cc/store';
+import { assertNotSyncedFolder, openStore, pendingMigrations, type Store } from '@cc/store';
+
+import { applyPendingRestore, Backups, type BackupPush } from './backups/engine.js';
+import type { BackupKey } from './backups/format.js';
+import type { Retention } from './backups/retention.js';
 
 import type { Clock } from './clock.js';
 import { systemClock } from './clock.js';
@@ -36,6 +44,7 @@ import {
 import type { Logger } from './logger.js';
 import { silentLogger } from './logger.js';
 import { registerConnectorHandlers } from './handlers/connectors.js';
+import { registerBackupHandlers } from './handlers/backups.js';
 import { registerItemHandlers } from './handlers/items.js';
 import { registerMeetingHandlers } from './handlers/meetings.js';
 import { registerOnboardingHandlers, type CommittedListener } from './handlers/onboarding.js';
@@ -54,6 +63,9 @@ import { serveUiPort, type UiPort } from './ui-port.js';
 /** ADR 0002 decision 4: the watchdog runs every 60 s. */
 export const WATCHDOG_INTERVAL_MS = 60_000;
 export const WATCHDOG_JOB = 'endpoint-watchdog';
+/** The backup check (04 §9.1 rule 1): due runs, due restore tests, the state's pushes. */
+export const BACKUP_JOB = 'backups';
+export const BACKUP_CHECK_INTERVAL_MS = 10 * 60_000;
 
 export interface CoreOptions {
   /** `<userData>`: Electron's `app.getPath('userData')`, or the headless `--profile-dir`. */
@@ -78,6 +90,23 @@ export interface CoreOptions {
   readonly watchdogIntervalMs?: number;
   readonly authTimeoutMs?: number;
   readonly validateResults?: boolean;
+  /**
+   * The backup keys, the newest last (04 §9.1 rule 3). Main reads them from `safeStorage`;
+   * headless mode has none unless a test passes them, and then backups cannot run.
+   */
+  readonly backupKeys?: readonly BackupKey[];
+  /** Pushes a desktop notification (02 §10); main shows it. */
+  readonly notify?: (push: BackupPush) => void;
+  /** Asks the host to restart the core: a staged restore applies at the next start. */
+  readonly requestRestart?: (reason: string) => void;
+  /** Overrides for tests: retention, the restore-test period, chunk size, check interval. */
+  readonly backups?: {
+    readonly retention?: Retention;
+    readonly offMachineRetention?: Retention;
+    readonly restoreTestEveryDays?: number;
+    readonly chunkBytes?: number;
+    readonly checkIntervalMs?: number;
+  };
 }
 
 /** What handler registration may use. */
@@ -91,6 +120,8 @@ export interface CoreHandle {
   readonly logger: Logger;
   readonly principals: Principals;
   readonly scheduler: Scheduler;
+  /** The backups of 04 §9.1. */
+  readonly backups: Backups;
 }
 
 export interface CoreService extends CoreHandle {
@@ -109,6 +140,8 @@ export interface CoreService extends CoreHandle {
    * Runs arrive with the orchestrator (P3); until then only meetings count.
    */
   busy(): readonly string[];
+  /** Main hands over new backup keys after the user sets a passphrase (04 §9.1 rule 3). */
+  setBackupKeys(keys: readonly BackupKey[]): void;
   stop(): Promise<void>;
 }
 
@@ -134,8 +167,14 @@ export async function startCore(options: CoreOptions): Promise<CoreService> {
   const logger = options.logger ?? silentLogger;
   const tmpRoot = options.tmpRoot ?? '/tmp';
 
-  fs.mkdirSync(userData, { recursive: true, mode: 0o700 });
   const ownsStore = options.store === undefined;
+  // 04 §9 rule 5, AC-04-12: refuse a synced folder before anything is written there.
+  if (ownsStore) assertNotSyncedFolder(userData, options.env);
+  fs.mkdirSync(userData, { recursive: true, mode: 0o700 });
+  // A restore staged before the restart replaces the store before it opens (04 §9.1 rule 9).
+  if (ownsStore) applyPendingRestore(userData, logger);
+  // 04 §9.1 rule 1: a backup before every migration.
+  if (ownsStore) await preMigrationBackup(options, userData, clock, logger);
   const store =
     options.store ??
     openStore({
@@ -148,6 +187,38 @@ export async function startCore(options: CoreOptions): Promise<CoreService> {
   } catch (error) {
     if (ownsStore) store.close();
     throw error;
+  }
+}
+
+/**
+ * Backs up the store as it is before migrations change it (04 §9.1 rule 1). With no key
+ * (headless mode without a test keyring) there is nothing to seal with, and the log says so;
+ * with a key, a failed backup stops the start, so no migration runs without one.
+ */
+async function preMigrationBackup(
+  options: CoreOptions,
+  userData: string,
+  clock: Clock,
+  logger: Logger,
+): Promise<void> {
+  const pending = pendingMigrations(userData);
+  if (pending === 0) return;
+  if (options.backupKeys === undefined || options.backupKeys.length === 0) {
+    logger.warn('backups.pre_migration_skipped', { pending, reason: 'no backup key' });
+    return;
+  }
+  const store = openStore({
+    userDataDir: userData,
+    now: () => clock.now().toISOString(),
+    migrate: false,
+    ...(options.env === undefined ? {} : { env: options.env }),
+  });
+  try {
+    const backups = new Backups({ userData, store, clock, logger, keys: options.backupKeys });
+    const record = await backups.run('pre_migration');
+    logger.info('backups.pre_migration', { id: record.id, pending });
+  } finally {
+    store.close();
   }
 }
 
@@ -173,12 +244,41 @@ async function serve(options: CoreOptions, basics: Basics): Promise<CoreService>
     clock,
   });
   const scheduler = new Scheduler({ clock, logger });
+  const backups = new Backups({
+    userData,
+    store,
+    clock,
+    logger,
+    ...(options.backupKeys === undefined ? {} : { keys: options.backupKeys }),
+    ...(options.notify === undefined ? {} : { notify: options.notify }),
+    ...(options.requestRestart === undefined ? {} : { requestRestart: options.requestRestart }),
+    busy: () => busyReasons(store),
+    ...(options.backups?.retention === undefined ? {} : { retention: options.backups.retention }),
+    ...(options.backups?.offMachineRetention === undefined
+      ? {}
+      : { offMachineRetention: options.backups.offMachineRetention }),
+    ...(options.backups?.restoreTestEveryDays === undefined
+      ? {}
+      : { restoreTestEveryDays: options.backups.restoreTestEveryDays }),
+    ...(options.backups?.chunkBytes === undefined
+      ? {}
+      : { chunkBytes: options.backups.chunkBytes }),
+  });
   const dispatcher = new Dispatcher({
     clock,
     logger,
     ...(options.validateResults === undefined ? {} : { validateResults: options.validateResults }),
   });
-  const handle: CoreHandle = { userData, store, records, clock, logger, principals, scheduler };
+  const handle: CoreHandle = {
+    userData,
+    store,
+    records,
+    clock,
+    logger,
+    principals,
+    scheduler,
+    backups,
+  };
 
   const plan = planEndpoint({ userData, tmpRoot });
   let prepared: PreparedEndpoint = await prepareEndpoint(plan, { userData });
@@ -186,10 +286,21 @@ async function serve(options: CoreOptions, basics: Basics): Promise<CoreService>
 
   await principals.ensureDefault();
   registerItemHandlers(dispatcher, records);
-  registerReadHandlers(dispatcher, store, clock);
+  registerReadHandlers(dispatcher, store, clock, () => {
+    const status = backups.status();
+    return {
+      state: status.state,
+      ...(status.lastGood === undefined ? {} : { lastGood: status.lastGood }),
+    };
+  });
   registerWriteHandlers(dispatcher, records, store, clock);
   registerReviewHandlers(dispatcher, records, store);
-  registerMeetingHandlers(dispatcher, new Meetings(store, { clock }), store, clock);
+  const meetings = new Meetings(store, {
+    clock,
+    backupState: () => backups.preReadState(),
+    attention: () => backups.attention(),
+  });
+  registerMeetingHandlers(dispatcher, meetings, store, clock);
   registerPrincipalHandlers(dispatcher, principals);
   registerConnectorHandlers(dispatcher, store, clock);
   registerOnboardingHandlers(dispatcher, store, {
@@ -197,6 +308,7 @@ async function serve(options: CoreOptions, basics: Basics): Promise<CoreService>
       ? {}
       : { onCommitted: options.onOnboardingCommitted }),
   });
+  registerBackupHandlers(dispatcher, backups);
   options.register?.(dispatcher, handle);
 
   const api = new LocalApiServer({
@@ -270,6 +382,10 @@ async function serve(options: CoreOptions, basics: Basics): Promise<CoreService>
     return 'ok';
   };
 
+  scheduler.every(BACKUP_JOB, options.backups?.checkIntervalMs ?? BACKUP_CHECK_INTERVAL_MS, () =>
+    backups.tick(),
+  );
+
   scheduler.every(WATCHDOG_JOB, options.watchdogIntervalMs ?? WATCHDOG_INTERVAL_MS, async () => {
     const outcome = await checkEndpoint();
     if (outcome !== 'ok') logger.info('endpoint.watchdog', { outcome });
@@ -298,6 +414,7 @@ async function serve(options: CoreOptions, basics: Basics): Promise<CoreService>
     serveUi: (port) => serveUiPort(dispatcher, port),
     checkEndpoint,
     busy: () => busyReasons(store),
+    setBackupKeys: (keys) => backups.setKeys(keys),
     stop,
   };
 }

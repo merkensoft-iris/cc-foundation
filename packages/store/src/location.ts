@@ -4,10 +4,14 @@
  * `workspace.db` and its WAL file sit in `<userData>`, next to the content-addressed blob
  * directory. 04 §9 rule 5: `<userData>` must not sit inside a synced folder, because
  * file-level sync corrupts a live SQLite database and its WAL, so opening the store there is
- * refused with help to move it. Backups are a separate build step (P1-17); this module only
- * refuses.
+ * refused with help to move it. A sync root is recognised by its name (a path segment such as
+ * `Dropbox`), by the environment variable a sync client sets, or by the marker a sync client
+ * keeps in the root of the folder it syncs (`.dropbox`, Google Drive's `.tmp.drivedownload`).
+ * Backups (P1-17) write only finished, encrypted archives to a synced folder; this module
+ * refuses the live store there.
  */
-import { isAbsolute, resolve, sep } from 'node:path';
+import { existsSync } from 'node:fs';
+import { dirname, isAbsolute, join, resolve, sep } from 'node:path';
 
 import { StoreError } from './errors.js';
 
@@ -54,6 +58,19 @@ export const SYNC_ROOT_ENV_VARS = [
   'iCloudDrive',
 ] as const;
 
+/**
+ * Files or folders a sync client keeps in the root of the folder it syncs (04 §9 rule 5,
+ * AC-04-12). A directory holding one of them is a sync root, whatever it is called.
+ */
+export const SYNC_MARKERS: readonly { readonly label: string; readonly name: string }[] = [
+  { label: 'Dropbox', name: '.dropbox' },
+  { label: 'Dropbox', name: '.dropbox.cache' },
+  { label: 'Google Drive', name: '.tmp.drivedownload' },
+  { label: 'Google Drive', name: '.tmp.driveupload' },
+  { label: 'Google Drive', name: '.shortcut-targets-by-id' },
+  { label: 'OneDrive', name: '.849C9593-D756-4E56-8D6E-42412F2A707B' },
+];
+
 export interface SyncedFolderMatch {
   readonly label: string;
   /** The path segment or environment root that matched. */
@@ -71,6 +88,19 @@ function isInside(child: string, parent: string): boolean {
   const from = resolve(parent);
   const to = resolve(child);
   return to === from || to.startsWith(from.endsWith(sep) ? from : `${from}${sep}`);
+}
+
+/** The sync-root marker in `path` or in one of its ancestors (AC-04-12). */
+function markerMatch(path: string): SyncedFolderMatch | undefined {
+  let dir = resolve(path);
+  for (;;) {
+    for (const marker of SYNC_MARKERS) {
+      if (existsSync(join(dir, marker.name))) return { label: marker.label, matched: dir };
+    }
+    const parent = dirname(dir);
+    if (parent === dir) return undefined;
+    dir = parent;
+  }
 }
 
 /**
@@ -92,7 +122,7 @@ export function syncedFolderMatch(
       return { label: name, matched: root };
     }
   }
-  return undefined;
+  return markerMatch(path);
 }
 
 /**

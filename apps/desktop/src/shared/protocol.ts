@@ -4,10 +4,17 @@
  * transferred port, and supervises it; the host answers `ready`, then pushes notifications
  * and the notification policy as the core produces them.
  *
+ * Backups (04 §9.1, P1-17): `init` carries the backup keys main keeps wrapped by
+ * `safeStorage`, and `backup-keys` replaces them after the user sets a passphrase; the
+ * passphrase itself never crosses. The host asks for `restart` after staging a restore, and
+ * says `refused` when the core refuses to open the store (a data directory inside a synced
+ * folder, 04 §9 rule 5): main then shows the help and exits instead of restarting it.
+ *
  * UI calls do not travel on this channel: they go over the transferred port as
  * `{ id, method, params }` and come back as `{ id, result }` or `{ id, error }`, the shape
  * `@cc/core`'s `serveUiPort` serves (04 §4.3 rule 1: calls on that port run as the user).
  */
+import type { SerializedBackupKey } from '@cc/core/backup-keys';
 import type { ApiErrorData, ProtectedBlock } from '@cc/schemas';
 
 /** How this start was classified by the clean-tree check (ADR 0004, 04 §10 rule 4). */
@@ -51,8 +58,14 @@ export interface NotificationPolicy {
  * app is idle (04 §10 rule 2: the restart onto a new build waits for idle).
  */
 export type MainToHost =
-  | { readonly type: 'init'; readonly userData: string; readonly mode: StartMode }
+  | {
+      readonly type: 'init';
+      readonly userData: string;
+      readonly mode: StartMode;
+      readonly backupKeys?: readonly SerializedBackupKey[];
+    }
   | { readonly type: 'activity'; readonly id: number }
+  | { readonly type: 'backup-keys'; readonly keys: readonly SerializedBackupKey[] }
   | { readonly type: 'stop' };
 
 /** core host → main. */
@@ -65,6 +78,15 @@ export type HostToMain =
   | { readonly type: 'notification-policy'; readonly policy: NotificationPolicy }
   /** The answer to `activity`: why the app is not idle; empty when it is. */
   | { readonly type: 'activity'; readonly id: number; readonly busy: readonly string[] }
+  /** Restart the core: a staged restore applies before the store opens (04 §9.1 rule 9). */
+  | { readonly type: 'restart'; readonly reason: string }
+  /** The core will not start here, and restarting cannot help (04 §9 rule 5, AC-04-12). */
+  | {
+      readonly type: 'refused';
+      readonly code: string;
+      readonly message: string;
+      readonly help: readonly string[];
+    }
   | { readonly type: 'fatal'; readonly message: string };
 
 /** A UI call on the port, and its answer (`@cc/core` `UiRequest` / `UiResponse`). */
@@ -130,6 +152,15 @@ export function parseHostMessage(value: unknown): HostToMain | undefined {
       return typeof value['id'] === 'number' &&
         Array.isArray(value['busy']) &&
         value['busy'].every(isString)
+        ? (value as HostToMain)
+        : undefined;
+    case 'restart':
+      return isString(value['reason']) ? (value as HostToMain) : undefined;
+    case 'refused':
+      return isString(value['code']) &&
+        isString(value['message']) &&
+        Array.isArray(value['help']) &&
+        value['help'].every(isString)
         ? (value as HostToMain)
         : undefined;
     case 'fatal':

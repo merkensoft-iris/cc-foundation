@@ -6,6 +6,10 @@
 import type {
   ActionItem,
   AgentPrincipal,
+  BackupLastGood,
+  BackupRecord,
+  BackupState,
+  BackupStatus,
   Decision,
   DomainEvent,
   Evidence,
@@ -15,7 +19,17 @@ import type {
   Risk,
 } from '@cc/schemas';
 
-export type { ActionItem, Decision, DomainEvent, Evidence, Goal, ItemSummary, Risk };
+export type {
+  ActionItem,
+  BackupRecord,
+  BackupStatus,
+  Decision,
+  DomainEvent,
+  Evidence,
+  Goal,
+  ItemSummary,
+  Risk,
+};
 
 export interface HomeResult {
   readonly workspace: string;
@@ -30,6 +44,8 @@ export interface HomeResult {
   };
   readonly items: readonly ItemSummary[];
   readonly counts: { readonly dueSoon: number; readonly open: number };
+  /** "Last good backup" and the backup state (04 §9.1 rule 8). */
+  readonly backup: { readonly state: BackupState; readonly lastGood?: BackupLastGood };
 }
 
 export interface ItemsListResult {

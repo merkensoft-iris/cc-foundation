@@ -94,6 +94,10 @@ Item refs look like `A-0142`, decisions `D-0008`, issues `I-0012`, measures `K-0
 
 - `cc-axi mcp`: The stdio MCP server (07 §7): 14 tools over the local API as --principal; register it with `claude mcp add command-center -- cc-axi mcp --principal <name>`.
 
+### backups
+
+- `cc-axi backups status`: The backup state, the last good backup and the last restore test (04 §9.1).
+
 ### update
 
 - `cc-axi update [--check]`: Report the cc-axi version; cc-axi ships inside the Command Center app and updates with it.

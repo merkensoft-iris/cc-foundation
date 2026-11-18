@@ -11,7 +11,13 @@
 import path from 'node:path';
 
 import { localDateTime } from '@cc/domain';
-import type { ActionItem, DomainEvent, ItemSummary } from '@cc/schemas';
+import type {
+  ActionItem,
+  BackupLastGood,
+  BackupState,
+  DomainEvent,
+  ItemSummary,
+} from '@cc/schemas';
 import { methods } from '@cc/schemas';
 import { exportWorkspace, MANIFEST_NAME, type ReadTx, type Store } from '@cc/store';
 
@@ -142,7 +148,17 @@ function todaysMeetings(read: Read, zone: string): { ref: string; time: string; 
     }));
 }
 
-export function registerReadHandlers(dispatcher: Dispatcher, store: Store, clock: Clock): void {
+/** What Home shows of the backups (04 §9.1 rule 8). */
+export type HomeBackup = { state: BackupState; lastGood?: BackupLastGood };
+
+const NO_BACKUPS: HomeBackup = { state: 'not_configured' };
+
+export function registerReadHandlers(
+  dispatcher: Dispatcher,
+  store: Store,
+  clock: Clock,
+  backup: () => HomeBackup = () => NO_BACKUPS,
+): void {
   const read = <T>(context: HandlerContext, run: (read: Read) => T): T =>
     reading(store, clock, context, run);
 
@@ -176,6 +192,7 @@ export function registerReadHandlers(dispatcher: Dispatcher, store: Store, clock
         },
         items: dueSoon.slice(0, 3).map((item) => summary(r, item, [], workspace.selfPersonId)),
         counts: { dueSoon: dueSoon.length, open: active.length },
+        backup: backup(),
       };
     }),
   );

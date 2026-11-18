@@ -95,7 +95,12 @@ describe('core supervision (04 §3)', () => {
     supervisor.start(mode);
     expect(cores).toHaveLength(1);
     const [init] = cores[0]?.received ?? [];
-    expect(init?.message).toEqual({ type: 'init', userData: '/tmp/cc-test-profile', mode });
+    expect(init?.message).toEqual({
+      type: 'init',
+      userData: '/tmp/cc-test-profile',
+      mode,
+      backupKeys: [],
+    });
     expect(init?.transfer).toHaveLength(1);
     expect(supervisor.state).toBe('starting');
   });
