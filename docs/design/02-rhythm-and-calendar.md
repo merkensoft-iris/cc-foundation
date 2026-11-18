@@ -309,12 +309,12 @@ Without a pack, `pipeline_review` is absent and its minutes go to `plan_commitme
 
 ### 5.7 Portfolio templates
 
-- `agenda.portfolio.daily-start@1` (10 min): `attention` 2 (confirmations pending, browser sessions needing the user, escalations at level 2 or higher, development requests awaiting review, backup warnings, today's meetings and conflicts) → `top_three` 8 (up to 3 focus items per workstream, at most 5 in total, chosen from items due within one day and current priorities).
+- `agenda.portfolio.daily-start@1` (10 min): `attention` 2 (confirmations pending, browser sessions needing the user, escalations (items at level 2 or higher, and open rhythm escalations), development requests awaiting review, backup warnings, today's meetings and conflicts) → `top_three` 8 (up to 3 focus items per workstream, at most 5 in total, chosen from items due within one day and current priorities).
 - `agenda.portfolio.daily-shutdown@1` (10 min): `day_close` 7 (claim finished items with evidence; update health on the rest) → `top_three` 3 (tomorrow's focus).
 
 Rules for both (owner decisions Q6 and Q7, 10 Nov 2026):
 
-1. **The attention list has a fixed order**: the categories in the order listed above, and within a category oldest first. The user cannot reorder it.
+1. **The attention list has a fixed order**: the categories in the order listed above, and within a category oldest first. The user cannot reorder it. Rhythm escalations (§4.2 rule 3) sit in the escalations category, oldest first together with the items (owner decision, key rhythm-attention-position, 18 Nov 2026).
 2. **Dismissing an attention entry snoozes it to tomorrow's daily start.** It is not resolved: an entry whose cause is still there returns the next day, and keeps returning until the cause is resolved (the confirmation decided, the session signed in, the escalation handled, the request reviewed, the backup healthy).
 3. **The daily start and shutdown may create action items and notes.** Allowed outputs in every section: `action_item` and `note` (§6.3). New items are captured as drafts and accepted by a short read-back at the end of the meeting (§6.4 rule 1), as in any meeting.
 

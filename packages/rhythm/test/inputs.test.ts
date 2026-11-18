@@ -375,6 +375,52 @@ describe('attention (02 §5.7)', () => {
     ]);
   });
 
+  it('rhythm escalations sit in the escalations category, oldest first with the items (02 §4.2 rule 3; key rhythm-attention-position)', () => {
+    const daily = instanceOf('ser_daily_start', '2026-11-23T09:00');
+    const issue = (
+      ref: string,
+      kind: 'rhythm' | 'manual',
+      status: Issue['status'],
+      createdAt: string,
+    ): Issue => ({
+      id: `iss_${ref}` as Issue['id'],
+      ref,
+      workstreamId: 'ws_ald' as Issue['workstreamId'],
+      title: `Issue ${ref}`,
+      raisedFrom:
+        kind === 'rhythm' ? { kind, seriesId: 'ser_ceo_weekly' as never } : { kind: 'manual' },
+      status,
+      createdAt,
+      createdBy: { kind: 'system', component: 'rhythm' },
+      updatedAt: createdAt,
+      updatedBy: { kind: 'system', component: 'rhythm' },
+      version: 1,
+    });
+    const result = resolveInput(
+      dailyQuery,
+      scope(daily, ['ws_ald'], {
+        actionItems: [
+          item('A-0142', { escalationLevel: 2, createdAt: '2026-11-02T00:00:00Z' }),
+          item('A-0160', { escalationLevel: 3, createdAt: '2026-11-21T00:00:00Z' }),
+        ],
+        issues: [
+          ...meetingData().issues,
+          issue('I-0070', 'rhythm', 'open', '2026-11-20T10:40:00Z'),
+          issue('I-0071', 'rhythm', 'resolved', '2026-11-03T00:00:00Z'),
+          issue('I-0072', 'manual', 'open', '2026-11-04T00:00:00Z'),
+        ],
+        instances: [daily],
+      }),
+    );
+    expect(
+      result.rows.map((r) => [(r.detail as { category: string }).category, r.ref, r.flags]),
+    ).toEqual([
+      ['escalation', 'A-0142', ['escalation_2']],
+      ['escalation', 'I-0070', ['rhythm_escalation']],
+      ['escalation', 'A-0160', ['escalation_3']],
+    ]);
+  });
+
   it('ADR 0001 decision 8: the US daylight-saving check line shows for a US-zoned workstream in the change week', () => {
     const daily = instanceOf('ser_daily_start', '2026-11-02T09:00');
     const result = resolveInput(dailyQuery, scope(daily, ['ws_ald'], { instances: [daily] }));
