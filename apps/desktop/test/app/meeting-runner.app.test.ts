@@ -4,12 +4,14 @@
  * is the reference scenario seeded the day before the real date (`cc:seed --today`): the app's
  * core runs on the real clock and its scheduler runs the rhythm jobs, so a review dated in the
  * scenario's own November would be missed (02 §4.2 rule 2) before the test could start it. The
- * review is the first weekly review still `planned`, days ahead; starting it builds its
- * pre-read first (02 §4.7). A `commandcenter://meeting/<ref>` link opens the app on it
+ * review is the first weekly review still `planned`, days ahead, its pre-read built on demand
+ * as the user (02 §6.2 rule 1; no local API method builds one yet), so the app opens it
+ * `prepared` with its merged agenda. A `commandcenter://meeting/<ref>` link opens the app on it
  * (02 §9.2 rule 2). The scorecard's Goals tab edit is on the same profile (owner decision Q2).
  */
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
+import { Meetings } from '@cc/core';
 import { startHeadless } from '@cc/core/headless';
 import { addDays, localDate } from '@cc/rhythm';
 import { createProfileDir, FakeTimerClock, seedScenario, type ProfileDir } from '@cc/test-kit';
@@ -37,6 +39,11 @@ beforeAll(async () => {
     const found = meetings.find((m) => m.title === 'Weekly CEO review' && m.state === 'planned');
     expect(found).toBeDefined();
     weekly = found?.ref ?? '';
+    const prepared = new Meetings(s.core.store, { clock: s.clock }).prepare(
+      { actor: { kind: 'user' } },
+      weekly,
+    );
+    expect(prepared.instance.state).toBe('prepared');
     weeklyDate = localDate(found?.start ?? '', s.timeZone);
   } finally {
     await s.stop();
