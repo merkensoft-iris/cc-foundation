@@ -175,6 +175,9 @@ importers:
       '@cc/schemas':
         specifier: workspace:*
         version: link:packages/schemas
+      '@cc/test-kit':
+        specifier: workspace:*
+        version: link:packages/test-kit
       '@eslint/js':
         specifier: ^10.0.1
         version: 10.0.1(eslint@10.14.0(jiti@2.7.0)(supports-color@7.2.0))
@@ -355,7 +358,17 @@ importers:
         specifier: ^9.6.0
         version: 9.6.0
 
-  packages/test-kit: {}
+  packages/test-kit:
+    dependencies:
+      '@cc/core':
+        specifier: workspace:*
+        version: link:../core
+      '@cc/rhythm':
+        specifier: workspace:*
+        version: link:../rhythm
+      '@cc/schemas':
+        specifier: workspace:*
+        version: link:../schemas
 
   packages/ui-sdk: {}
 

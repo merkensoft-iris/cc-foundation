@@ -15,5 +15,10 @@
   ],
   "scripts": {
     "build": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "@cc/core": "workspace:*",
+    "@cc/rhythm": "workspace:*",
+    "@cc/schemas": "workspace:*"
   }
 }
