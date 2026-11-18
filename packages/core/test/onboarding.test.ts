@@ -345,6 +345,61 @@ describe('apply --dry-run and apply (C-01-07, C-01-01)', { timeout: SLOW_MS }, (
     expect(applied).toMatchObject({ status: 'ok' });
   });
 
+  it('AC-02-12 a calendar mapping route whose binding does not implement calendar@1, or a series with no primary target, fails validation with E_INVARIANT, and nothing is written', async () => {
+    const test = await core();
+    const profile = fixture('scenario.json');
+    const before = rows(test);
+    const gcal = { binding: 'gcal-main', calendar: 'Command Center' };
+    // gmail-alderwick is an S7 email tool: its connector does not implement calendar@1.
+    const notCalendar = {
+      providers: ['google-calendar', 'gmail'],
+      routes: [
+        { workstreams: 'all', targets: [{ ...gcal, role: 'primary' }] },
+        {
+          workstreams: ['alderwick'],
+          targets: [{ binding: 'gmail-alderwick', calendar: 'Inbox', role: 'mirror' }],
+        },
+      ],
+    };
+    // Every series is routed to a mirror only.
+    const noPrimary = {
+      providers: ['google-calendar'],
+      routes: [{ workstreams: 'all', targets: [{ ...gcal, role: 'mirror' }] }],
+    };
+    for (const [calendarMapping, pattern] of [
+      [notCalendar, /"gmail-alderwick" does not implement calendar@1/],
+      [noPrimary, /Weekly CEO review has no primary calendar target/],
+    ] as const) {
+      const { preview } = (await test.core.callAsUser('onboarding.preview', {
+        profile,
+        calendarMapping,
+      })) as { preview: Preview };
+      expect(preview.blockers.map((b) => b.code)).toContain('W-CALENDAR-MAPPING');
+      expect(preview.blockers.map((b) => b.text).join(' ')).toMatch(pattern);
+      const error = await rejection(
+        test.core.callAsUser('onboarding.apply', { profile, calendarMapping }),
+      );
+      expect(error.code).toBe('E_INVARIANT');
+      expect(error.message).toMatch(/W-CALENDAR-MAPPING/);
+      expect(rows(test)).toEqual(before);
+    }
+
+    // The portfolio series route as "portfolio": routing only the workstreams leaves them
+    // unrouted (.ics only), and one primary for everything commits.
+    const valid = {
+      providers: ['google-calendar'],
+      routes: [
+        { workstreams: ['alderwick', 'quillmarsh'], targets: [{ ...gcal, role: 'primary' }] },
+      ],
+    };
+    const applied = await test.core.callAsUser('onboarding.apply', {
+      profile,
+      calendarMapping: valid,
+    });
+    expect(applied).toMatchObject({ status: 'ok' });
+    expect(test.core.store.read((tx) => tx.list('onboarding'))[0]?.calendarMapping).toEqual(valid);
+  });
+
   it('02 §4.6 a session inside a soft block needs the user to confirm it at S6 before the commit', async () => {
     const test = await core();
     const unconfirmed = {

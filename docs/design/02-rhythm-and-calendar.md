@@ -597,6 +597,7 @@ interface CalendarMapping {
 2. At onboarding S7 ([01 §3](01-onboarding-and-frameworks.md#3-onboarding-flow)) CC reads the mapping; if the engine has none, CC proposes one and keeps it in the local store. **Export to `cc.config`** writes the file for the user to commit; CC never commits (C-01-09).
 3. The effective mapping is the engine's when present, otherwise the local one. A change to it is a re-run of S7 with a diff (C-01-06), and a new calendar target starts with the batch confirmation of §9.2 rule 5.
 4. The mapping is validated by the foundation: every route's binding must implement `calendar@1`, every series has exactly one primary target, and sensitive workstreams never route to a calendar whose binding is shared with another account owner.
+   - **Before P2** (09 P1-20) there are no binding records or installed connector manifests, so the onboarding commit checks the mapping against the S7 answers: a binding label implements `calendar@1` when it names an S7 tool (by account label, else tool name) of category `calendar` whose connector is listed in `providers`. A series no route names is not routed (`.ics` export only); a routed series needs exactly one primary target. A broken mapping blocks the commit with `W-CALENDAR-MAPPING` (`E_INVARIANT`, nothing written). The sensitive-workstream clause needs binding ownership and is checked from P2, when a label resolves to a binding and its connector's declared contracts.
 
 ## 10. Notifications
 

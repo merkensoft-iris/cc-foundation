@@ -9,7 +9,7 @@
  *
  * | When | What happens | Criteria |
  * |---|---|---|
- * | Wed 11-04 09:40 | `cc:seed`: onboarding commit, the agent principal, the worked examples | AC-01-01, AC-01-06, AC-02-01, AC-01-05, AC-03-11 |
+ * | Wed 11-04 09:40 | `cc:seed`: onboarding commit, the agent principal, the worked examples | AC-01-01, AC-01-06, AC-02-01, AC-01-05, AC-03-11, AC-02-12 |
  * | Mon 11-09 | first daily start: pre-read, start, capture, dismiss, close; the unheld shutdown is missed | 02 §5.7 (Q6, Q7), 02 §4.2 |
  * | Tue 11-10 | the agent claims A-0144 and cannot confirm it | AC-03-02 |
  * | Fri 11-13 15:00 | first weekly review: the agent cannot decide D-0008; an item captured, read back, closed | C-02-04 |
@@ -27,9 +27,10 @@
  * Checks of steps not yet built are pending at the point in the timeline where they belong,
  * one per criterion, so the step that builds them enables them in place: P1-13 (MCP relay,
  * AC-07-03), P1-14 (hooks, AC-07-05, AC-07-06) and P1-17 (backups, AC-04-10 to AC-04-12).
- * `cc:trace` does not count a pending test. Two more wait for work no P1 step names yet: the
- * calendar mapping validator (AC-02-12), and a way for the user to open a proposed decision,
- * without which D-0008 cannot be decided (`meetings.capture` takes only notes and items).
+ * `cc:trace` does not count a pending test. One more waits for work no P1 step names yet: a
+ * way for the user to open a proposed decision, without which D-0008 cannot be decided
+ * (`meetings.capture` takes only notes and items). The calendar mapping check (AC-02-12, P1-20)
+ * runs beside the seed on a fresh profile, since the seeded one is already committed.
  *
  * The scenario stands in for the 03 §13 records with what P1's API can create: A-0142, A-0144
  * and A-0160 (created and accepted), D-0008 (proposed by the agent) and R-0002 (on the
@@ -296,9 +297,53 @@ describe(
         expect(risk).toMatchObject({ workstreamId: workspaceId, status: 'watching' });
       });
 
-      it.todo(
-        'AC-02-12 a calendar mapping route whose binding does not implement calendar@1, or a series with no primary target, fails validation with E_INVARIANT and writes nothing (no P1 step builds the 02 §9.6 rule 4 validator yet)',
-      );
+      it('AC-02-12 on a fresh profile, a calendar mapping route whose binding does not implement calendar@1, or a series with no primary target, fails validation with E_INVARIANT and writes nothing', async () => {
+        const fresh = createProfileDir();
+        const { startHeadless } = await import('@cc/core/headless');
+        const { FakeTimerClock } = await import('@cc/test-kit');
+        const core = await startHeadless({
+          profileDir: fresh.path,
+          clock: new FakeTimerClock('2026-11-04T04:10:00Z'),
+          env: {},
+        });
+        try {
+          const profile = readOnboardingProfile(readScenario());
+          const gcal = { binding: 'gcal-main', calendar: 'Command Center' };
+          const mappings = [
+            // gmail-alderwick is the S7 Gmail account: not a calendar@1 binding.
+            {
+              providers: ['google-calendar', 'gmail'],
+              routes: [
+                { workstreams: 'all', targets: [{ ...gcal, role: 'primary' }] },
+                {
+                  workstreams: ['alderwick'],
+                  targets: [{ binding: 'gmail-alderwick', calendar: 'Inbox', role: 'mirror' }],
+                },
+              ],
+            },
+            // The weekly CEO review is routed to a mirror only.
+            {
+              providers: ['google-calendar'],
+              routes: [{ workstreams: ['alderwick'], targets: [{ ...gcal, role: 'mirror' }] }],
+            },
+          ];
+          for (const calendarMapping of mappings) {
+            const error = await rejection(
+              core.callAsUser('onboarding.apply', { profile, calendarMapping }),
+            );
+            expect(error.code).toBe('E_INVARIANT');
+            expect(error.message).toMatch(/W-CALENDAR-MAPPING/);
+          }
+          expect(await core.callAsUser('onboarding.status', {})).toMatchObject({
+            state: 'not_started',
+          });
+          expect(core.store.read((tx) => tx.list('workstreams'))).toEqual([]);
+          expect(core.store.read((tx) => tx.list('meeting_series'))).toEqual([]);
+        } finally {
+          await core.stop();
+          fresh.cleanup();
+        }
+      });
 
       it.todo(
         'AC-07-05 cc-axi setup hooks --agents claude-code,codex,opencode --scope project run twice leaves one hook per agent (P1-14)',

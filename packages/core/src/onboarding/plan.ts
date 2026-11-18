@@ -21,7 +21,8 @@
  * 5. S7 and S8 add no record before P2 and P3: connector bindings, the AI provider config and
  *    the backup policy have no record type yet, so those answers stay in the onboarding record
  *    and the preview lists the outward actions they lead to (sign-ins, the first calendar
- *    batch, discovery), each confirmed on its own later (C-01-01).
+ *    batch, discovery), each confirmed on its own later (C-01-01). The calendar mapping is
+ *    checked against 02 §9.6 rule 4 (checkCalendarMapping); a broken one blocks the commit.
  */
 import {
   createWorkspaceWorkstream,
@@ -48,6 +49,7 @@ import {
   agendaTemplate,
   blockIntervals,
   canonicalRule,
+  checkCalendarMapping,
   checkNoSlot,
   checkSeries,
   checkTimeBudget,
@@ -743,6 +745,27 @@ export function planOnboarding(input: PlanInput): OnboardingPlan {
     blockers.push(
       notice('W-NO-SLOT', t2.text, ['Change a meeting time (S5) or a protected block (S1)']),
     );
+  }
+
+  // S7: the calendar mapping (02 §9.6 rule 4, AC-02-12). A broken mapping blocks the commit.
+  if (input.calendarMapping !== undefined) {
+    const keyOfId = new Map([...workstreamId].map(([key, id]) => [id as string, key]));
+    const violations = checkCalendarMapping(
+      input.calendarMapping,
+      profile.tools,
+      records.map((s) => ({
+        name: s.name,
+        workstreamKeys: s.workstreamIds.map((id) => keyOfId.get(id) ?? id),
+        backboneMeetingKey: s.backboneMeetingKey,
+      })),
+    );
+    for (const violation of violations) {
+      blockers.push(
+        notice('W-CALENDAR-MAPPING', violation.text, [
+          "Change the calendar mapping at S7, or in the engine's cc.config under calendars",
+        ]),
+      );
+    }
   }
 
   // S5: measures and goals
