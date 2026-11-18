@@ -9,6 +9,10 @@
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
     },
+    "./backup-keys": {
+      "types": "./dist/backups/keys.d.ts",
+      "default": "./dist/backups/keys.js"
+    },
     "./client": {
       "types": "./dist/client.d.ts",
       "default": "./dist/client.js"

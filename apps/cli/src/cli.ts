@@ -43,6 +43,7 @@ import {
 import { search } from './commands/search.js';
 import { hookSessionStart } from './commands/hook.js';
 import { setupHooks, setupStatus } from './commands/setup.js';
+import { backupsStatus } from './commands/backups.js';
 import type { Handler, Session } from './commands/common.js';
 import { CliError, usageError } from './errors.js';
 import { commandHelp, DESCRIPTION, groupHelp, HUMAN_ONLY_VERBS, topLevelHelp } from './help.js';
@@ -92,6 +93,7 @@ export const HANDLERS: Readonly<Record<string, Handler>> = {
   'setup status': setupStatus,
   'hook session-start': hookSessionStart,
   mcp,
+  'backups status': backupsStatus,
   update,
 };
 

@@ -6,7 +6,8 @@
  * writes the projection rows and the matching `events` rows together; a stale `version`
  * fails `E_CONFLICT`. Only packages/core imports this package (dependency rule D5).
  *
- * Backups and the restore test are P1-17; the local API and `cc-axi` surfaces of
+ * Backups (P1-17) live in @cc/core; this package gives them the online-backup snapshot and the
+ * read-only snapshot check of the restore test (`snapshot.ts`). The local API and `cc-axi` surfaces of
  * `export.run` and `cc-axi export --out <dir>` are P1-04 and P1-05 (09 §6.1).
  */
 export const PACKAGE_NAME = '@cc/store';
@@ -18,6 +19,7 @@ export {
   blobPath,
   blobsDir,
   syncedFolderMatch,
+  SYNC_MARKERS,
   SYNC_ROOT_ENV_VARS,
   SYNC_ROOTS,
   workspaceDbPath,
@@ -61,7 +63,8 @@ export {
   type WriteTx,
 } from './repository.js';
 export { ftsQuery, type SearchHit } from './search.js';
-export { openStore, type Store, type StoreOptions } from './store.js';
+export { openStore, pendingMigrations, type Store, type StoreOptions } from './store.js';
+export { inspectSnapshot, type SnapshotInfo } from './snapshot.js';
 export {
   exportWorkspace,
   MANIFEST_NAME,

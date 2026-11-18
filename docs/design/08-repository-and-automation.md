@@ -72,7 +72,7 @@ cc-foundation/
     schemas/                        # zod types for records (03), API methods (04 §4), MCP tools (07 §7), config (§4.3)
       records/<type>@<major>.json   # generated JSON Schemas
       mcp/tools.json                # generated MCP tools/list payload (07 §7, 12 KB budget)
-    store/                          # SQLite, repository layer, event log, FTS, backups and restore tests (04 §9.1)
+    store/                          # SQLite, repository layer, event log, FTS, backup snapshots and their read-only check (04 §9.1)
       migrations/NNNN_name.sql      # forward-only (03 §12)
     domain/                         # lifecycle, invariants, health, review loop, metrics (pure)
     frameworks/                     # recommend(), templates, packs, validators (pure)
@@ -84,7 +84,8 @@ cc-foundation/
                                     # carry-forward, escalation, reconciliation over calendar@1, .ics export (pure)
     policy/                         # Policy Engine, risk classes, confirmations, standing approvals (pure)
     core/                           # core service: wires the packages above, local API server,
-                                    # schedulers, Connector Host supervisor, lock loader, headless mode
+                                    # schedulers, backups and restore tests (04 §9.1), Connector Host supervisor,
+                                    # lock loader, headless mode
     connector-sdk/                  # ConnectorModule, ConnectorContext, record types, capability contracts (calendar@1)
     connector-host/                 # connector runs in utilityProcess, ScopedHttp, auth injection, cursors
     browser-host/                   # Playwright contexts, guards G1-G8, GuardedPage, needs-you,

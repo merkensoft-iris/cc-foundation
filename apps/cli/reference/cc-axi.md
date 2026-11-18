@@ -655,6 +655,23 @@ cc-axi mcp --principal claude-code
 cc-axi mcp --principal firstmate-main
 ```
 
+## `cc-axi backups status`
+
+The backup state, the last good backup and the last restore test (04 §9.1).
+
+```text
+cc-axi backups status
+```
+
+Local API: `backups.status`.
+
+Examples:
+
+```text
+cc-axi backups status
+cc-axi backups status --format json
+```
+
 ## `cc-axi update`
 
 Report the cc-axi version; cc-axi ships inside the Command Center app and updates with it.

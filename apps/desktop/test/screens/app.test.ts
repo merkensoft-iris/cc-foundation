@@ -26,6 +26,14 @@ const home = {
     { ref: 'A-0142', title: 'Send the revised proposal', due: '2026-11-12', state: 'overdue' },
   ],
   counts: { dueSoon: 3, open: 9 },
+  backup: {
+    state: 'ok' as const,
+    lastGood: {
+      id: 'bkp_01KA0000000000000000000000',
+      at: '2026-11-13T03:00:00.000Z',
+      destination: 'Synced folder',
+    },
+  },
 };
 
 describe('the frame and deep links', () => {

@@ -1,5 +1,6 @@
 import { EventEmitter } from 'node:events';
 import fs from 'node:fs';
+import path from 'node:path';
 
 import { recordPathOf, silentLogger } from '@cc/core';
 import { createProfileDir } from '@cc/test-kit';
@@ -61,7 +62,7 @@ describe('core host (the core utility process, 04 §3)', () => {
   it('starts the core on init, serves the UI port and says ready', async () => {
     const seen: Omit<StartCoreOptions, 'events'>[] = [];
     const startCore: StartCore = async (options) => {
-      seen.push({ userData: options.userData, mode: options.mode });
+      seen.push({ userData: options.userData, mode: options.mode, backupKeys: options.backupKeys });
       return fakeCore(options);
     };
     const { parent } = host(startCore);
@@ -72,7 +73,9 @@ describe('core host (the core utility process, 04 §3)', () => {
 
     parent.deliver({ type: 'init', userData: '/tmp/cc-test-a', mode: { kind: 'normal' } }, [port2]);
     await settle();
-    expect(seen).toEqual([{ userData: '/tmp/cc-test-a', mode: { kind: 'normal' } }]);
+    expect(seen).toEqual([
+      { userData: '/tmp/cc-test-a', mode: { kind: 'normal' }, backupKeys: [] },
+    ]);
     expect(parent.sent).toEqual([{ type: 'ready' }]);
 
     port1.postMessage({ id: 7, method: 'home.get', params: {} });
@@ -154,6 +157,48 @@ describe('core host (the core utility process, 04 §3)', () => {
     await settle();
     expect(parent.sent).toEqual([{ type: 'fatal', message: 'store is locked' }]);
     expect(exits).toEqual([1]);
+  });
+
+  it('AC-04-12 a real core in a fixture sync root is refused, not crashed: main gets the help to move it', async () => {
+    const root = createProfileDir();
+    try {
+      fs.writeFileSync(path.join(root.path, '.dropbox'), '');
+      const { parent, exits } = host(
+        realCore({ tmpRoot: root.path, logger: silentLogger, env: {} }),
+      );
+      const userData = path.join(root.path, 'Command Center');
+      parent.deliver({ type: 'init', userData, mode: { kind: 'normal' } }, [fakeChannel().port2]);
+      await waitFor(() => exits.length > 0);
+      expect(parent.sent).toEqual([
+        {
+          type: 'refused',
+          code: 'E_GUARD_SYNCED_FOLDER',
+          message: expect.stringMatching(/inside Dropbox/),
+          help: expect.arrayContaining([expect.stringMatching(/move the data directory/)]),
+        },
+      ]);
+      expect(exits).toEqual([1]);
+      expect(fs.existsSync(userData)).toBe(false);
+    } finally {
+      root.cleanup();
+    }
+  });
+
+  it('04 §9.1 rule 3: hands the keys of init and backup-keys to the core', async () => {
+    const received: unknown[] = [];
+    const { parent } = host(async (options) => {
+      received.push(options.backupKeys);
+      const core = await fakeCore(options);
+      return { ...core, setBackupKeys: (keys) => void received.push(keys) };
+    });
+    const key = { id: 'key_0123456789abcdef', key: 'AAAA', origin: 'random' as const };
+    parent.deliver({ type: 'init', userData: '/x', mode: { kind: 'normal' }, backupKeys: [key] }, [
+      fakeChannel().port2,
+    ]);
+    await settle();
+    parent.deliver({ type: 'backup-keys', keys: [key, key] });
+    await settle();
+    expect(received).toEqual([[key], [key, key]]);
   });
 
   it('ignores malformed messages and a second init', async () => {

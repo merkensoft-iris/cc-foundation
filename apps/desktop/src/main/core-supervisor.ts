@@ -7,7 +7,13 @@
  * were in flight fail with `E_CRASH`; calls not yet sent wait for the restarted core. After
  * too many crashes in a row without a stable run, the supervisor gives up (`failed`) rather
  * than loop, and calls fail with `E_APP_NOT_RUNNING`.
+ *
+ * A core that says `refused` (04 §9 rule 5: the data directory is inside a synced folder) is
+ * not restarted: no restart can fix it, so the supervisor goes to `failed` at once. `restart()`
+ * stops the core gracefully and starts it again at once, not counted as a crash: a staged
+ * restore applies at that start (04 §9.1 rule 9). Each start sends the current backup keys.
  */
+import type { SerializedBackupKey } from '@cc/core/backup-keys';
 import type { ApiErrorData } from '@cc/schemas';
 
 import {
@@ -79,6 +85,8 @@ export interface SupervisorOptions {
   readonly onHostMessage?: (message: HostToMain) => void;
   readonly onStateChange?: (state: CoreState) => void;
   readonly log?: (event: string, fields?: Record<string, unknown>) => void;
+  /** The backup keys each start hands the core (04 §9.1 rule 3). */
+  readonly backupKeys?: () => readonly SerializedBackupKey[];
 }
 
 /** A failed UI call; `data` is the local API error (04 §4.1 rule 4). */
@@ -118,6 +126,10 @@ export class CoreSupervisor {
   #onExit: (() => void) | undefined;
   /** `activity()` questions waiting for the core's answer. */
   readonly #activity = new Map<number, (busy: readonly string[]) => void>();
+  /** The core said `refused`: its exit is final. */
+  #refused = false;
+  /** `restart()` stopped the core: its exit starts it again. */
+  #restartRequested = false;
 
   constructor(options: SupervisorOptions) {
     this.#options = options;
@@ -146,7 +158,7 @@ export class CoreSupervisor {
           ? { id: this.#nextId++, method }
           : { id: this.#nextId++, method, params };
       const pending: Pending = { request, resolve, reject };
-      if (this.#state === 'ready') this.#send(pending);
+      if (this.#state === 'ready' && !this.#restartRequested) this.#send(pending);
       else this.#queue.push(pending);
     });
   }
@@ -175,6 +187,36 @@ export class CoreSupervisor {
       });
       child.postMessage({ type: 'activity', id });
     });
+  }
+
+  /** Hands the running core new backup keys (04 §9.1 rule 3); later starts send them too. */
+  sendBackupKeys(keys: readonly SerializedBackupKey[]): void {
+    if (this.#state === 'ready' || this.#state === 'starting') {
+      this.#process?.postMessage({ type: 'backup-keys', keys });
+    }
+  }
+
+  /**
+   * Stops the core gracefully and starts it again at once (04 §9.1 rule 9: a staged restore
+   * applies before the store opens). Calls already sent finish first; calls made meanwhile
+   * wait for the new core.
+   */
+  restart(): void {
+    if (this.#state !== 'ready' || this.#restartRequested) return;
+    this.#restartRequested = true;
+    if (this.#inFlight.size === 0) this.#stopForRestart();
+  }
+
+  #stopForRestart(): void {
+    const child = this.#process;
+    if (child === undefined) return;
+    this.#setState('restarting');
+    const killTimer = this.#options.clock.setTimeout(() => {
+      this.#options.log?.('core.stop_timeout');
+      child.kill();
+    }, this.#timing.stopTimeoutMs);
+    this.#onExit = () => this.#options.clock.clearTimeout(killTimer);
+    child.postMessage({ type: 'stop' });
   }
 
   /** Stops the core gracefully (killing it after the timeout). Idempotent. */
@@ -253,6 +295,10 @@ export class CoreSupervisor {
         return;
       }
       if (message.type === 'fatal') this.#options.log?.('core.fatal', { message: message.message });
+      if (message.type === 'refused') {
+        this.#refused = true;
+        this.#options.log?.('core.refused', { code: message.code });
+      }
       this.#options.onHostMessage?.(message);
     });
     child.on('exit', (code) => {
@@ -267,7 +313,10 @@ export class CoreSupervisor {
       }
     }, this.#timing.startTimeoutMs);
 
-    child.postMessage({ type: 'init', userData: this.#options.userData, mode }, [port2]);
+    const backupKeys = this.#options.backupKeys?.() ?? [];
+    child.postMessage({ type: 'init', userData: this.#options.userData, mode, backupKeys }, [
+      port2,
+    ]);
   }
 
   #onReady(): void {
@@ -291,6 +340,9 @@ export class CoreSupervisor {
     this.#inFlight.delete(data.id);
     if ('error' in data) pending.reject(new UiCallError(data.error));
     else pending.resolve(data.result);
+    if (this.#restartRequested && this.#state === 'ready' && this.#inFlight.size === 0) {
+      this.#stopForRestart();
+    }
   }
 
   #failAll(error: UiCallError): void {
@@ -307,6 +359,26 @@ export class CoreSupervisor {
     this.#process = undefined;
     if (this.#state === 'stopping') {
       this.#onExit?.();
+      return;
+    }
+    if (this.#refused) {
+      this.#setState('failed');
+      this.#failAll(this.#notRunning());
+      return;
+    }
+    if (this.#restartRequested) {
+      this.#restartRequested = false;
+      this.#failAll(
+        new UiCallError({
+          code: 'E_CRASH',
+          message: 'the core service restarted while handling the call',
+          help: ['Retry the action'],
+        }),
+      );
+      this.#onExit?.();
+      this.#onExit = undefined;
+      this.#options.log?.('core.restarted', { code });
+      this.#launch();
       return;
     }
     // A crash: the core never exits on its own while main is running.

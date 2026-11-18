@@ -231,6 +231,20 @@ export const HUMAN_ONLY_OPERATIONS: readonly HumanOnlyOperation[] = [
     screen: 'Settings → Backups',
   }),
   op({
+    method: 'backups.run',
+    operation: 'running a backup by hand',
+    spec: '04 §4.1, 04 §9.1 rule 1',
+    link: 'app',
+    screen: 'Settings → Backups',
+  }),
+  op({
+    method: 'backups.test',
+    operation: 'running the restore test by hand',
+    spec: '04 §4.1, 04 §9.1 rule 7',
+    link: 'app',
+    screen: 'Settings → Backups',
+  }),
+  op({
     method: 'backups.restore',
     operation: 'restoring from a backup',
     spec: '04 §4.3, 04 §9.1 rule 9, C-04-10',

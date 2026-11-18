@@ -11,10 +11,11 @@
  * `cc:rebuild` is the window's Rebuild now and Later (04 §10 rule 2). It is a shell action,
  * not a core method, so no local API client (CLI, MCP) can reach it (OQ-04-11).
  *
- * `backups.passphrase` (onboarding S1, 01 §3.1 row 9; 04 §9.1 rule 3) is answered here first:
- * main keeps the passphrase in the OS secret store (`safeStorage`, `<userData>/secrets/`), and
- * the core is told only that it is set. The passphrase never reaches the core, the store or a
- * log.
+ * `backups.passphrase` (onboarding S1 and Settings → Backups, 01 §3.1 row 9; 04 §9.1 rule 3) is
+ * answered here first: main derives the backup key from the passphrase (ADR 0007), keeps the
+ * key in the OS secret store (`safeStorage`, `<userData>/secrets/`) and hands it to the core,
+ * and the core is told only that a passphrase is set. The passphrase never reaches the core,
+ * the store or a log, and is not stored anywhere.
  */
 import type { ApiErrorData } from '@cc/schemas';
 
@@ -65,8 +66,8 @@ export interface BridgeOptions {
     readonly now: () => Promise<RebuildState>;
     readonly later: () => Promise<RebuildState>;
   };
-  /** Keeps the backup passphrase in the secret store; absent where there is none. */
-  readonly storeBackupPassphrase?: (passphrase: string) => Promise<void>;
+  /** Derives and keeps the backup key from a passphrase; absent where there is no secret store. */
+  readonly setBackupPassphrase?: (passphrase: string) => Promise<void>;
   readonly log?: (event: string, fields?: Record<string, unknown>) => void;
 }
 
@@ -87,7 +88,7 @@ function failed(code: string, message: string, help: string[] = []): InvokeAnswe
   return { ok: false, error: { code, message, help } };
 }
 
-/** S1's passphrase: into the secret store, then the core records that it is set. */
+/** The passphrase: its key into the secret store and the core, then the core records it is set. */
 async function setBackupPassphrase(options: BridgeOptions, params: unknown): Promise<InvokeAnswer> {
   const passphrase =
     typeof params === 'object' && params !== null
@@ -100,13 +101,13 @@ async function setBackupPassphrase(options: BridgeOptions, params: unknown): Pro
       ['Command Center cannot recover a lost passphrase: keep it somewhere safe (04 §9.1)'],
     );
   }
-  if (options.storeBackupPassphrase === undefined) {
+  if (options.setBackupPassphrase === undefined) {
     return failed('E_FORBIDDEN', 'this app has no secret store to keep the passphrase in', [
       'Set the passphrase in the installed app',
     ]);
   }
   try {
-    await options.storeBackupPassphrase(passphrase);
+    await options.setBackupPassphrase(passphrase);
   } catch {
     options.log?.('ipc.secret_store_failed', { method: BACKUP_PASSPHRASE_METHOD });
     return failed('E_PERMISSION', 'the OS secret store refused the passphrase', [

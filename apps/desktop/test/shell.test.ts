@@ -1,7 +1,10 @@
 import { EventEmitter } from 'node:events';
 
+import { deriveBackupKey, type SerializedBackupKey } from '@cc/core/backup-keys';
+
 import { describe, expect, it } from 'vitest';
 
+import { KEYS_SECRET, LEGACY_PASSPHRASE_SECRET } from '../src/main/backup-keys.js';
 import type { CoreLauncher, CoreProcess, MainPort } from '../src/main/core-supervisor.js';
 import type { InvokeAnswer, InvokeEvent } from '../src/main/ipc.js';
 import {
@@ -14,6 +17,7 @@ import type { ShownNotification } from '../src/main/notifications/center.js';
 import {
   SMOKE_TIMEOUT_MS,
   startShell,
+  type ShellOptions,
   type ShellPlatform,
   type ShellTray,
   type ShellWindow,
@@ -55,13 +59,16 @@ class FakeCore extends EventEmitter implements CoreProcess {
   /** What the core answers to `activity`. */
   busy: readonly string[] = [];
   port: FakePort | undefined;
+  /** Every UI call that reached this core. */
+  readonly calls: { method: string; params?: unknown }[] = [];
   postMessage(message: MainToHost, transfer: MainPort[] = []): void {
     this.received.push(message);
     if (message.type === 'init') {
       this.port = transfer[0] as FakePort;
       this.port.on(
         'message',
-        ({ data }: { data: { id: number; method: string; params?: unknown } }) =>
+        ({ data }: { data: { id: number; method: string; params?: unknown } }) => {
+          this.calls.push({ method: data.method, params: data.params });
           this.port?.postMessage({
             id: data.id,
             // The params are echoed for backups.* only, to show what reached the core.
@@ -69,7 +76,8 @@ class FakeCore extends EventEmitter implements CoreProcess {
               method: data.method,
               ...(data.method.startsWith('backups.') ? { params: data.params } : {}),
             },
-          }),
+          });
+        },
       );
       this.port.start();
       queueMicrotask(() => this.emit('message', { type: 'ready' }));
@@ -99,6 +107,7 @@ function fakePlatform(overrides: Partial<ShellPlatform> = {}) {
   const calls = { quit: 0, prepare: 0, registerProtocolClient: 0, trayDestroyed: 0 };
   const relaunched: string[] = [];
   const smokes: SmokeResult[] = [];
+  const refusals: { code: string; message: string; help: readonly string[] }[] = [];
   let resolveReady: () => void = () => undefined;
   const ready = new Promise<void>((resolve) => (resolveReady = resolve));
 
@@ -153,6 +162,7 @@ function fakePlatform(overrides: Partial<ShellPlatform> = {}) {
     },
     relaunch: (executable) => void relaunched.push(executable),
     finishSmoke: (result) => void smokes.push(result),
+    refuseStart: (refusal) => void refusals.push(refusal),
     log: (event, fields) => void logs.push({ event, ...(fields === undefined ? {} : { fields }) }),
     ...overrides,
   };
@@ -172,6 +182,7 @@ function fakePlatform(overrides: Partial<ShellPlatform> = {}) {
     calls,
     relaunched,
     smokes,
+    refusals,
     emit,
     invoke,
     ready: resolveReady,
@@ -182,6 +193,45 @@ function deferredCheck(): { check: StartCheck; resolve: (mode: StartMode) => voi
   let resolve: (mode: StartMode) => void = () => undefined;
   const result = new Promise<StartMode>((r) => (resolve = r));
   return { check: () => result.then((mode) => ({ mode, offerRebuild: false })), resolve };
+}
+
+/** Secrets kept in memory, as `safeStorage` files would hold them. */
+function memorySecrets() {
+  const values = new Map<string, string>();
+  return {
+    values,
+    read: (name: string) => Promise.resolve(values.get(name)),
+    write: (name: string, value: string) => {
+      values.set(name, value);
+      return Promise.resolve();
+    },
+    remove: (name: string) => {
+      values.delete(name);
+      return Promise.resolve();
+    },
+  };
+}
+
+/** ADR 0007's derivation at a test cost. */
+const fastDerive = (passphrase: string) =>
+  deriveBackupKey(passphrase, {
+    alg: 'scrypt',
+    N: 2 ** 10,
+    r: 8,
+    p: 1,
+    salt: Buffer.alloc(16, 3).toString('base64'),
+  });
+
+function parseKeysOf(value: string | undefined): SerializedBackupKey[] {
+  return value === undefined ? [] : (JSON.parse(value) as SerializedBackupKey[]);
+}
+
+async function startedWith(fake: ReturnType<typeof fakePlatform>, options: ShellOptions) {
+  const shell = startShell(fake.platform, options);
+  fake.ready();
+  const value = await shell;
+  await settle(20);
+  return value;
 }
 
 async function started(fake: ReturnType<typeof fakePlatform>) {
@@ -219,6 +269,7 @@ describe('desktop shell main process (04 §3)', () => {
       type: 'init',
       userData: '/tmp/cc-test-shell',
       mode: { kind: 'developer', reasons: ['tracked file modified: ui/home.tsx'] },
+      backupKeys: [],
     });
     expect(shell?.core.state).toBe('ready');
     // ADR 0004 decision 7: the window title and the tray carry the mode.
@@ -405,29 +456,32 @@ describe('desktop shell main process (04 §3)', () => {
     });
   });
 
-  it('01 §3.1 row 9: the backup passphrase goes to the secret store, and the core only learns that it is set', async () => {
-    const stored: [string, string][] = [];
-    const fake = fakePlatform({
-      storeSecret: (name, value) => {
-        stored.push([name, value]);
-        return Promise.resolve();
-      },
-    });
-    await started(fake);
+  it('01 §3.1 row 9, 04 §9.1 rule 3: the passphrase becomes a key in the secret store and the core; the passphrase itself reaches neither', async () => {
+    const secrets = memorySecrets();
+    const fake = fakePlatform({ secrets });
+    await startedWith(fake, { deriveBackupKey: fastDerive });
+    // The first start makes the random key of the local set and hands it to the core.
+    const first = parseKeysOf(secrets.values.get(KEYS_SECRET));
+    expect(first).toEqual([expect.objectContaining({ origin: 'random' })]);
+    expect(fake.cores[0]?.received[0]).toMatchObject({ type: 'init', backupKeys: first });
+
     const short = (await fake.invoke('cc:invoke', 'cc-app://app/', 'backups.passphrase', {
       passphrase: 'too short',
     })) as InvokeAnswer;
     expect(short).toMatchObject({ ok: false, error: { code: 'E_USAGE' } });
-    expect(stored).toEqual([]);
+    expect(parseKeysOf(secrets.values.get(KEYS_SECRET))).toHaveLength(1);
 
     const passphrase = 'correct horse battery staple';
     const answer = (await fake.invoke('cc:invoke', 'cc-app://app/', 'backups.passphrase', {
       passphrase,
     })) as InvokeAnswer;
-    expect(stored).toEqual([['backup-passphrase', passphrase]]);
-    // The core is called with no params: the passphrase never reaches it.
+    const keys = parseKeysOf(secrets.values.get(KEYS_SECRET));
+    expect(keys.map((key) => key.origin)).toEqual(['random', 'passphrase']);
+    // The derived key went to the running core; the core is called with no params.
+    expect(fake.cores[0]?.received).toContainEqual({ type: 'backup-keys', keys });
     expect(answer).toEqual({ ok: true, result: { method: 'backups.passphrase', params: {} } });
-    expect(JSON.stringify(fake.logs)).not.toContain(passphrase);
+    const everything = JSON.stringify([fake.logs, fake.cores[0]?.received, [...secrets.values]]);
+    expect(everything).not.toContain(passphrase);
 
     const nowhere = fakePlatform();
     await started(nowhere);
@@ -435,6 +489,68 @@ describe('desktop shell main process (04 §3)', () => {
       passphrase,
     })) as InvokeAnswer;
     expect(refused).toMatchObject({ ok: false, error: { code: 'E_FORBIDDEN' } });
+  });
+
+  it('04 §9.1 rule 3: a passphrase the P1-12 build kept becomes its key, and the passphrase file is deleted', async () => {
+    const secrets = memorySecrets();
+    secrets.values.set(LEGACY_PASSPHRASE_SECRET, 'correct horse battery staple');
+    const fake = fakePlatform({ secrets });
+    await startedWith(fake, { deriveBackupKey: fastDerive });
+    // The derivation runs on the thread pool: wait for the core to start with the keys.
+    for (let i = 0; i < 200 && fake.cores.length === 0; i++) {
+      await new Promise((resolve) => setTimeout(resolve, 10));
+      await settle(5);
+    }
+    expect(secrets.values.has(LEGACY_PASSPHRASE_SECRET)).toBe(false);
+    const keys = parseKeysOf(secrets.values.get(KEYS_SECRET));
+    expect(keys.map((key) => key.origin)).toEqual(['random', 'passphrase']);
+    expect(keys[1]?.id).toBe((await fastDerive('correct horse battery staple')).id);
+    expect(fake.cores[0]?.received[0]).toMatchObject({ backupKeys: keys });
+  });
+
+  it('AC-04-12 a core that refuses a data directory inside a synced folder is not restarted: the shell shows the help and exits', async () => {
+    const fake = fakePlatform();
+    const shell = await started(fake);
+    const refusal = {
+      type: 'refused',
+      code: 'E_GUARD_SYNCED_FOLDER',
+      message: 'the Command Center data directory /x/Dropbox/cc is inside Dropbox',
+      help: ['move the data directory to a path that no sync client watches, then start CC again'],
+    };
+    fake.cores[0]?.emit('message', refusal);
+    fake.cores[0]?.emit('exit', 1);
+    await settle(20);
+    expect(fake.refusals).toEqual([
+      { type: 'refused', code: refusal.code, message: refusal.message, help: refusal.help },
+    ]);
+    expect(shell?.core.state).toBe('failed');
+    (fake.platform.clock as TimerClock).advance(60_000);
+    await settle(20);
+    expect(fake.cores).toHaveLength(1);
+  });
+
+  it('04 §9.1 rule 9: a staged restore restarts the core at once, with the keys, after the restore call answered', async () => {
+    const secrets = memorySecrets();
+    const fake = fakePlatform({ secrets });
+    const shell = await startedWith(fake, { deriveBackupKey: fastDerive });
+    const answer = (await fake.invoke('cc:invoke', 'cc-app://app/', 'backups.restore', {
+      id: 'bkp_01KA0000000000000000000000',
+    })) as InvokeAnswer;
+    expect(answer).toMatchObject({ ok: true });
+    fake.cores[0]?.emit('message', { type: 'restart', reason: 'restore' });
+    await settle(20);
+    expect(fake.cores).toHaveLength(2);
+    expect(fake.cores[0]?.received.at(-1)).toEqual({ type: 'stop' });
+    expect(fake.cores[1]?.received[0]).toMatchObject({
+      type: 'init',
+      backupKeys: parseKeysOf(secrets.values.get(KEYS_SECRET)),
+    });
+    expect(shell?.core.state).toBe('ready');
+    // A restart is not a crash: no backoff, and calls go to the new core.
+    expect(await fake.invoke('cc:invoke', 'cc-app://app/', 'home.get', {})).toMatchObject({
+      ok: true,
+    });
+    expect(fake.cores[1]?.calls.map((call) => call.method)).toEqual(['home.get']);
   });
 
   it('registers commandcenter:// with the OS only in a packaged build', async () => {
@@ -458,9 +574,10 @@ function fakeRebuild(outcome: RebuildOutcome) {
   const runs: number[] = [];
   return {
     runs,
-    rebuild: () => {
+    rebuild: async (backup: () => Promise<void>) => {
+      await backup();
       runs.push(runs.length + 1);
-      return Promise.resolve(outcome);
+      return outcome;
     },
   };
 }
@@ -498,6 +615,8 @@ describe('Rebuild now in the shell (04 §10 rule 2)', () => {
     });
     await settle(20);
     expect(built.runs).toEqual([1]);
+    // The pre-update backup went through the core first (04 §10 rule 2, §9.1 rule 1).
+    expect(core.calls).toContainEqual({ method: 'backups.run', params: { trigger: 'pre_update' } });
     expect(shell?.rebuild.state).toEqual({
       kind: 'waiting-for-idle',
       busy: ['1 meeting in progress'],

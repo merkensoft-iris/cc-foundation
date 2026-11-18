@@ -15,7 +15,10 @@ export type AppRoute =
   | { readonly screen: 'issues' }
   | { readonly screen: 'meetings'; readonly ref?: string; readonly from?: string }
   | { readonly screen: 'scorecard'; readonly tab?: 'measures' | 'goals'; readonly ref?: string }
-  | { readonly screen: 'settings'; readonly tab?: 'agents' | 'notifications' | 'ai' }
+  | {
+      readonly screen: 'settings';
+      readonly tab?: 'agents' | 'notifications' | 'backups' | 'ai';
+    }
   /** Onboarding (01 §3): not in the navigation; the app opens it until it is committed. */
   | { readonly screen: 'onboarding'; readonly step?: OnboardingStep };
 

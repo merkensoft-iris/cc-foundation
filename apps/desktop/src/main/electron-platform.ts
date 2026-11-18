@@ -8,7 +8,15 @@
  * A packaged build reads the build stamp `cc-build` wrote at its app root (inside the asar)
  * for the start check and Rebuild now; an unpackaged run has none (`start-mode.ts`).
  */
-import { chmodSync, mkdirSync, renameSync, writeFileSync } from 'node:fs';
+import {
+  chmodSync,
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  renameSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -18,6 +26,7 @@ import { BUILD_STAMP, readBuildStamp, rebuildNow, THEME_CSS } from '@cc/build-ru
 import {
   app,
   BrowserWindow,
+  dialog,
   ipcMain,
   MessageChannelMain,
   Menu,
@@ -118,27 +127,27 @@ export function createElectronPlatform(argv: readonly string[]): ShellPlatform {
   const stamp = app.isPackaged ? readBuildStamp(join(appRoot, BUILD_STAMP)) : null;
   const themeFile = app.isPackaged ? join(appRoot, THEME_CSS) : undefined;
 
-  /**
-   * The pre-update backup Rebuild now takes first (04 §10 rule 2, §9.1).
-   * TODO(P1-17): the real snapshot. Until backups exist there is nothing to take, so the
-   * rebuild goes ahead and the log says so; the build never writes `<userData>`'s data.
-   */
-  const preUpdateBackup = (): Promise<void> => {
-    log('rebuild.backup_skipped', { reason: 'pre-update backups arrive with P1-17' });
-    return Promise.resolve();
-  };
-
+  /** Rebuild now; the shell passes the pre-update backup the core takes (04 §10 rule 2). */
   const rebuild =
     stamp === null
       ? undefined
-      : async (): Promise<RebuildOutcome> => {
+      : async (backup: () => Promise<void>): Promise<RebuildOutcome> => {
           const result = await rebuildNow({
             stamp,
             buildsDir: join(userData, 'builds'),
-            backup: preUpdateBackup,
+            backup,
           });
           return result.ok ? { ok: true, app: result.app, log: result.log } : result;
         };
+
+  /** `<userData>/secrets/<name>`, in a 0700 directory (04 §9 rule 1). */
+  const secretPath = (name: string): string => {
+    if (!/^[a-z][a-z0-9-]*$/.test(name)) throw new Error(`not a secret name: ${name}`);
+    const dir = join(userData, 'secrets');
+    mkdirSync(dir, { recursive: true, mode: 0o700 });
+    chmodSync(dir, 0o700);
+    return join(dir, name);
+  };
 
   /** Notifications are kept referenced until closed, or their click handler is lost. */
   const live = new Set<Notification>();
@@ -169,18 +178,39 @@ export function createElectronPlatform(argv: readonly string[]): ShellPlatform {
     startCheck: app.isPackaged ? stampCheck(stamp) : unpackagedCheck,
     ...(rebuild === undefined ? {} : { rebuild }),
     ...(args.smoke === true ? { smoke: true } : {}),
-    storeSecret: async (name, value) => {
-      if (!/^[a-z][a-z0-9-]*$/.test(name)) throw new Error(`not a secret name: ${name}`);
-      if (!safeStorage.isEncryptionAvailable()) throw new Error('safeStorage is not available');
-      const dir = join(userData, 'secrets');
-      mkdirSync(dir, { recursive: true, mode: 0o700 });
-      chmodSync(dir, 0o700);
-      const file = join(dir, name);
-      const temp = `${file}.tmp`;
-      writeFileSync(temp, safeStorage.encryptString(value), { mode: 0o600 });
-      renameSync(temp, file);
-      log('secrets.stored', { name });
-      return Promise.resolve();
+    secrets: {
+      read: (name) => {
+        const file = secretPath(name);
+        if (!existsSync(file)) return Promise.resolve(undefined);
+        if (!safeStorage.isEncryptionAvailable()) {
+          return Promise.reject(new Error('safeStorage is not available'));
+        }
+        return Promise.resolve(safeStorage.decryptString(readFileSync(file)));
+      },
+      write: (name, value) => {
+        if (!safeStorage.isEncryptionAvailable()) {
+          return Promise.reject(new Error('safeStorage is not available'));
+        }
+        const file = secretPath(name);
+        const temp = `${file}.tmp`;
+        writeFileSync(temp, safeStorage.encryptString(value), { mode: 0o600 });
+        renameSync(temp, file);
+        log('secrets.stored', { name });
+        return Promise.resolve();
+      },
+      remove: (name) => {
+        rmSync(secretPath(name), { force: true });
+        log('secrets.removed', { name });
+        return Promise.resolve();
+      },
+    },
+    refuseStart: (refusal) => {
+      log('shell.refused', { code: refusal.code });
+      dialog.showErrorBox(
+        'Command Center cannot open its data here',
+        [refusal.message, '', ...refusal.help].join('\n'),
+      );
+      app.exit(1);
     },
     requestSingleInstanceLock: () => app.requestSingleInstanceLock(),
     onSecondInstance: (listener) => {

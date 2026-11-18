@@ -5,6 +5,36 @@
  */
 export const PACKAGE_NAME = '@cc/core';
 
+export {
+  applyPendingRestore,
+  archiveName,
+  Backups,
+  BACKUPS_DIRNAME,
+  parseArchiveName,
+  type BackupAttention,
+  type BackupManifest,
+  type BackupPush,
+  type BackupsOptions,
+} from './backups/engine.js';
+export {
+  extractArchive,
+  readArchiveHeader,
+  writeArchive,
+  type ArchiveHeader,
+} from './backups/format.js';
+export {
+  deriveBackupKey,
+  keyIdOf,
+  parseKey,
+  parseKeys,
+  randomBackupKey,
+  SCRYPT_PARAMS,
+  serializeKey,
+  type BackupKey,
+  type KdfParams,
+  type SerializedBackupKey,
+} from './backups/keys.js';
+export { DEFAULT_RETENTION, selectKept, type Retention } from './backups/retention.js';
 export { systemClock, type Clock, type TimerHandle } from './clock.js';
 export {
   actorOf,
@@ -36,6 +66,7 @@ export {
   asCoreError,
   isCoreError,
 } from './errors.js';
+export { registerBackupHandlers } from './handlers/backups.js';
 export { registerItemHandlers, toDomainEvidence } from './handlers/items.js';
 export { registerReadHandlers } from './handlers/reads.js';
 export { periodStart, registerWriteHandlers } from './handlers/writes.js';
@@ -92,6 +123,8 @@ export {
 export { storeRhythmStore } from './rhythm-store.js';
 export { Scheduler, type Job, type JobStatus } from './scheduler.js';
 export {
+  BACKUP_CHECK_INTERVAL_MS,
+  BACKUP_JOB,
   startCore,
   WATCHDOG_INTERVAL_MS,
   WATCHDOG_JOB,

@@ -1,6 +1,13 @@
 export { ApiErrorData, ERROR_CODES, ErrorCode, MutationStatus, recordRef } from './common.js';
 export {
   apiMethods,
+  BackupId,
+  BackupLastGood,
+  BackupRecord,
+  BackupRestoreTest,
+  BackupState,
+  BackupStatus,
+  BackupTrigger,
   DisplayState,
   EvidenceInput,
   ItemSummary,

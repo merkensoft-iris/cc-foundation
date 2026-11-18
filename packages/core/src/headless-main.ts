@@ -9,7 +9,7 @@
  * that channel.
  */
 import { systemClock } from './clock.js';
-import { isCoreError } from './errors.js';
+import { asCoreError, isCoreError } from './errors.js';
 import { startHeadless } from './headless.js';
 import { stderrLogger } from './logger.js';
 
@@ -50,7 +50,9 @@ async function main(): Promise<void> {
   );
 }
 
-main().catch((error: unknown) => {
+main().catch((caught: unknown) => {
+  // A store error (a data directory inside a synced folder, AC-04-12) prints its help too.
+  const error = asCoreError(caught);
   const message = isCoreError(error)
     ? `${error.code}: ${error.message}\n${error.help.join('\n')}`
     : String(error);

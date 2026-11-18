@@ -1,7 +1,8 @@
 /**
  * Settings (09 P1-11): Agent access (07 §5: principals, their scopes and workstreams; adding,
- * changing and revoking are human-only, 04 §4.3), Notifications (02 §10), and a placeholder for
- * the AI settings, which arrive with the AI layer (P3). No AI runs in this build.
+ * changing and revoking are human-only, 04 §4.3), Notifications (02 §10), Backups (04 §9.1,
+ * P1-17: `settings-backups.ts`), and a placeholder for the AI settings, which arrive with the
+ * AI layer (P3). No AI runs in this build.
  *
  * Agent access also registers MCP clients (04 §8 rule 3, 09 P1-13): Add client creates an
  * `mcp_client` principal with the MCP defaults of 07 §5 and prints the command that registers
@@ -13,8 +14,9 @@ import type { AppRoute } from '../app/routes.js';
 import { act, errorText, type Screen, type Ui } from '../app/screen.js';
 import { button, checkbox, chip, field, page, section, select, table, tabs } from '../ui/parts.js';
 import { h, type VNode } from '../ui/vnode.js';
+import { backupsView, loadBackups, type BackupsState } from './settings-backups.js';
 
-type Tab = 'agents' | 'notifications' | 'ai';
+type Tab = 'agents' | 'notifications' | 'backups' | 'ai';
 
 /** The MCP clients whose registration command Settings prints (04 §8 rule 3). */
 export type McpClient = 'claude-code' | 'codex' | 'other';
@@ -22,6 +24,7 @@ export type McpClient = 'claude-code' | 'codex' | 'other';
 export interface SettingsState {
   tab: Tab;
   principals?: readonly PrincipalRow[];
+  backups?: BackupsState;
   readonly add: { name: string; kind: string; scopes: Set<string> };
   readonly client: { name: string; client: McpClient };
 }
@@ -65,6 +68,7 @@ export function registrationCommand(client: McpClient, principal: string): strin
 const TABS = [
   { id: 'agents', label: 'Agent access' },
   { id: 'notifications', label: 'Notifications' },
+  { id: 'backups', label: 'Backups' },
   { id: 'ai', label: 'AI' },
 ] as const;
 
@@ -354,6 +358,7 @@ export const settingsScreen: Screen<SettingsState> = {
       name: 'claude-code',
       client: 'claude-code' as McpClient,
     }));
+    if (tab === 'backups') return { tab, add, client, backups: await loadBackups(ui) };
     if (tab !== 'agents') return { tab, add, client };
     const list = await ui.call<{ principals: PrincipalRow[] }>('principals.list', {});
     return { tab, add, client, principals: list.principals };
@@ -365,7 +370,9 @@ export const settingsScreen: Screen<SettingsState> = {
         ? agentsView(state, ui)
         : state.tab === 'notifications'
           ? notificationsView()
-          : aiView();
+          : state.tab === 'backups' && state.backups !== undefined
+            ? backupsView(state.backups, ui)
+            : aiView();
     return page('Settings', header, body);
   },
 };

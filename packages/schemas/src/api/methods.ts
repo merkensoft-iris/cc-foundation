@@ -12,8 +12,9 @@
  * there, with their record types. `connectors.*` and `confirmations.*` have the methods the
  * MCP tools of 07 §7 call (P1-13): `connectors.actions` and `connectors.invoke`, which find no
  * installed connector until P2-02, and `confirmations.get` and `confirmations.wait`; P2-01 and
- * P2-02 add the rest. `backups.*` has the two S1 answers of P1-12 (destination and
- * passphrase); P1-17 adds its status and history methods.
+ * P2-02 add the rest. `backups.*` (04 §9.1) has the two S1 answers of P1-12 (destination and
+ * passphrase) and the status, history, run, restore test and restore of P1-17; running,
+ * testing and restoring are human-only, like the S1 answers.
  */
 import { z } from 'zod';
 
@@ -26,6 +27,7 @@ import {
   LocalTime,
   Health,
   RunId,
+  Sha256,
   UtcTimestamp,
 } from '../records/common.js';
 import { ConfirmationId, ConfirmationRequest, RiskClass } from '../records/confirmation.js';
@@ -178,6 +180,88 @@ export const authProve = method({
   }),
 });
 
+// backup status (04 §9.1): shared by home.get and backups.*
+
+/** Why an archive was written (04 §9.1 rule 1). */
+export const BackupTrigger = z.enum([
+  'scheduled',
+  'pre_migration',
+  'pre_update',
+  'pre_restore',
+  'manual',
+]);
+export type BackupTrigger = z.infer<typeof BackupTrigger>;
+
+/** 04 §9.1 rule 8. */
+export const BackupState = z.enum(['ok', 'warning', 'failing', 'not_configured']);
+export type BackupState = z.infer<typeof BackupState>;
+
+/** A backup archive's ID: `bkp_` and the archive's time-ordered ULID. */
+export const BackupId = z.string().regex(/^bkp_[0-9A-HJKMNP-TV-Z]{26}$/);
+
+/** The newest archive not failed by a restore test (04 §9.1 rule 8, AC-04-11). */
+export const BackupLastGood = z.strictObject({
+  id: BackupId,
+  at: UtcTimestamp,
+  /** The destination's label, or "This computer" for the local set. */
+  destination: z.string().min(1),
+});
+export type BackupLastGood = z.infer<typeof BackupLastGood>;
+
+/** The last restore test (04 §9.1 rule 7). */
+export const BackupRestoreTest = z.strictObject({
+  at: UtcTimestamp,
+  ok: z.boolean(),
+  detail: z.string().min(1),
+  /** The archive the test restored, when one was found. */
+  backupId: BackupId.optional(),
+  source: z.enum(['local', 'off_machine']).optional(),
+});
+export type BackupRestoreTest = z.infer<typeof BackupRestoreTest>;
+
+/** 04 §9.1 `BackupStatus`, with the newest good archive and what the state rests on. */
+export const BackupStatus = z.strictObject({
+  state: BackupState,
+  lastGoodLocalAt: UtcTimestamp.optional(),
+  lastGoodOffMachineAt: UtcTimestamp.optional(),
+  lastGood: BackupLastGood.optional(),
+  lastRestoreTest: BackupRestoreTest.optional(),
+  /** The off-machine destination's label; absent until the user sets one. */
+  destination: z.string().min(1).optional(),
+  passphraseSet: z.boolean(),
+  /** One sentence per cause of a state other than `ok`. */
+  reasons: z.array(z.string()),
+});
+export type BackupStatus = z.infer<typeof BackupStatus>;
+
+/** 04 §9.1 `BackupRecord`: one archive, its local copy and its off-machine copy. */
+export const BackupRecord = z.strictObject({
+  id: BackupId,
+  at: UtcTimestamp,
+  trigger: BackupTrigger,
+  archiveSha256: Sha256,
+  bytes: z.int().min(0),
+  /** The archive's file name in the local set (`<userData>/backups/`). */
+  local: z.strictObject({
+    path: z.string().min(1),
+    ok: z.boolean(),
+    error: z.string().optional(),
+    /** Pruned by the retention rule (04 §9.1 rule 4). */
+    pruned: z.boolean().optional(),
+  }),
+  offMachine: z
+    .strictObject({
+      destination: z.string().min(1),
+      ok: z.boolean(),
+      error: z.string().optional(),
+      pruned: z.boolean().optional(),
+    })
+    .optional(),
+  /** The restore test that read this archive, if one did (04 §9.1 rule 7). */
+  verified: z.strictObject({ at: UtcTimestamp, ok: z.boolean() }).optional(),
+});
+export type BackupRecord = z.infer<typeof BackupRecord>;
+
 // home
 
 export const homeGet = method({
@@ -206,6 +290,8 @@ export const homeGet = method({
       dueSoon: z.int().min(0),
       open: z.int().min(0),
     }),
+    /** "Last good backup" and the backup state (04 §9.1 rule 8). */
+    backup: z.strictObject({ state: BackupState, lastGood: BackupLastGood.optional() }),
   }),
 });
 
@@ -1353,7 +1439,7 @@ export const confirmationsWait = method({
   result: z.strictObject({ confirmation: ConfirmationRequest, timedOut: z.boolean() }),
 });
 
-// backups: the S1 answers (04 §9.1); the rest of backups.* is P1-17
+// backups: the S1 answers (P1-12), then status, history, run, restore test and restore (P1-17)
 
 export const backupsDestination = method({
   method: 'backups.destination',
@@ -1372,6 +1458,61 @@ export const backupsPassphrase = method({
   humanOnly: true,
   params: z.strictObject({}),
   result: z.strictObject({ status: MutationStatus, passphraseSet: z.boolean() }),
+});
+
+export const backupsStatus = method({
+  method: 'backups.status',
+  spec: '04 §4.1, 04 §9.1 rule 8',
+  description: 'The backup state, the last good backup and the last restore test.',
+  scope: 'read',
+  humanOnly: false,
+  params: z.strictObject({}),
+  result: BackupStatus,
+});
+
+export const backupsList = method({
+  method: 'backups.list',
+  spec: '04 §4.1, 04 §9.1',
+  description: 'The backup history, newest first: each archive, where it was written and kept.',
+  scope: 'read',
+  humanOnly: false,
+  params: z.strictObject({ limit: Limit.optional() }),
+  result: z.strictObject({ backups: z.array(BackupRecord), total: z.int().min(0) }),
+});
+
+export const backupsRun = method({
+  method: 'backups.run',
+  spec: '04 §4.1, 04 §9.1 rule 1',
+  description:
+    'Takes a backup now: the local set, then the off-machine destination when one is set.',
+  humanOnly: true,
+  params: z.strictObject({ trigger: z.enum(['manual', 'pre_update']).optional() }),
+  result: z.strictObject({ backup: BackupRecord, status: BackupStatus }),
+});
+
+export const backupsTest = method({
+  method: 'backups.test',
+  spec: '04 §4.1, 04 §9.1 rule 7',
+  description:
+    'Runs the restore test now on the newest off-machine archive, or the newest local one.',
+  humanOnly: true,
+  params: z.strictObject({}),
+  result: z.strictObject({ test: BackupRestoreTest, status: BackupStatus }),
+});
+
+export const backupsRestore = method({
+  method: 'backups.restore',
+  spec: '04 §4.3, 04 §9.1 rule 9, C-04-10',
+  description:
+    'Backs up the current store, then restores the chosen archive; the core restarts on it.',
+  humanOnly: true,
+  params: z.strictObject({ id: BackupId }),
+  result: z.strictObject({
+    status: z.literal('ok'),
+    /** The backup of the current store taken first (C-04-10). */
+    preRestoreBackupId: BackupId,
+    restored: BackupId,
+  }),
 });
 
 /** Every method `pnpm cc:gen` writes a schema for, in 04 §4.1 order. */
@@ -1437,6 +1578,11 @@ export const apiMethods: readonly ApiMethod[] = [
   confirmationsWait,
   backupsDestination,
   backupsPassphrase,
+  backupsStatus,
+  backupsList,
+  backupsRun,
+  backupsTest,
+  backupsRestore,
   exportRun,
 ];
 
