@@ -18,11 +18,13 @@ export async function cli(
   profileDir: string,
   argv: readonly string[],
   extraEnv: NodeJS.ProcessEnv = {},
+  cwd?: string,
 ): Promise<CliRun> {
   let stdout = '';
   const code = await runCli({
     argv,
     env: testEnv(profileDir, extraEnv),
+    ...(cwd === undefined ? {} : { cwd }),
     stdout: { write: (chunk: string) => (stdout += chunk) },
     bin: '/usr/local/bin/cc-axi',
   });

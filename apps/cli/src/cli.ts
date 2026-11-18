@@ -40,6 +40,8 @@ import {
   onboardingStatus,
 } from './commands/onboarding.js';
 import { search } from './commands/search.js';
+import { hookSessionStart } from './commands/hook.js';
+import { setupHooks, setupStatus } from './commands/setup.js';
 import type { Handler, Session } from './commands/common.js';
 import { usageError } from './errors.js';
 import { commandHelp, DESCRIPTION, groupHelp, HUMAN_ONLY_VERBS, topLevelHelp } from './help.js';
@@ -80,6 +82,9 @@ export const HANDLERS: Readonly<Record<string, Handler>> = {
   'onboarding recommend': onboardingRecommend,
   'onboarding apply': onboardingApply,
   'onboarding export': onboardingExport,
+  'setup hooks': setupHooks,
+  'setup status': setupStatus,
+  'hook session-start': hookSessionStart,
   update,
 };
 
@@ -101,11 +106,14 @@ function createSession(
   globals: Globals,
   env: NodeJS.ProcessEnv,
   cwd: string,
+  execPath: string,
 ): Session & { close(): void } {
   let client: Promise<LocalApiClient> | undefined;
   return {
     globals,
     cwd,
+    env,
+    execPath,
     api() {
       client ??= connectLocalApi({
         userData: env['CC_PROFILE_DIR'] || defaultUserData(process.platform, env),
@@ -127,14 +135,15 @@ export async function runCli(options: RunOptions): Promise<number> {
   const env = options.env ?? process.env;
   const cwd = options.cwd ?? process.cwd();
   const format = peekFormat(options.argv);
-  const bin = collapseHome(options.bin ?? process.argv[1] ?? 'cc-axi');
+  const execPath = options.bin ?? process.argv[1] ?? 'cc-axi';
+  const bin = collapseHome(execPath);
 
   const run = async (path: string, argv: readonly string[]): Promise<Output | string> => {
     const command = findCommand(path);
     if (command === undefined) throw usageError(`unknown command ${path}`);
     const parsed = parseArgs(command, argv);
     if (parsed.help) return emit(commandHelp(command), parsed.globals);
-    const session = createSession(parsed.globals, env, cwd);
+    const session = createSession(parsed.globals, env, cwd, execPath);
     try {
       const output = await HANDLERS[path]!(parsed, session);
       return emit(
@@ -176,7 +185,7 @@ export async function runCli(options: RunOptions): Promise<number> {
       topLevelHelp: `${encode(topLevelHelp())}\n`,
       commands,
       home: async () => {
-        const session = createSession({ format: 'toon' }, env, cwd);
+        const session = createSession({ format: 'toon' }, env, cwd, execPath);
         try {
           return await homeView(session);
         } finally {

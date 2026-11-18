@@ -37,8 +37,12 @@ export interface Session {
   readonly globals: Globals;
   /** Connects on first use, so `--help` and usage errors never need the app. */
   api(): Promise<LocalApiClient>;
-  /** The working directory, for `file:` evidence paths. */
+  /** The working directory, for `file:` evidence paths and the hook's workstream (07 §8). */
   readonly cwd: string;
+  /** The environment `cc-axi` runs with: `$HOME` and `$PATH` for `setup hooks`. */
+  readonly env: NodeJS.ProcessEnv;
+  /** The absolute path of the running `cc-axi` entry, for the portable hook command. */
+  readonly execPath: string;
 }
 
 export type Handler = (parsed: Parsed, session: Session) => Promise<Output>;

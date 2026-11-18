@@ -581,6 +581,63 @@ cc-axi onboarding export --out profile.json
 cc-axi onboarding export --out engine/profile.json --format json
 ```
 
+## `cc-axi setup hooks`
+
+Install or repair the SessionStart hooks that run `cc-axi hook session-start` in new agent sessions.
+
+```text
+cc-axi setup hooks [--agents <list>] [--scope <user|project>]
+```
+
+| Flag                      | Meaning                                                                        | Default                    |
+| ------------------------- | ------------------------------------------------------------------------------ | -------------------------- |
+| `--agents <list>`         | Agents, comma-separated: claude-code, codex, opencode.                         | claude-code,codex,opencode |
+| `--scope <user\|project>` | user: the home-directory config of each agent; project: the current directory. | user                       |
+
+Local API: none.
+
+Examples:
+
+```text
+cc-axi setup hooks
+cc-axi setup hooks --scope project
+cc-axi setup hooks --agents claude-code,codex --scope project
+```
+
+## `cc-axi setup status`
+
+Show which agents have the SessionStart hook, at user and project scope.
+
+```text
+cc-axi setup status
+```
+
+Local API: none.
+
+Examples:
+
+```text
+cc-axi setup status
+cc-axi setup status --format json
+```
+
+## `cc-axi hook session-start`
+
+What an installed hook prints at session start: today's meetings, attention counts and the top items of this directory's workstream.
+
+```text
+cc-axi hook session-start
+```
+
+Local API: `home.get`, `workstreams.list`, `workstreams.get`, `items.list`.
+
+Examples:
+
+```text
+cc-axi hook session-start
+cc-axi hook session-start --principal claude-code
+```
+
 ## `cc-axi update`
 
 Report the cc-axi version; cc-axi ships inside the Command Center app and updates with it.
