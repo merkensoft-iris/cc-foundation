@@ -33,6 +33,7 @@ export * from './records/framework-instance.js';
 export * from './records/rrule.js';
 export * from './records/meeting.js';
 export * from './records/onboarding.js';
+export * from './records/confirmation.js';
 export * from './temporal.js';
 export * from './frameworks/agenda.js';
 export * from './frameworks/framework.js';
@@ -45,3 +46,4 @@ export {
 } from './frameworks/index.js';
 export { recordJsonSchema, recordTypes, validateRecord, type RecordType } from './records/index.js';
 export * from './api/index.js';
+export * from './mcp/tools.js';

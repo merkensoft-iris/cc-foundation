@@ -35,6 +35,7 @@ import {
 } from './endpoint.js';
 import type { Logger } from './logger.js';
 import { silentLogger } from './logger.js';
+import { registerConnectorHandlers } from './handlers/connectors.js';
 import { registerItemHandlers } from './handlers/items.js';
 import { registerMeetingHandlers } from './handlers/meetings.js';
 import { registerOnboardingHandlers, type CommittedListener } from './handlers/onboarding.js';
@@ -190,6 +191,7 @@ async function serve(options: CoreOptions, basics: Basics): Promise<CoreService>
   registerReviewHandlers(dispatcher, records, store);
   registerMeetingHandlers(dispatcher, new Meetings(store, { clock }), store, clock);
   registerPrincipalHandlers(dispatcher, principals);
+  registerConnectorHandlers(dispatcher, store, clock);
   registerOnboardingHandlers(dispatcher, store, {
     ...(options.onOnboardingCommitted === undefined
       ? {}

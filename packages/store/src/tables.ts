@@ -618,7 +618,7 @@ export const tableSpecs: readonly TableSpec[] = [
   unspecified('connector_installs', 'P2 connector host (05 §15)'),
   unspecified('connector_bindings', 'P2 connector host (05 §3)'),
   unspecified('browser_sessions', 'P2 browser host (04 §5.6)'),
-  unspecified('confirmations', 'P1-04 core service and local API (04 §4.3, §11)'),
+  unspecified('confirmations', 'P2-01 Policy Engine and confirmations (04 §7.3)'),
   unspecified('standing_approvals', 'P2 policy engine (04 §7.4)'),
   {
     table: 'agent_principals',

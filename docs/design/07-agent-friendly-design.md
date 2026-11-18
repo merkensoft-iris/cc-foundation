@@ -94,7 +94,7 @@ cc-axi meetings list [--range today|week|<from>..<to>] | view <ref> | preread <r
 cc-axi measures list [--workstream <slug>] | record <ref> --value <v> [--period <date>] [--note "<t>"]
 cc-axi goals list [--workstream <slug>] [--period current|previous|next]
 cc-axi workstreams list | view <slug>
-cc-axi connectors list | search <text> | view <id> | actions <binding> | health [<binding>]
+cc-axi connectors list | search <text> | view <id> | actions [<binding>] | health [<binding>]
                      | invoke <binding> <action> --input '<json>' [--wait <seconds>]
                      | test <path> [--live --binding <label>] | discover --tool "<name>"
 cc-axi sessions list
@@ -105,7 +105,7 @@ cc-axi requests list [--status <s>] | view <id> | propose --title "<t>" --body-f
 cc-axi backups status                               last good backup, last restore test (04 §9.1)
 cc-axi open [<ref>|<id>]                            opens the app at the matching deep link
 cc-axi export --out <dir>
-cc-axi mcp [--run <runId>]                          stdio MCP relay (§7)
+cc-axi mcp [--run <runId>]                          stdio MCP relay (§7); --run arrives with the orchestrator (P3)
 cc-axi setup hooks [--agents claude-code,codex,opencode,grok] [--scope user|project] | skill | status
 cc-axi hook session-start                           used by installed hooks (§8)
 cc-axi serve --headless --profile-dir <dir>         development and tests only
@@ -370,7 +370,7 @@ item ref (for example A-0142) as the task id, and report outcomes and blockers t
 
 ## 7. MCP server surface
 
-The server name is `command-center`, using stdio transport ([04 §8](04-platform.md#8-mcp-server)). Tool definitions are generated from `packages/schemas`. Each tool description is one sentence. The whole `tools/list` payload stays at or under 12 KB, checked in CI. Results are the same TOON text as the CLI, in one text content block. Errors set `isError: true`, with the same `error:` and `help:` lines.
+The server name is `command-center`, using stdio transport ([04 §8](04-platform.md#8-mcp-server)). Tool definitions are generated from `packages/schemas` (`src/mcp/tools.ts`, written to `packages/schemas/mcp/tools.json` by `pnpm cc:gen`). Each tool description is one sentence. The whole `tools/list` payload stays at or under 12 KB, checked in CI by `pnpm cc:gen`. Results are the same TOON text as the CLI, in one text content block. Errors set `isError: true`, with the same `error:` and `help:` lines.
 
 | Tool | Local API method | Scope |
 |---|---|---|
@@ -390,6 +390,15 @@ The server name is `command-center`, using stdio transport ([04 §8](04-platform
 | `cc_confirmation_status` | `confirmations.get` and `confirmations.wait` | read |
 
 AXI's own benchmark found MCP conditions costlier than the AXI CLI. CC therefore keeps the MCP surface to these 14 tools, and recommends the CLI to agents that have a shell.
+
+Rules (P1-13):
+
+1. **Inputs are the CLI flags.** A tool's arguments are the flags of its §4.2 command in snake_case (`due_before` for `--due-before`, `options` for the repeated `--option`). The relay runs each call through that command's parser and view, so a tool returns the command's text and its errors. An argument the chosen type does not take is `E_USAGE`, and the help line lists what it takes (`cc_list with type workstreams takes: limit`).
+2. **Types.** `cc_list` and `cc_get` take `items`, `decisions`, `issues`, `meetings`, `measures`, `goals` and `workstreams`; `requests` joins them with `requests.*` (P6-05). `cc_get` reads the type from the ref or ID (`A-0142`, `D-0008`, `M-0031`, `K-0003`, `G-0004`, `act_…`); a workstream slug needs `type: "workstreams"`.
+3. **Views before their CLI commands.** Some tools need a view whose command is not built yet: `meetings list`, `view` and `capture`, a measure or goal by ref, `connectors actions` and `invoke`, and `confirmations view` and `wait`. The relay runs these views with the same AXI rules (§4.1), and their help lines name tools rather than commands. They become CLI commands with their own build steps. `cc_list` for meetings takes `range` (`today`, `week`, or `<from>..<to>`; default this week). `cc_meeting_capture` takes the section ID, and the section's `workstream` when a per-workstream section repeats, plus either a `note` or an `action` title with `due`, `done_means` and an optional `owner`.
+4. **Connectors and confirmations before P2.** No connector is installed until P2-02: `cc_connector_actions` returns the definitive empty message `actions: 0 connector actions`, and `cc_connector_invoke` returns `E_NOT_FOUND` naming the binding and action. `cc_connector_actions` takes an optional `binding`. `cc_confirmation_status` reads the confirmation requests of [04 §7.3](04-platform.md#73-confirmation-requests); none is created before P2-01, so until then every ID is `E_NOT_FOUND`. With `wait` (1 to 600 seconds) it waits for the user's decision and reports `timed_out`.
+5. **Human-only attempts.** No tool performs a human-only operation (C-07-02). A `tools/call` that names one anyway (`cc_confirm_claim`, `cc_attest`, `cc_approve`, `cc_decide`, `cc_drop_item` and the like) is sent to the core as that operation's method, and the core's gate refuses it with `E_HUMAN_REQUIRED` and the deep link, as for every other caller (AC-07-03, AC-04-04). Any other unknown tool name is `E_USAGE` listing the 14 tools.
+6. **Protocol.** The relay is a `@modelcontextprotocol/sdk` `Server` on its stdio transport ([08 §3](08-repository-and-automation.md#3-stack)), which negotiates the protocol version and answers `ping`. `initialize` also returns one paragraph of instructions: start with `cc_home`; drafts, claims, decisions and confirmations are settled by the user in the app.
 
 ## 8. Ambient context: hooks and skill
 

@@ -2,6 +2,11 @@
  * Settings (09 P1-11): Agent access (07 §5: principals, their scopes and workstreams; adding,
  * changing and revoking are human-only, 04 §4.3), Notifications (02 §10), and a placeholder for
  * the AI settings, which arrive with the AI layer (P3). No AI runs in this build.
+ *
+ * Agent access also registers MCP clients (04 §8 rule 3, 09 P1-13): Add client creates an
+ * `mcp_client` principal with the MCP defaults of 07 §5 and prints the command that registers
+ * the `command-center` server with the client, for example
+ * `claude mcp add command-center -- cc-axi mcp --principal claude-code`.
  */
 import { SCOPES, type PrincipalRow } from '../app/api.js';
 import type { AppRoute } from '../app/routes.js';
@@ -11,10 +16,50 @@ import { h, type VNode } from '../ui/vnode.js';
 
 type Tab = 'agents' | 'notifications' | 'ai';
 
+/** The MCP clients whose registration command Settings prints (04 §8 rule 3). */
+export type McpClient = 'claude-code' | 'codex' | 'other';
+
 export interface SettingsState {
   tab: Tab;
   principals?: readonly PrincipalRow[];
   readonly add: { name: string; kind: string; scopes: Set<string> };
+  readonly client: { name: string; client: McpClient };
+}
+
+/** The MCP server name of 07 §7. */
+export const MCP_SERVER = 'command-center';
+
+/** The scopes an MCP client gets when added here: the `claude-code` row of 07 §5. */
+export const MCP_CLIENT_SCOPES = [
+  'read',
+  'items:write',
+  'items:claim',
+  'decisions:propose',
+  'meetings:capture',
+  'connectors:read',
+] as const;
+
+const CLIENTS: readonly { value: McpClient; label: string }[] = [
+  { value: 'claude-code', label: 'Claude Code' },
+  { value: 'codex', label: 'Codex' },
+  { value: 'other', label: 'Another MCP client (stdio)' },
+];
+
+/** The command that registers the relay with a client, for one principal (04 §8 rule 3). */
+export function registrationCommand(client: McpClient, principal: string): string {
+  const relay = `cc-axi mcp --principal ${principal}`;
+  switch (client) {
+    case 'claude-code':
+      return `claude mcp add ${MCP_SERVER} -- ${relay}`;
+    case 'codex':
+      return `codex mcp add ${MCP_SERVER} -- ${relay}`;
+    case 'other':
+      return JSON.stringify({
+        mcpServers: {
+          [MCP_SERVER]: { command: 'cc-axi', args: ['mcp', '--principal', principal] },
+        },
+      });
+  }
 }
 
 const TABS = [
@@ -117,6 +162,7 @@ function agentsView(state: SettingsState, ui: Ui): VNode {
       ),
       'No principals.',
     ),
+    mcpClientsView(state, ui),
     section(
       'Add a principal',
       h(
@@ -179,6 +225,87 @@ function agentsView(state: SettingsState, ui: Ui): VNode {
   );
 }
 
+/**
+ * Add client (04 §8 rule 3): creates the `mcp_client` principal with the MCP defaults and shows,
+ * for every MCP client principal, the command that registers the server with the chosen client.
+ * Its token file is what the relay authenticates with; the command carries no secret.
+ */
+function mcpClientsView(state: SettingsState, ui: Ui): VNode {
+  const add = state.client;
+  const clients = (state.principals ?? []).filter(
+    (principal) => principal.kind === 'mcp_client' && principal.revokedAt === undefined,
+  );
+  return section(
+    'MCP clients',
+    h(
+      'p',
+      { class: 'muted' },
+      'An MCP client such as Claude Code runs `cc-axi mcp` and reaches Command Center through its 14 tools as its own principal. ',
+      `Add client gives it the MCP defaults: ${MCP_CLIENT_SCOPES.join(', ')}. Change them in the table above.`,
+    ),
+    h(
+      'div',
+      { class: 'form', test: 'add-mcp-client' },
+      select(
+        'Client',
+        add.client,
+        CLIENTS,
+        (value) => {
+          add.client = value as McpClient;
+          ui.render();
+        },
+        'mcp-client',
+      ),
+      field('Principal name', add.name, (value) => (add.name = value), {
+        test: 'mcp-client-name',
+        placeholder: 'claude-code',
+      }),
+      button(
+        'Add client',
+        () => {
+          const name = add.name.trim();
+          if (!/^[a-z0-9][a-z0-9-]*$/.test(name)) {
+            ui.flash('A principal name is lower-case letters, digits and dashes.', 'error');
+            return;
+          }
+          const params = { name, kind: 'mcp_client', scopes: [...MCP_CLIENT_SCOPES] };
+          void (async () => {
+            try {
+              await ui.call('principals.create', params);
+              ui.flash(
+                `${name} added. Register it with: ${registrationCommand(add.client, name)}`,
+                'ok',
+              );
+            } catch (error) {
+              ui.flash(errorText(error), 'error');
+            }
+            await ui.reload();
+          })();
+        },
+        { test: 'add-mcp-client-submit', primary: true },
+      ),
+    ),
+    clients.length === 0
+      ? h('p', { class: 'muted', test: 'mcp-registrations' }, 'No MCP client yet.')
+      : h(
+          'ul',
+          { test: 'mcp-registrations' },
+          clients.map((principal) =>
+            h(
+              'li',
+              null,
+              h('span', null, `${principal.name}: run this where the client runs`),
+              h(
+                'code',
+                { class: 'command', test: `mcp-command-${principal.name}` },
+                registrationCommand(add.client, principal.name),
+              ),
+            ),
+          ),
+        ),
+  );
+}
+
 function notificationsView(): VNode {
   return h(
     'div',
@@ -223,9 +350,13 @@ export const settingsScreen: Screen<SettingsState> = {
       kind: 'mcp_client',
       scopes: new Set<string>(['read']),
     }));
-    if (tab !== 'agents') return { tab, add };
+    const client = ui.keep('add-mcp-client', () => ({
+      name: 'claude-code',
+      client: 'claude-code' as McpClient,
+    }));
+    if (tab !== 'agents') return { tab, add, client };
     const list = await ui.call<{ principals: PrincipalRow[] }>('principals.list', {});
-    return { tab, add, principals: list.principals };
+    return { tab, add, client, principals: list.principals };
   },
   view(state, ui) {
     const header = tabs(state.tab, TABS, (tab) => ui.go({ screen: 'settings', tab }));

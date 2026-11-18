@@ -29,7 +29,16 @@ export type IssueResult = ResultOf<typeof methods.issuesGet>;
 export type IssueMutationResult = ResultOf<typeof methods.issuesRaise>;
 export type MeasuresListResult = ResultOf<typeof methods.measuresList>;
 export type MeasureRecordResult = ResultOf<typeof methods.measuresRecord>;
+export type MeasureResult = ResultOf<typeof methods.measuresGet>;
 export type GoalsListResult = ResultOf<typeof methods.goalsList>;
+export type GoalResult = ResultOf<typeof methods.goalsGet>;
+export type MeetingsListResult = ResultOf<typeof methods.meetingsList>;
+export type MeetingResult = ResultOf<typeof methods.meetingsGet>;
+export type MeetingCaptureResult = ResultOf<typeof methods.meetingsCapture>;
+export type ConnectorActionsResult = ResultOf<typeof methods.connectorsActions>;
+export type ConnectorInvokeResult = ResultOf<typeof methods.connectorsInvoke>;
+export type ConfirmationResult = ResultOf<typeof methods.confirmationsGet>;
+export type ConfirmationWaitResult = ResultOf<typeof methods.confirmationsWait>;
 export type WorkstreamsListResult = ResultOf<typeof methods.workstreamsList>;
 export type WorkstreamResult = ResultOf<typeof methods.workstreamsGet>;
 
@@ -58,6 +67,7 @@ const REF_KINDS = {
   I: { prefix: 'iss', list: 'cc-axi issues list' },
   K: { prefix: 'msr', list: 'cc-axi measures list' },
   M: { prefix: 'mtg', list: 'cc-axi search "<text>" --types meetings' },
+  G: { prefix: 'goal', list: 'cc-axi goals list' },
 } as const;
 
 /** Checks a HumanRef (`A-0142`) or ID (`act_...`) argument before any API call. */

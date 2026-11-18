@@ -368,9 +368,9 @@ interface StandingApproval {
 
 ## 8. MCP server
 
-1. **Transport.** stdio. The MCP client starts `cc-axi mcp --principal <name>`. This relay connects to the local socket (§4.1), authenticates with the principal's token, and forwards MCP requests to the same handlers as the CLI. It holds no state.
+1. **Transport.** stdio. The MCP client starts `cc-axi mcp --principal <name>`. This relay connects to the local socket (§4.1), authenticates with the principal's token, and forwards MCP requests to the same handlers as the CLI: each tool call runs the matching `cc-axi` command's parser and view ([07 §7](07-agent-friendly-design.md#7-mcp-server-surface)). It holds no state beyond that connection, which it opens on the first tool call and again after it drops.
 2. **Not running.** If the app is not running, the relay starts nothing. It answers every tool call with a structured error (`E_APP_NOT_RUNNING`, with help "Open Command Center, then retry"). The tools list still works, so clients can discover the server.
-3. **Registration.** Settings → Agent access → Add client creates the principal and its scopes, and prints the command, for example `claude mcp add command-center -- cc-axi mcp --principal claude-code`.
+3. **Registration.** Settings → Agent access → Add client creates the principal and its scopes, and prints the command, for example `claude mcp add command-center -- cc-axi mcp --principal claude-code`. The new principal is an `mcp_client` with the scopes of the `claude-code` row of [07 §5](07-agent-friendly-design.md#5-agent-principals-and-scopes), which the user changes in the principals table. The command is printed for the chosen client: `claude mcp add …` for Claude Code, `codex mcp add command-center -- cc-axi mcp --principal <name>` for Codex, and an `mcpServers` entry (`"command": "cc-axi"`, `"args": ["mcp", "--principal", "<name>"]`) for other stdio clients. It carries no secret: the relay reads the principal's token file (§4.2). An app started with `--profile-dir` also needs `CC_PROFILE_DIR` in the client's environment (07 §4.2).
 4. **Surface.** Tools only in v1 (no resources or prompts), so that clients behave the same. The tool list, inputs and outputs are in [07 §7](07-agent-friendly-design.md#7-mcp-server-surface).
 5. **Streamable HTTP** on `127.0.0.1` with a bearer token is off by default (OQ-04-04).
 

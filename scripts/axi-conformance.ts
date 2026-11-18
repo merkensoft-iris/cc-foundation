@@ -17,7 +17,8 @@
  * - mutations print `status`; a repeat of an idempotent one is `no-op` and exits 0;
  * - the home view starts with `bin:` and `description:`; `-v`, `-V` and `--version` print the
  *   bare version; `--help` gives flags, defaults and 2 or 3 examples;
- * - the app not running is `E_APP_NOT_RUNNING`, exit 1.
+ * - the app not running is `E_APP_NOT_RUNNING`, exit 1;
+ * - `cc-axi mcp` answers MCP on stdout: the 14 tools, and tool results in the CLI's TOON.
  *
  * AC-07-02: `cc-axi --version` and `node -e "console.log(1)"` run interleaved, 5 warm-up runs
  * then `--runs` (at least 100) each; the median and p95 differences must both be at most
@@ -73,6 +74,8 @@ interface Case {
   readonly cwd?: string;
   /** Variables added to the test environment. */
   readonly env?: NodeJS.ProcessEnv;
+  /** MCP lines for stdin: the command is the stdio MCP relay, checked as one (07 §7). */
+  readonly mcp?: readonly Record<string, unknown>[];
 }
 
 const total = (result: Record<string, unknown>): number => Number(result['total']);
@@ -183,6 +186,20 @@ export const CASES: Readonly<Record<string, Case>> = {
   },
   'setup status': { run: ['setup', 'status'], cwd: SETUP_DIR, env: SETUP_ENV },
   'hook session-start': { run: ['hook', 'session-start'] },
+  mcp: {
+    run: ['mcp', '--principal', 'claude-code'],
+    mcp: [
+      {
+        jsonrpc: '2.0',
+        id: 1,
+        method: 'initialize',
+        params: { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 'c' } },
+      },
+      { jsonrpc: '2.0', method: 'notifications/initialized' },
+      { jsonrpc: '2.0', id: 2, method: 'tools/list' },
+      { jsonrpc: '2.0', id: 3, method: 'tools/call', params: { name: 'cc_home', arguments: {} } },
+    ],
+  },
   update: { run: ['update'] },
 };
 
@@ -192,9 +209,14 @@ interface Run {
   readonly stderr: string;
 }
 
-function runBin(args: readonly string[], env: NodeJS.ProcessEnv, cwd?: string): Promise<Run> {
+function runBin(
+  args: readonly string[],
+  env: NodeJS.ProcessEnv,
+  cwd?: string,
+  input?: string,
+): Promise<Run> {
   return new Promise((resolve) => {
-    execFile(
+    const child = execFile(
       process.execPath,
       [BIN, ...args],
       { env, encoding: 'utf8', timeout: 30_000, ...(cwd === undefined ? {} : { cwd }) },
@@ -203,6 +225,40 @@ function runBin(args: readonly string[], env: NodeJS.ProcessEnv, cwd?: string): 
         resolve({ code, stdout, stderr });
       },
     );
+    // Every command gets a closed stdin, as from a terminal with nothing piped in.
+    child.stdin?.end(input ?? '');
+  });
+}
+
+/**
+ * `cc-axi mcp` (07 §7): the relay answers each request on stdout as one JSON-RPC line, lists
+ * the 14 tools, and a tool result is the CLI's TOON text; stdin ending stops it with exit 0.
+ */
+async function mcpChecks(
+  command: CommandSpec,
+  spec: Case,
+  checks: Checks,
+  env: NodeJS.ProcessEnv,
+): Promise<void> {
+  const input = (spec.mcp ?? []).map((line) => `${JSON.stringify(line)}\n`).join('');
+  const run = await runBin(spec.run, env, undefined, input);
+  const name = (what: string): string => `\`${command.path}\` ${what}`;
+  await checks.check('AC-07-01', name('answers MCP on stdout, exit 0, nothing on stderr'), () => {
+    if (run.code !== 0 || run.stderr !== '') return showRun(spec.run, run);
+    const lines = run.stdout.trimEnd().split('\n');
+    const answers = lines.map(
+      (line) => JSON.parse(line) as { id: number; result: Record<string, unknown> },
+    );
+    const ids = answers.map((answer) => answer.id).sort();
+    if (JSON.stringify(ids) !== '[1,2,3]') return `answered ids ${JSON.stringify(ids)}`;
+    const tools = answers.find((answer) => answer.id === 2)?.result['tools'];
+    if (!Array.isArray(tools) || tools.length !== 14) return `tools/list: ${JSON.stringify(tools)}`;
+    const home = answers.find((answer) => answer.id === 3)?.result as {
+      content: { text: string }[];
+      isError?: boolean;
+    };
+    const text = home.content[0]?.text ?? '';
+    return home.isError !== true && Array.isArray(toon(text)['items']) ? true : `cc_home: ${text}`;
   });
 }
 
@@ -298,6 +354,11 @@ async function commandChecks(
       return true;
     },
   );
+
+  if (spec.mcp !== undefined) {
+    await mcpChecks(command, spec, checks, env);
+    return;
+  }
 
   const before = profiles.core.results.length;
   const run = await runBin(spec.run, env, cwd);

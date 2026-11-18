@@ -3,9 +3,18 @@
  */
 import { describe, expect, it } from 'vitest';
 
-import { ActionKind, apiMethods, DecisionStatus, Health, Lifecycle, methods } from '@cc/schemas';
+import {
+  ActionKind,
+  apiMethods,
+  DecisionStatus,
+  Health,
+  Lifecycle,
+  MCP_TOOLS,
+  methods,
+} from '@cc/schemas';
 
 import { HANDLERS } from '../src/cli.js';
+import { RELAY_COMMANDS, RELAY_HANDLERS } from '../src/mcp/routes.js';
 import { HUMAN_ONLY_VERBS } from '../src/help.js';
 import {
   ACTION_KINDS,
@@ -17,6 +26,7 @@ import {
   ITEM_FIELDS,
   LIFECYCLES,
   REVERSIBILITIES,
+  MCP_METHODS,
   SEARCH_TYPES,
 } from '../src/spec.js';
 
@@ -79,5 +89,31 @@ describe('cc-axi command catalogue', () => {
       methods.decisionsPropose.params.shape.reversibility.unwrap().options,
     );
     expect([...GOAL_PERIODS]).toEqual(methods.goalsList.params.shape.period.unwrap().options);
+  });
+
+  it('C-07-02 the MCP relay calls exactly the methods of its 14 tools, none human-only (07 §7)', () => {
+    const toolMethods = [...new Set(MCP_TOOLS.flatMap((tool) => tool.methods))];
+    expect([...MCP_METHODS].sort()).toEqual(toolMethods.sort());
+    expect(COMMANDS.find((command) => command.path === 'mcp')?.methods).toEqual(MCP_METHODS);
+    for (const command of RELAY_COMMANDS) {
+      // A relay command is not a CLI command yet (07 §4.2: absent until built).
+      expect(
+        COMMANDS.some((entry) => entry.path === command.path),
+        command.path,
+      ).toBe(false);
+      for (const name of command.methods) {
+        const definition = apiMethods.find((method) => method.method === name);
+        expect(definition?.humanOnly, `${command.path} calls ${name}`).toBe(false);
+      }
+      for (const word of command.path.split(' ')) expect(HUMAN_ONLY_VERBS.has(word)).toBe(false);
+    }
+    expect(Object.keys(RELAY_HANDLERS).sort()).toEqual(
+      RELAY_COMMANDS.map((command) => command.path).sort(),
+    );
+    for (const tool of MCP_TOOLS) {
+      for (const name of tool.methods) {
+        expect(apiMethods.find((method) => method.method === name)?.humanOnly, name).toBe(false);
+      }
+    }
   });
 });

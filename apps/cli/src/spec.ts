@@ -5,8 +5,10 @@
  * command cannot exist without its help or its conformance case.
  *
  * Commands of later build steps (meetings, connectors, sessions, confirmations, onboarding
- * rerun, requests, backups, open, export, mcp, setup skill, serve, items handoff and items link)
- * are absent, not stubbed (07 §4.2). No command performs a human-only operation (C-07-02).
+ * rerun, requests, backups, open, export, setup skill, serve, items handoff and items link)
+ * are absent, not stubbed (07 §4.2). The MCP relay (`mcp`, P1-13) runs the meetings, connectors
+ * and confirmations views its tools need as relay commands (apps/cli/src/mcp/routes.ts), not
+ * as CLI commands. No command performs a human-only operation (C-07-02).
  */
 
 /** Value lists the parser checks before calling the API; a unit test keeps them equal to @cc/schemas. */
@@ -37,6 +39,37 @@ export const SEARCH_TYPES = ['items', 'decisions', 'issues', 'meetings'] as cons
 export const FORMATS = ['toon', 'json'] as const;
 /** `setup hooks --scope` (07 §8 item 1); `--agents` is checked by its handler. */
 export const HOOK_SCOPE_CHOICES = ['user', 'project'] as const;
+
+/** The local API methods the MCP tools call (07 §7), for the `mcp` entry. */
+export const MCP_METHODS: readonly string[] = [
+  'home.get',
+  'search.query',
+  'items.list',
+  'decisions.list',
+  'issues.list',
+  'meetings.list',
+  'measures.list',
+  'goals.list',
+  'workstreams.list',
+  'items.get',
+  'decisions.get',
+  'issues.get',
+  'meetings.get',
+  'measures.get',
+  'goals.get',
+  'workstreams.get',
+  'items.create',
+  'items.update',
+  'items.claim',
+  'evidence.add',
+  'decisions.propose',
+  'meetings.capture',
+  'measures.record',
+  'connectors.actions',
+  'connectors.invoke',
+  'confirmations.get',
+  'confirmations.wait',
+];
 
 /** Lists show 50 entries unless `--limit` says otherwise (07 §4.1 rule 2). */
 export const DEFAULT_LIMIT = 50;
@@ -621,6 +654,17 @@ export const COMMANDS: readonly CommandSpec[] = [
     flags: [],
     examples: ['cc-axi hook session-start', 'cc-axi hook session-start --principal claude-code'],
     methods: ['home.get', 'workstreams.list', 'workstreams.get', 'items.list'],
+  },
+  {
+    path: 'mcp',
+    summary:
+      'The stdio MCP server (07 §7): 14 tools over the local API as --principal; register it with `claude mcp add command-center -- cc-axi mcp --principal <name>`',
+    kind: 'meta',
+    args: [],
+    flags: [],
+    examples: ['cc-axi mcp --principal claude-code', 'cc-axi mcp --principal firstmate-main'],
+    // The methods of the 14 tools (07 §7); a unit test keeps this equal to MCP_TOOLS in @cc/schemas.
+    methods: MCP_METHODS,
   },
   {
     path: 'update',
