@@ -8,15 +8,7 @@
  * A packaged build reads the build stamp `cc-build` wrote at its app root (inside the asar)
  * for the start check and Rebuild now; an unpackaged run has none (`start-mode.ts`).
  */
-import {
-  chmodSync,
-  existsSync,
-  mkdirSync,
-  readFileSync,
-  renameSync,
-  rmSync,
-  writeFileSync,
-} from 'node:fs';
+import { chmodSync, existsSync, mkdirSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -148,6 +140,20 @@ export function createElectronPlatform(argv: readonly string[]): ShellPlatform {
     chmodSync(dir, 0o700);
     return join(dir, name);
   };
+  /** Rejects when the OS secret store cannot encrypt (04 §9 rule 1): secrets never go plain. */
+  const secretStoreAvailable = async (): Promise<void> => {
+    if (await safeStorage.isAsyncEncryptionAvailable()) return;
+    const backend =
+      process.platform === 'linux' ? ` (backend ${safeStorage.getSelectedStorageBackend()})` : '';
+    throw new Error(`safeStorage is not available${backend}`);
+  };
+  const writeSecret = async (name: string, value: string): Promise<void> => {
+    const file = secretPath(name);
+    const temp = `${file}.tmp`;
+    writeFileSync(temp, await safeStorage.encryptStringAsync(value), { mode: 0o600 });
+    renameSync(temp, file);
+    log('secrets.stored', { name });
+  };
 
   /** Notifications are kept referenced until closed, or their click handler is lost. */
   const live = new Set<Notification>();
@@ -179,24 +185,22 @@ export function createElectronPlatform(argv: readonly string[]): ShellPlatform {
     ...(rebuild === undefined ? {} : { rebuild }),
     ...(args.smoke === true ? { smoke: true } : {}),
     secrets: {
-      read: (name) => {
+      // The asynchronous safeStorage API: Electron 45 deprecates the synchronous one, whose
+      // key is not read from the Secret Service on Linux. It decrypts what the synchronous
+      // API wrote, and asks for a re-encryption when the key changed.
+      read: async (name) => {
         const file = secretPath(name);
-        if (!existsSync(file)) return Promise.resolve(undefined);
-        if (!safeStorage.isEncryptionAvailable()) {
-          return Promise.reject(new Error('safeStorage is not available'));
-        }
-        return Promise.resolve(safeStorage.decryptString(readFileSync(file)));
+        if (!existsSync(file)) return undefined;
+        await secretStoreAvailable();
+        const { result, shouldReEncrypt } = await safeStorage.decryptStringAsync(
+          await readFile(file),
+        );
+        if (shouldReEncrypt) await writeSecret(name, result);
+        return result;
       },
-      write: (name, value) => {
-        if (!safeStorage.isEncryptionAvailable()) {
-          return Promise.reject(new Error('safeStorage is not available'));
-        }
-        const file = secretPath(name);
-        const temp = `${file}.tmp`;
-        writeFileSync(temp, safeStorage.encryptString(value), { mode: 0o600 });
-        renameSync(temp, file);
-        log('secrets.stored', { name });
-        return Promise.resolve();
+      write: async (name, value) => {
+        await secretStoreAvailable();
+        await writeSecret(name, value);
       },
       remove: (name) => {
         rmSync(secretPath(name), { force: true });
