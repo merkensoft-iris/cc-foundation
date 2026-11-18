@@ -7,10 +7,13 @@
  * MCP and AI layer call the same handlers, C-07-03), results carry the records of 03 §5, and
  * list results carry the minimal summaries and total counts of 07 §4.1 rules 2 and 4.
  *
- * The namespaces in `pendingNamespaces` return records specified outside 03 §5 (connectors,
- * sessions, confirmations, development requests). Their methods are added here by the build
- * steps named there, with their record types. `backups.*` has the two S1 answers of P1-12
- * (destination and passphrase); P1-17 adds its status and history methods.
+ * The namespaces in `pendingNamespaces` return records specified outside 03 §5 (browser
+ * sessions, development requests). Their methods are added here by the build steps named
+ * there, with their record types. `connectors.*` and `confirmations.*` have the methods the
+ * MCP tools of 07 §7 call (P1-13): `connectors.actions` and `connectors.invoke`, which find no
+ * installed connector until P2-02, and `confirmations.get` and `confirmations.wait`; P2-01 and
+ * P2-02 add the rest. `backups.*` has the two S1 answers of P1-12 (destination and
+ * passphrase); P1-17 adds its status and history methods.
  */
 import { z } from 'zod';
 
@@ -22,8 +25,10 @@ import {
   LocalDate,
   LocalTime,
   Health,
+  RunId,
   UtcTimestamp,
 } from '../records/common.js';
+import { ConfirmationId, ConfirmationRequest, RiskClass } from '../records/confirmation.js';
 import { Decision, DecisionStatus } from '../records/decision.js';
 import { DomainEvent } from '../records/event.js';
 import { Evidence } from '../records/evidence.js';
@@ -1272,6 +1277,81 @@ export const onboardingExport = method({
   result: z.strictObject({ profile: OnboardingProfile }),
 });
 
+// connectors (05; P1-13 serves the two methods of the MCP tools, with empty results until P2)
+
+/** A connector action a binding offers, with its risk class from the installed manifest (C-05-02). */
+export const ConnectorActionSummary = z.strictObject({
+  binding: z.string().min(1),
+  action: z.string().min(1),
+  risk: RiskClass,
+});
+
+export const connectorsActions = method({
+  method: 'connectors.actions',
+  spec: '04 §4.1, 07 §4.2, 07 §7 (cc_connector_actions), 09 P1-13',
+  description: 'Lists the actions of the installed connector bindings, or of one binding.',
+  scope: 'connectors:read',
+  humanOnly: false,
+  params: z.strictObject({
+    /** A binding label or bnd_ ID; every binding when absent. */
+    binding: z.string().min(1).optional(),
+  }),
+  result: z.strictObject({
+    actions: z.array(ConnectorActionSummary),
+    total: z.int().min(0),
+  }),
+});
+
+export const connectorsInvoke = method({
+  method: 'connectors.invoke',
+  spec: '04 §4.1, 04 §7, 07 §4.2, 07 §7 (cc_connector_invoke), 09 P1-13',
+  description:
+    'Invokes a connector action through the Policy Engine; a non-read action also needs connectors:invoke.',
+  scope: 'connectors:read',
+  humanOnly: false,
+  params: z.strictObject({
+    binding: z.string().min(1),
+    action: z.string().min(1),
+    input: z.record(z.string(), z.unknown()).optional(),
+    /** Seconds to wait for the run to finish; default 0. */
+    waitSeconds: z.int().min(0).max(600).optional(),
+  }),
+  result: z.strictObject({
+    binding: z.string().min(1),
+    action: z.string().min(1),
+    status: z.enum(['ok', 'running', 'pending_confirmation']),
+    runId: RunId.optional(),
+    confirmation: ConfirmationId.optional(),
+    expires: UtcTimestamp.optional(),
+    output: z.unknown().optional(),
+  }),
+});
+
+// confirmations (04 §7.3; P1-13 serves get and wait, approve and deny stay in the app)
+
+export const confirmationsGet = method({
+  method: 'confirmations.get',
+  spec: '04 §4.1, 04 §7.3, 07 §7 (cc_confirmation_status), 09 P1-13',
+  description: 'Returns a confirmation request and its status.',
+  scope: 'read',
+  humanOnly: false,
+  params: z.strictObject({ id: ConfirmationId }),
+  result: z.strictObject({ confirmation: ConfirmationRequest }),
+});
+
+export const confirmationsWait = method({
+  method: 'confirmations.wait',
+  spec: '04 §7.3 rule 4, 07 §4.2, 07 §7 (cc_confirmation_status), 09 P1-13',
+  description: 'Waits until a confirmation request is decided or expires, or the timeout passes.',
+  scope: 'read',
+  humanOnly: false,
+  params: z.strictObject({
+    id: ConfirmationId,
+    timeoutSeconds: z.int().min(1).max(600),
+  }),
+  result: z.strictObject({ confirmation: ConfirmationRequest, timedOut: z.boolean() }),
+});
+
 // backups: the S1 answers (04 §9.1); the rest of backups.* is P1-17
 
 export const backupsDestination = method({
@@ -1350,6 +1430,10 @@ export const apiMethods: readonly ApiMethod[] = [
   onboardingPreview,
   onboardingApply,
   onboardingExport,
+  connectorsActions,
+  connectorsInvoke,
+  confirmationsGet,
+  confirmationsWait,
   backupsDestination,
   backupsPassphrase,
   exportRun,
@@ -1360,9 +1444,7 @@ export const apiMethods: readonly ApiMethod[] = [
  * added, with its records, by the build step named here (09 §6.1).
  */
 export const pendingNamespaces: readonly { namespace: string; spec: string; step: string }[] = [
-  { namespace: 'connectors.*', spec: '05', step: 'P1-13 (empty results), P2-02' },
   { namespace: 'sessions.*', spec: '04 §5', step: 'P4 (browser sandbox)' },
-  { namespace: 'confirmations.*', spec: '04 §7.3', step: 'P1-13, P2-01' },
   { namespace: 'requests.*', spec: '06 §10.4', step: 'P6-05' },
 ];
 

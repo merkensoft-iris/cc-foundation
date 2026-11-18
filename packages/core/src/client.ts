@@ -34,9 +34,18 @@ export interface AuthenticatedPrincipal {
   readonly sensitiveAccess: boolean;
 }
 
+export interface CallOptions {
+  /** This call's timeout, for a call that waits on purpose (`confirmations.wait`). */
+  readonly timeoutMs?: number;
+}
+
 export interface LocalApiClient {
   readonly principal: AuthenticatedPrincipal;
-  call<T = unknown>(method: string, params?: Record<string, unknown>): Promise<T>;
+  call<T = unknown>(
+    method: string,
+    params?: Record<string, unknown>,
+    options?: CallOptions,
+  ): Promise<T>;
   close(): void;
 }
 
@@ -70,14 +79,18 @@ class Connection {
     socket.on('error', () => socket.destroy());
   }
 
-  call(method: string, params: Record<string, unknown> | undefined): Promise<unknown> {
+  call(
+    method: string,
+    params: Record<string, unknown> | undefined,
+    timeoutMs: number = this.#timeoutMs,
+  ): Promise<unknown> {
     if (this.#closedError !== undefined) return Promise.reject(this.#closedError);
     const id = this.#nextId++;
     return new Promise((resolve, reject) => {
       const timer = setTimeout(() => {
         this.#pending.delete(id);
         reject(new CoreError('E_APP_NOT_RUNNING', `${method} timed out`, [APP_NOT_RUNNING_HELP]));
-      }, this.#timeoutMs);
+      }, timeoutMs);
       this.#pending.set(id, { resolve, reject, timer });
       this.#socket.write(
         `${JSON.stringify({ jsonrpc: '2.0', id, method, ...(params === undefined ? {} : { params }) })}\n`,
@@ -184,8 +197,8 @@ export async function connectLocalApi(options: ConnectOptions): Promise<LocalApi
     })) as { principal: AuthenticatedPrincipal };
     return {
       principal: proved.principal,
-      call: <T>(method: string, params?: Record<string, unknown>) =>
-        connection.call(method, params) as Promise<T>,
+      call: <T>(method: string, params?: Record<string, unknown>, callOptions?: CallOptions) =>
+        connection.call(method, params, callOptions?.timeoutMs) as Promise<T>,
       close: () => connection.close(),
     };
   } catch (error) {

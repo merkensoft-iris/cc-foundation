@@ -5,8 +5,8 @@
  * `sensitiveAccess` (07 §5, C-03-03); records it may not see are left out of lists and counts
  * and are "not found" by ref.
  *
- * Not served here: meeting search, confirmations and sessions counts (P1-13/P2-01 and P4), so
- * those read as empty. Today's meetings come from the rhythm engine's instances (P1-07, P1-08).
+ * Not served here: meeting search, and the confirmations and sessions counts (P2-01 and P4),
+ * so those read as empty. Today's meetings come from the rhythm engine's instances (P1-07, P1-08).
  */
 import path from 'node:path';
 
