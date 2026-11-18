@@ -33,8 +33,5 @@ export const backupsStatus: Handler = async (_parsed, session) => {
           },
   };
   if (status.reasons.length > 0) output['reasons'] = status.reasons;
-  if (status.state !== 'ok') {
-    output['help'] = ['Backups are run, tested and restored in the app: Settings → Backups'];
-  }
   return output;
 };

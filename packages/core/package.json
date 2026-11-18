@@ -10,8 +10,8 @@
       "default": "./dist/index.js"
     },
     "./backup-keys": {
-      "types": "./dist/backups/keys.d.ts",
-      "default": "./dist/backups/keys.js"
+      "types": "./dist/backup-keys.d.ts",
+      "default": "./dist/backup-keys.js"
     },
     "./client": {
       "types": "./dist/client.d.ts",

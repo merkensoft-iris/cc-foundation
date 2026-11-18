@@ -35,9 +35,13 @@ describe('cc-axi backups status', { timeout: SLOW_MS }, () => {
       passphrase_set: false,
     });
     expect(run.output['last_restore_test']).toBe('none');
-    expect(run.output['help']).toEqual([
-      'Backups are run, tested and restored in the app: Settings → Backups',
+    // Headless mode has no secret store, so no key either (04 §3 rule 2).
+    expect(run.output['reasons']).toEqual([
+      'There is no backup key: the app has no secret store to keep one in.',
+      'No off-machine destination is set.',
     ]);
+    // A detail view carries no help lines (07 §4.1); running and restoring are app-only.
+    expect(run.output['help']).toBeUndefined();
     const paths = COMMANDS.map((command) => command.path).filter((path) =>
       path.startsWith('backups'),
     );
