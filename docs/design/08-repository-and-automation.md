@@ -67,9 +67,11 @@ cc-foundation/
       src/shared/                   # the main <-> core-host message types
     cli/                            # cc-axi: commands, TOON views, MCP stdio relay, hook installer
       src/version.ts                # leaf module for the --version fast path
+      src/mcp/                      # the stdio MCP relay: tool routes onto the commands (04 §8)
   packages/
     schemas/                        # zod types for records (03), API methods (04 §4), MCP tools (07 §7), config (§4.3)
       records/<type>@<major>.json   # generated JSON Schemas
+      mcp/tools.json                # generated MCP tools/list payload (07 §7, 12 KB budget)
     store/                          # SQLite, repository layer, event log, FTS, backups and restore tests (04 §9.1)
       migrations/NNNN_name.sql      # forward-only (03 §12)
     domain/                         # lifecycle, invariants, health, review loop, metrics (pure)
