@@ -5,6 +5,7 @@ import { deriveBackupKey, type SerializedBackupKey } from '@cc/core/backup-keys'
 import { describe, expect, it } from 'vitest';
 
 import { KEYS_SECRET, LEGACY_PASSPHRASE_SECRET } from '../src/main/backup-keys.js';
+import type { ConfirmPrompt } from '../src/main/confirm-prompt.js';
 import type { CoreLauncher, CoreProcess, MainPort } from '../src/main/core-supervisor.js';
 import type { InvokeAnswer, InvokeEvent } from '../src/main/ipc.js';
 import {
@@ -69,6 +70,14 @@ class FakeCore extends EventEmitter implements CoreProcess {
         'message',
         ({ data }: { data: { id: number; method: string; params?: unknown } }) => {
           this.calls.push({ method: data.method, params: data.params });
+          // A Tier H call (C-04-12): the core answers with an intent instead of running it.
+          if (data.method === 'principals.revoke') {
+            this.port?.postMessage({
+              id: data.id,
+              result: { status: 'needs_confirmation', intent: INTENT },
+            });
+            return;
+          }
           this.port?.postMessage({
             id: data.id,
             // The params are echoed for backups.* only, to show what reached the core.
@@ -86,6 +95,21 @@ class FakeCore extends EventEmitter implements CoreProcess {
       const { id } = message;
       queueMicrotask(() => this.emit('message', { type: 'activity', id, busy: this.busy }));
     }
+    if (message.type === 'approve-intent') {
+      const { id, intentId, payloadHash } = message;
+      queueMicrotask(() =>
+        this.emit(
+          'message',
+          intentId === INTENT.id && payloadHash === INTENT.payloadHash
+            ? { type: 'intent-result', id, result: { principal: { name: 'cli-default' } } }
+            : {
+                type: 'intent-result',
+                id,
+                error: { code: 'E_PAYLOAD_CHANGED', message: 'not that payload', help: [] },
+              },
+        ),
+      );
+    }
     if (message.type === 'stop') queueMicrotask(() => this.emit('exit', 0));
   }
   kill(): boolean {
@@ -93,6 +117,15 @@ class FakeCore extends EventEmitter implements CoreProcess {
     return true;
   }
 }
+
+/** The intent the fake core issues for `principals.revoke`. */
+const INTENT = {
+  id: 'cfi_01KA0000000000000000000000',
+  method: 'principals.revoke',
+  preview: 'Remove access for "cli-default".',
+  payloadHash: `sha256:${'a'.repeat(64)}`,
+  expiresAt: '2026-11-13T05:35:00.000Z',
+};
 
 type Listener = (...args: never[]) => unknown;
 
@@ -108,6 +141,9 @@ function fakePlatform(overrides: Partial<ShellPlatform> = {}) {
   const relaunched: string[] = [];
   const smokes: SmokeResult[] = [];
   const refusals: { code: string; message: string; help: readonly string[] }[] = [];
+  /** What main's confirmation prompt was asked, and what the user answers in it. */
+  const prompts: ConfirmPrompt[] = [];
+  const answer = { confirmed: true, hold: undefined as Promise<void> | undefined };
   let resolveReady: () => void = () => undefined;
   const ready = new Promise<void>((resolve) => (resolveReady = resolve));
 
@@ -147,6 +183,11 @@ function fakePlatform(overrides: Partial<ShellPlatform> = {}) {
       windows.push(window);
       return window;
     },
+    confirm: async (prompt) => {
+      prompts.push(prompt);
+      await answer.hold;
+      return answer.confirmed;
+    },
     createTray: (): ShellTray => ({
       set: (state) => void traySets.push(state),
       destroy: () => void (calls.trayDestroyed += 1),
@@ -183,6 +224,8 @@ function fakePlatform(overrides: Partial<ShellPlatform> = {}) {
     relaunched,
     smokes,
     refusals,
+    prompts,
+    answer,
     emit,
     invoke,
     ready: resolveReady,
@@ -551,6 +594,60 @@ describe('desktop shell main process (04 §3)', () => {
       ok: true,
     });
     expect(fake.cores[1]?.calls.map((call) => call.method)).toEqual(['home.get']);
+  });
+
+  it('C-04-12 a Tier H call is confirmed in the prompt main draws, then approved over the core-host channel, not the UI port', async () => {
+    const fake = fakePlatform();
+    await started(fake);
+    const answer = (await fake.invoke('cc:invoke', 'cc-app://app/', 'principals.revoke', {
+      name: 'cli-default',
+    })) as InvokeAnswer;
+    // The prompt shows the core's preview, not anything the renderer sent.
+    expect(fake.prompts).toEqual([
+      { title: 'Remove access', preview: INTENT.preview, expiresAt: INTENT.expiresAt },
+    ]);
+    expect(fake.cores[0]?.received.filter((message) => message.type === 'approve-intent')).toEqual([
+      {
+        type: 'approve-intent',
+        id: expect.any(Number) as number,
+        intentId: INTENT.id,
+        payloadHash: INTENT.payloadHash,
+      },
+    ]);
+    // The renderer gets the operation's result; the UI port carried the one call only.
+    expect(answer).toEqual({ ok: true, result: { principal: { name: 'cli-default' } } });
+    expect(fake.cores[0]?.calls.map((call) => call.method)).toEqual(['principals.revoke']);
+  });
+
+  it('C-04-12 Cancel in the prompt drops the intent, and the renderer is told nothing changed', async () => {
+    const fake = fakePlatform();
+    fake.answer.confirmed = false;
+    await started(fake);
+    const answer = (await fake.invoke('cc:invoke', 'cc-app://app/', 'principals.revoke', {
+      name: 'cli-default',
+    })) as InvokeAnswer;
+    expect(answer).toMatchObject({ ok: false, error: { code: 'E_HUMAN_REQUIRED' } });
+    const sent = fake.cores[0]?.received.map((message) => message.type) ?? [];
+    expect(sent).toContain('deny-intent');
+    expect(sent).not.toContain('approve-intent');
+  });
+
+  it('C-04-12 one prompt at a time: a second Tier H call while one is open is not confirmed', async () => {
+    const fake = fakePlatform();
+    let release: () => void = () => undefined;
+    fake.answer.hold = new Promise<void>((resolve) => (release = resolve));
+    await started(fake);
+    const first = fake.invoke('cc:invoke', 'cc-app://app/', 'principals.revoke', {
+      name: 'cli-default',
+    }) as Promise<InvokeAnswer>;
+    await settle(20);
+    const second = (await fake.invoke('cc:invoke', 'cc-app://app/', 'principals.revoke', {
+      name: 'cli-default',
+    })) as InvokeAnswer;
+    expect(second).toMatchObject({ ok: false, error: { code: 'E_HUMAN_REQUIRED' } });
+    release();
+    expect(await first).toMatchObject({ ok: true });
+    expect(fake.prompts).toHaveLength(1);
   });
 
   it('registers commandcenter:// with the OS only in a packaged build', async () => {

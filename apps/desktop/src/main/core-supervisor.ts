@@ -12,6 +12,10 @@
  * not restarted: no restart can fix it, so the supervisor goes to `failed` at once. `restart()`
  * stops the core gracefully and starts it again at once, not counted as a crash: a staged
  * restore applies at that start (04 §9.1 rule 9). Each start sends the current backup keys.
+ *
+ * Tier H confirmations (C-04-12): `approveIntent` sends `approve-intent` on the process channel,
+ * not the UI port, and waits for `intent-result`. A restart waits for those answers too, as it
+ * waits for UI calls: a confirmed restore answers before the core restarts onto it.
  */
 import type { SerializedBackupKey } from '@cc/core/backup-keys';
 import type { ApiErrorData } from '@cc/schemas';
@@ -130,6 +134,8 @@ export class CoreSupervisor {
   #refused = false;
   /** `restart()` stopped the core: its exit starts it again. */
   #restartRequested = false;
+  /** `approveIntent()` calls waiting for the core's `intent-result`. */
+  readonly #intentCalls = new Map<number, Omit<Pending, 'request'>>();
 
   constructor(options: SupervisorOptions) {
     this.#options = options;
@@ -189,6 +195,27 @@ export class CoreSupervisor {
     });
   }
 
+  /**
+   * The shell confirmed a Tier H intent (C-04-12): the core runs it once if `payloadHash`
+   * matches. Resolves with the operation's result or rejects with `UiCallError`.
+   */
+  approveIntent(intentId: string, payloadHash: string): Promise<unknown> {
+    const child = this.#process;
+    if (this.#state !== 'ready' || this.#restartRequested || child === undefined) {
+      return Promise.reject(this.#notRunning());
+    }
+    const id = this.#nextId++;
+    return new Promise((resolve, reject) => {
+      this.#intentCalls.set(id, { resolve, reject });
+      child.postMessage({ type: 'approve-intent', id, intentId, payloadHash });
+    });
+  }
+
+  /** The shell's Cancel: the core drops the intent. */
+  denyIntent(intentId: string): void {
+    if (this.#state === 'ready') this.#process?.postMessage({ type: 'deny-intent', intentId });
+  }
+
   /** Hands the running core new backup keys (04 §9.1 rule 3); later starts send them too. */
   sendBackupKeys(keys: readonly SerializedBackupKey[]): void {
     if (this.#state === 'ready' || this.#state === 'starting') {
@@ -204,7 +231,12 @@ export class CoreSupervisor {
   restart(): void {
     if (this.#state !== 'ready' || this.#restartRequested) return;
     this.#restartRequested = true;
-    if (this.#inFlight.size === 0) this.#stopForRestart();
+    if (this.#idle()) this.#stopForRestart();
+  }
+
+  /** No UI call and no intent approval is waiting for the core. */
+  #idle(): boolean {
+    return this.#inFlight.size === 0 && this.#intentCalls.size === 0;
   }
 
   #stopForRestart(): void {
@@ -294,6 +326,10 @@ export class CoreSupervisor {
         this.#activity.get(message.id)?.(message.busy);
         return;
       }
+      if (message.type === 'intent-result') {
+        this.#onIntentResult(message);
+        return;
+      }
       if (message.type === 'fatal') this.#options.log?.('core.fatal', { message: message.message });
       if (message.type === 'refused') {
         this.#refused = true;
@@ -340,15 +376,32 @@ export class CoreSupervisor {
     this.#inFlight.delete(data.id);
     if ('error' in data) pending.reject(new UiCallError(data.error));
     else pending.resolve(data.result);
-    if (this.#restartRequested && this.#state === 'ready' && this.#inFlight.size === 0) {
-      this.#stopForRestart();
-    }
+    this.#restartIfIdle();
+  }
+
+  #onIntentResult(message: Extract<HostToMain, { type: 'intent-result' }>): void {
+    const pending = this.#intentCalls.get(message.id);
+    if (pending === undefined) return;
+    this.#intentCalls.delete(message.id);
+    if ('error' in message) pending.reject(new UiCallError(message.error));
+    else pending.resolve(message.result);
+    this.#restartIfIdle();
+  }
+
+  #restartIfIdle(): void {
+    if (this.#restartRequested && this.#state === 'ready' && this.#idle()) this.#stopForRestart();
   }
 
   #failAll(error: UiCallError): void {
     for (const pending of [...this.#inFlight.values(), ...this.#queue]) pending.reject(error);
     this.#inFlight.clear();
     this.#queue = [];
+    this.#failIntentCalls(error);
+  }
+
+  #failIntentCalls(error: UiCallError): void {
+    for (const pending of this.#intentCalls.values()) pending.reject(error);
+    this.#intentCalls.clear();
   }
 
   #onProcessExit(code: number): void {
@@ -395,6 +448,13 @@ export class CoreSupervisor {
       );
     }
     this.#inFlight.clear();
+    this.#failIntentCalls(
+      new UiCallError({
+        code: 'E_CRASH',
+        message: 'the core service stopped while running the confirmed operation',
+        help: ['The core is restarting; check the result, and do it again in the app if needed'],
+      }),
+    );
     if (this.#consecutiveCrashes > this.#timing.crashLimit) {
       this.#setState('failed');
       this.#failAll(this.#notRunning());

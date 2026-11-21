@@ -8,10 +8,15 @@
  * fix (`E_GUARD_*`, such as a data directory inside a synced folder, 04 §9 rule 5) is
  * reported as `refused` with its help lines, so main shows them and exits (AC-04-12).
  *
+ * Tier H confirmations (04 §4.3 rule 4, C-04-12): main's `approve-intent` runs an intent the
+ * core issued to the UI port, and is answered with `intent-result`; `deny-intent` drops one.
+ * Only this channel carries them: the UI port cannot approve anything.
+ *
  * The core is reached through `StartCore`, the shape of `@cc/core`'s `startCore` (09 P1-04);
  * `index.ts` passes the real one (`real-core.ts`), tests pass fakes.
  */
 import type { UiPort } from '@cc/core';
+import type { ApiErrorData } from '@cc/schemas';
 import type { SerializedBackupKey } from '@cc/core/backup-keys';
 
 import type {
@@ -30,6 +35,10 @@ export interface CoreLike {
   busy?(): readonly string[];
   /** Replaces the backup keys (`@cc/core` `CoreService.setBackupKeys`). */
   setBackupKeys?(keys: readonly SerializedBackupKey[]): void;
+  /** Runs a confirmed Tier H intent once (`@cc/core` `CoreService.approveIntent`). */
+  approveIntent?(intentId: string, payloadHash: string): Promise<unknown>;
+  /** Drops a Tier H intent (`@cc/core` `CoreService.denyIntent`). */
+  denyIntent?(intentId: string): void;
   stop(): Promise<void>;
 }
 
@@ -84,6 +93,14 @@ function isMainMessage(value: unknown): value is MainToHost {
   if (message['type'] === 'stop') return true;
   if (message['type'] === 'activity') return typeof message['id'] === 'number';
   if (message['type'] === 'backup-keys') return Array.isArray(message['keys']);
+  if (message['type'] === 'approve-intent') {
+    return (
+      typeof message['id'] === 'number' &&
+      typeof message['intentId'] === 'string' &&
+      typeof message['payloadHash'] === 'string'
+    );
+  }
+  if (message['type'] === 'deny-intent') return typeof message['intentId'] === 'string';
   if (message['backupKeys'] !== undefined && !Array.isArray(message['backupKeys'])) return false;
   if (message['type'] !== 'init' || typeof message['userData'] !== 'string') return false;
   const mode = message['mode'] as Record<string, unknown> | undefined;
@@ -106,6 +123,27 @@ function refusalOf(
     help: Array.isArray(help)
       ? help.filter((line): line is string => typeof line === 'string')
       : [],
+  };
+}
+
+/** A core error's `{ code, message, help }`; anything else is `E_INTERNAL`. */
+function errorData(error: unknown): ApiErrorData {
+  if (error instanceof Error) {
+    const { code, help } = error as Error & { code?: unknown; help?: unknown };
+    if (typeof code === 'string' && /^E_[A-Z0-9_]+$/.test(code)) {
+      return {
+        code,
+        message: error.message,
+        help: Array.isArray(help)
+          ? help.filter((line): line is string => typeof line === 'string')
+          : [],
+      };
+    }
+  }
+  return {
+    code: 'E_INTERNAL',
+    message: 'the core could not run the confirmed operation',
+    help: ['Do it again in the app'],
   };
 }
 
@@ -177,6 +215,33 @@ export function runCoreHost(options: HostOptions): void {
           failed(error);
         }
       }, failed);
+      return;
+    }
+    if (data.type === 'approve-intent') {
+      const { id } = data;
+      const refused = (error: unknown) =>
+        parentPort.postMessage({ type: 'intent-result', id, error: errorData(error) });
+      if (core === undefined) {
+        refused(undefined);
+        return;
+      }
+      core
+        .then(async (started) => {
+          if (started.approveIntent === undefined) {
+            refused(undefined);
+            return;
+          }
+          const result = await started.approveIntent(data.intentId, data.payloadHash);
+          parentPort.postMessage({ type: 'intent-result', id, result });
+        })
+        .catch(refused);
+      return;
+    }
+    if (data.type === 'deny-intent') {
+      void core?.then(
+        (started) => started.denyIntent?.(data.intentId),
+        () => undefined,
+      );
       return;
     }
     if (data.type === 'backup-keys') {
