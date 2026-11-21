@@ -53,7 +53,7 @@ export interface Forms {
     minutes: string;
     policy: 'hard' | 'soft';
   };
-  backup: { label: string; path: string; passphrase: string; confirm: string };
+  backup: { label: string };
   stream: {
     kind: WorkstreamAnswers['kind'];
     name: string;
@@ -164,7 +164,7 @@ export function emptyForms(): Forms {
       minutes: '60',
       policy: 'hard',
     },
-    backup: { label: '', path: '', passphrase: '', confirm: '' },
+    backup: { label: '' },
     stream: {
       kind: 'company',
       name: '',

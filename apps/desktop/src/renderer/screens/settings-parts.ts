@@ -106,8 +106,10 @@ export function advanced(
 }
 
 /**
- * The inline confirmation of a hard-to-undo or high-risk action (Remove access, Restore, a
- * high-risk permission). Nothing happens until the second click; Cancel closes it.
+ * The inline explanation of a hard-to-undo or high-risk action (Remove access, Restore, a
+ * high-risk permission). Nothing is called until the second click; Cancel closes it. It is not
+ * the confirmation: those actions are Tier H, and the app shell's confirm window confirms them
+ * after it (C-04-12).
  */
 export function confirmPanel(options: {
   readonly test: string;

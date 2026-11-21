@@ -5,7 +5,6 @@ import { deriveBackupKey, type SerializedBackupKey } from '@cc/core/backup-keys'
 import { describe, expect, it } from 'vitest';
 
 import { KEYS_SECRET, LEGACY_PASSPHRASE_SECRET } from '../src/main/backup-keys.js';
-import type { ConfirmPrompt } from '../src/main/confirm-prompt.js';
 import type { CoreLauncher, CoreProcess, MainPort } from '../src/main/core-supervisor.js';
 import type { InvokeAnswer, InvokeEvent } from '../src/main/ipc.js';
 import {
@@ -15,6 +14,13 @@ import {
   type RebuildState,
 } from '../src/main/rebuild-offer.js';
 import type { ShownNotification } from '../src/main/notifications/center.js';
+import {
+  CONFIRM_ANSWER_CHANNEL,
+  promptUrl,
+  SECRET_ANSWER_CHANNEL,
+  type PromptWindow,
+  type PromptWindowSpec,
+} from '../src/main/shell-prompts.js';
 import {
   SMOKE_TIMEOUT_MS,
   startShell,
@@ -53,6 +59,27 @@ class FakeWindow implements ShellWindow {
     this.destroyed = true;
     for (const listener of this.#closed) listener();
   }
+}
+
+/** One of main's prompt windows; its web contents id is what answers must come from. */
+class FakePromptWindow implements PromptWindow {
+  destroyed = false;
+  focused = 0;
+  readonly #closed: (() => void)[] = [];
+  readonly senderId: number;
+  readonly spec: PromptWindowSpec;
+  constructor(senderId: number, spec: PromptWindowSpec) {
+    this.senderId = senderId;
+    this.spec = spec;
+  }
+  isDestroyed = () => this.destroyed;
+  focus = () => void (this.focused += 1);
+  close = () => {
+    if (this.destroyed) return;
+    this.destroyed = true;
+    for (const listener of this.#closed) listener();
+  };
+  onClosed = (listener: () => void) => void this.#closed.push(listener);
 }
 
 class FakeCore extends EventEmitter implements CoreProcess {
@@ -141,9 +168,17 @@ function fakePlatform(overrides: Partial<ShellPlatform> = {}) {
   const relaunched: string[] = [];
   const smokes: SmokeResult[] = [];
   const refusals: { code: string; message: string; help: readonly string[] }[] = [];
-  /** What main's confirmation prompt was asked, and what the user answers in it. */
-  const prompts: ConfirmPrompt[] = [];
-  const answer = { confirmed: true, hold: undefined as Promise<void> | undefined };
+  /** Main's prompt windows, and what the user does in them (`manual`: the test answers). */
+  const prompts: FakePromptWindow[] = [];
+  const answer = {
+    confirmed: true,
+    secret: 'correct horse battery staple' as string | undefined,
+    folder: '/tmp/cc-test-folder' as string | undefined,
+    manual: false,
+    hold: undefined as Promise<void> | undefined,
+  };
+  const folderTitles: string[] = [];
+  let nextSender = 100;
   let resolveReady: () => void = () => undefined;
   const ready = new Promise<void>((resolve) => (resolveReady = resolve));
 
@@ -183,10 +218,31 @@ function fakePlatform(overrides: Partial<ShellPlatform> = {}) {
       windows.push(window);
       return window;
     },
-    confirm: async (prompt) => {
-      prompts.push(prompt);
-      await answer.hold;
-      return answer.confirmed;
+    openPrompt: (spec) => {
+      const window = new FakePromptWindow(nextSender++, spec);
+      prompts.push(window);
+      // The user answers in the window, as Playwright clicks it in the app flows.
+      void Promise.resolve(answer.hold).then(() => {
+        if (answer.manual || window.destroyed) return;
+        const event = {
+          senderFrame: { url: promptUrl(spec.token), parent: null },
+          sender: { id: window.senderId },
+        };
+        if (spec.kind === 'confirm') {
+          handlers.get(CONFIRM_ANSWER_CHANNEL)?.(
+            event,
+            spec.token,
+            answer.confirmed ? 'approve' : 'deny',
+          );
+        } else {
+          handlers.get(SECRET_ANSWER_CHANNEL)?.(event, spec.token, answer.secret ?? null);
+        }
+      });
+      return window;
+    },
+    chooseFolder: (title) => {
+      folderTitles.push(title);
+      return Promise.resolve(answer.folder);
     },
     createTray: (): ShellTray => ({
       set: (state) => void traySets.push(state),
@@ -212,6 +268,9 @@ function fakePlatform(overrides: Partial<ShellPlatform> = {}) {
     (listeners.get(name) as ((...a: unknown[]) => unknown) | undefined)?.(...args);
   const invoke = (channel: string, url: string, ...args: unknown[]) =>
     handlers.get(channel)?.({ senderFrame: { url, parent: null } }, ...args);
+  /** A call with the whole event: the sender's web contents id and frame. */
+  const invokeAs = (channel: string, event: InvokeEvent, ...args: unknown[]) =>
+    handlers.get(channel)?.(event, ...args);
 
   return {
     platform,
@@ -226,8 +285,10 @@ function fakePlatform(overrides: Partial<ShellPlatform> = {}) {
     refusals,
     prompts,
     answer,
+    folderTitles,
     emit,
     invoke,
+    invokeAs,
     ready: resolveReady,
   };
 }
@@ -499,7 +560,7 @@ describe('desktop shell main process (04 §3)', () => {
     });
   });
 
-  it('01 §3.1 row 9, 04 §9.1 rule 3: the passphrase becomes a key in the secret store and the core; the passphrase itself reaches neither', async () => {
+  it("01 §3.1 row 9, 04 §9.1 rule 3: the passphrase is typed in main's secret prompt and becomes a key in the secret store and the core; the passphrase itself reaches neither, nor the app page", async () => {
     const secrets = memorySecrets();
     const fake = fakePlatform({ secrets });
     await startedWith(fake, { deriveBackupKey: fastDerive });
@@ -508,16 +569,36 @@ describe('desktop shell main process (04 §3)', () => {
     expect(first).toEqual([expect.objectContaining({ origin: 'random' })]);
     expect(fake.cores[0]?.received[0]).toMatchObject({ type: 'init', backupKeys: first });
 
-    const short = (await fake.invoke('cc:invoke', 'cc-app://app/', 'backups.passphrase', {
-      passphrase: 'too short',
+    const passphrase = 'correct horse battery staple';
+    // The page never passes a passphrase: such a call is refused and no prompt opens.
+    const passed = (await fake.invoke('cc:invoke', 'cc-app://app/', 'backups.passphrase', {
+      passphrase,
     })) as InvokeAnswer;
+    expect(passed).toMatchObject({ ok: false, error: { code: 'E_USAGE' } });
+    expect(fake.prompts).toHaveLength(0);
+
+    fake.answer.secret = 'too short';
+    const short = (await fake.invoke(
+      'cc:invoke',
+      'cc-app://app/',
+      'backups.passphrase',
+      {},
+    )) as InvokeAnswer;
     expect(short).toMatchObject({ ok: false, error: { code: 'E_USAGE' } });
     expect(parseKeysOf(secrets.values.get(KEYS_SECRET))).toHaveLength(1);
 
-    const passphrase = 'correct horse battery staple';
-    const answer = (await fake.invoke('cc:invoke', 'cc-app://app/', 'backups.passphrase', {
-      passphrase,
-    })) as InvokeAnswer;
+    fake.answer.secret = passphrase;
+    const answer = (await fake.invoke(
+      'cc:invoke',
+      'cc-app://app/',
+      'backups.passphrase',
+      {},
+    )) as InvokeAnswer;
+    expect(fake.prompts.map((prompt) => [prompt.spec.kind, prompt.spec.title])).toEqual([
+      ['secret', 'Backup password'],
+      ['secret', 'Backup password'],
+    ]);
+    expect(fake.prompts.every((prompt) => prompt.destroyed)).toBe(true);
     const keys = parseKeysOf(secrets.values.get(KEYS_SECRET));
     expect(keys.map((key) => key.origin)).toEqual(['random', 'passphrase']);
     // The derived key went to the running core; the core is called with no params.
@@ -526,12 +607,69 @@ describe('desktop shell main process (04 §3)', () => {
     const everything = JSON.stringify([fake.logs, fake.cores[0]?.received, [...secrets.values]]);
     expect(everything).not.toContain(passphrase);
 
+    // Cancel in the prompt sets nothing.
+    fake.answer.secret = undefined;
+    const cancelled = (await fake.invoke(
+      'cc:invoke',
+      'cc-app://app/',
+      'backups.passphrase',
+      {},
+    )) as InvokeAnswer;
+    expect(cancelled).toMatchObject({ ok: false, error: { code: 'E_HUMAN_REQUIRED' } });
+    expect(parseKeysOf(secrets.values.get(KEYS_SECRET))).toHaveLength(2);
+
     const nowhere = fakePlatform();
     await started(nowhere);
-    const refused = (await nowhere.invoke('cc:invoke', 'cc-app://app/', 'backups.passphrase', {
-      passphrase,
-    })) as InvokeAnswer;
+    const refused = (await nowhere.invoke(
+      'cc:invoke',
+      'cc-app://app/',
+      'backups.passphrase',
+      {},
+    )) as InvokeAnswer;
     expect(refused).toMatchObject({ ok: false, error: { code: 'E_FORBIDDEN' } });
+    expect(nowhere.prompts).toHaveLength(0);
+  });
+
+  it("01 §3.1 row 10, 04 §9.1 rule 5: a folder destination's folder is chosen in the system folder picker, never passed by the app page", async () => {
+    const fake = fakePlatform();
+    await started(fake);
+    const set = (destination: unknown) =>
+      fake.invoke('cc:invoke', 'cc-app://app/', 'backups.destination', {
+        destination,
+      }) as Promise<InvokeAnswer>;
+
+    const passed = await set({ kind: 'folder', label: 'Synced folder', path: '/somewhere/else' });
+    expect(passed).toMatchObject({ ok: false, error: { code: 'E_USAGE' } });
+    expect(fake.folderTitles).toEqual([]);
+
+    expect(await set({ kind: 'folder', label: '  Synced folder ' })).toEqual({
+      ok: true,
+      result: {
+        method: 'backups.destination',
+        params: {
+          destination: { kind: 'folder', label: 'Synced folder', path: '/tmp/cc-test-folder' },
+        },
+      },
+    });
+    expect(fake.folderTitles).toEqual(['Choose the folder for Synced folder']);
+
+    fake.answer.folder = undefined;
+    expect(await set({ kind: 'folder', label: 'Synced folder' })).toMatchObject({
+      ok: false,
+      error: { code: 'E_HUMAN_REQUIRED' },
+    });
+    expect(await set({ kind: 'folder', label: ' ' })).toMatchObject({
+      ok: false,
+      error: { code: 'E_USAGE' },
+    });
+    // Clearing the destination goes to the core as it is.
+    expect(await set(null)).toEqual({
+      ok: true,
+      result: { method: 'backups.destination', params: { destination: null } },
+    });
+    expect(
+      fake.cores[0]?.calls.filter((call) => call.method === 'backups.destination'),
+    ).toHaveLength(2);
   });
 
   it('04 §9.1 rule 3: a passphrase the P1-12 build kept becomes its key, and the passphrase file is deleted', async () => {
@@ -596,16 +734,18 @@ describe('desktop shell main process (04 §3)', () => {
     expect(fake.cores[1]?.calls.map((call) => call.method)).toEqual(['home.get']);
   });
 
-  it('C-04-12 a Tier H call is confirmed in the prompt main draws, then approved over the core-host channel, not the UI port', async () => {
+  it('C-04-12 a Tier H call is confirmed in the confirm window main opens, then approved over the core-host channel, not the UI port', async () => {
     const fake = fakePlatform();
     await started(fake);
     const answer = (await fake.invoke('cc:invoke', 'cc-app://app/', 'principals.revoke', {
       name: 'cli-default',
     })) as InvokeAnswer;
-    // The prompt shows the core's preview, not anything the renderer sent.
-    expect(fake.prompts).toEqual([
-      { title: 'Remove access', preview: INTENT.preview, expiresAt: INTENT.expiresAt },
-    ]);
+    // The window shows the core's preview, not anything the renderer sent.
+    const [prompt] = fake.prompts;
+    expect(fake.prompts).toHaveLength(1);
+    expect(prompt?.spec).toMatchObject({ kind: 'confirm', title: 'Remove access' });
+    expect(prompt?.spec.page).toContain('Remove access for &quot;cli-default&quot;.');
+    expect(prompt?.destroyed).toBe(true);
     expect(fake.cores[0]?.received.filter((message) => message.type === 'approve-intent')).toEqual([
       {
         type: 'approve-intent',
@@ -619,7 +759,7 @@ describe('desktop shell main process (04 §3)', () => {
     expect(fake.cores[0]?.calls.map((call) => call.method)).toEqual(['principals.revoke']);
   });
 
-  it('C-04-12 Cancel in the prompt drops the intent, and the renderer is told nothing changed', async () => {
+  it('C-04-12 Cancel in the confirm window drops the intent, and the renderer is told nothing changed', async () => {
     const fake = fakePlatform();
     fake.answer.confirmed = false;
     await started(fake);
@@ -632,7 +772,89 @@ describe('desktop shell main process (04 §3)', () => {
     expect(sent).not.toContain('approve-intent');
   });
 
-  it('C-04-12 one prompt at a time: a second Tier H call while one is open is not confirmed', async () => {
+  it("C-04-12 the confirm window takes its answer only from its own window's top frame and token; the app page cannot approve", async () => {
+    const fake = fakePlatform();
+    fake.answer.manual = true;
+    await started(fake);
+    const pending = fake.invoke('cc:invoke', 'cc-app://app/', 'principals.revoke', {
+      name: 'cli-default',
+    }) as Promise<InvokeAnswer>;
+    await settle(20);
+    const prompt = fake.prompts[0];
+    if (prompt === undefined) throw new Error('no confirm window');
+    const token = prompt.spec.token;
+    const own = { url: promptUrl(token), parent: null };
+    const refusedAnswers: [InvokeEvent, unknown, unknown][] = [
+      // The app window, even with the right token.
+      [
+        { senderFrame: { url: 'cc-app://app/', parent: null }, sender: { id: 1 } },
+        token,
+        'approve',
+      ],
+      // The right URL from another web contents.
+      [{ senderFrame: own, sender: { id: prompt.senderId + 1 } }, token, 'approve'],
+      // A subframe of the confirm window.
+      [{ senderFrame: { ...own, parent: {} }, sender: { id: prompt.senderId } }, token, 'approve'],
+      // Another token, or no choice the window offers.
+      [{ senderFrame: own, sender: { id: prompt.senderId } }, 'f'.repeat(32), 'approve'],
+      [{ senderFrame: own, sender: { id: prompt.senderId } }, token, 'yes'],
+      // The secret channel cannot answer a confirm window.
+      [{ senderFrame: own, sender: { id: prompt.senderId } }, token, 'approve'],
+    ];
+    for (const [index, [event, id, choice]] of refusedAnswers.entries()) {
+      const channel =
+        index === refusedAnswers.length - 1 ? SECRET_ANSWER_CHANNEL : CONFIRM_ANSWER_CHANNEL;
+      expect(fake.invokeAs(channel, event, id, choice), String(index)).toBe(false);
+    }
+    await settle(20);
+    expect(prompt.destroyed).toBe(false);
+    expect(fake.cores[0]?.received.map((message) => message.type)).not.toContain('approve-intent');
+
+    expect(
+      fake.invokeAs(
+        CONFIRM_ANSWER_CHANNEL,
+        { senderFrame: own, sender: { id: prompt.senderId } },
+        token,
+        'approve',
+      ),
+    ).toBe(true);
+    expect(await pending).toMatchObject({ ok: true });
+    // A second answer finds no open window.
+    expect(
+      fake.invokeAs(
+        CONFIRM_ANSWER_CHANNEL,
+        { senderFrame: own, sender: { id: prompt.senderId } },
+        token,
+        'approve',
+      ),
+    ).toBe(false);
+  });
+
+  it('C-04-12 closing the confirm window, or letting the intent expire, confirms nothing', async () => {
+    const fake = fakePlatform();
+    fake.answer.manual = true;
+    await started(fake);
+    const closed = fake.invoke('cc:invoke', 'cc-app://app/', 'principals.revoke', {
+      name: 'cli-default',
+    }) as Promise<InvokeAnswer>;
+    await settle(20);
+    fake.prompts[0]?.close();
+    expect(await closed).toMatchObject({ ok: false, error: { code: 'E_HUMAN_REQUIRED' } });
+
+    const expired = fake.invoke('cc:invoke', 'cc-app://app/', 'principals.revoke', {
+      name: 'cli-default',
+    }) as Promise<InvokeAnswer>;
+    await settle(20);
+    expect(fake.prompts[1]?.destroyed).toBe(false);
+    (fake.platform.clock as TimerClock).advanceTo(INTENT.expiresAt);
+    expect(await expired).toMatchObject({ ok: false, error: { code: 'E_HUMAN_REQUIRED' } });
+    expect(fake.prompts[1]?.destroyed).toBe(true);
+    const sent = fake.cores[0]?.received.map((message) => message.type) ?? [];
+    expect(sent.filter((type) => type === 'deny-intent')).toHaveLength(2);
+    expect(sent).not.toContain('approve-intent');
+  });
+
+  it('C-04-12 one confirm window at a time: a second Tier H call while one is open is not confirmed', async () => {
     const fake = fakePlatform();
     let release: () => void = () => undefined;
     fake.answer.hold = new Promise<void>((resolve) => (release = resolve));
@@ -648,6 +870,39 @@ describe('desktop shell main process (04 §3)', () => {
     release();
     expect(await first).toMatchObject({ ok: true });
     expect(fake.prompts).toHaveLength(1);
+  });
+
+  it('04 §4.3 rule 3, C-04-12 commandcenter://confirmations/<id> of an open intent brings its confirm window to the front instead of routing the app page', async () => {
+    const fake = fakePlatform();
+    fake.answer.manual = true;
+    const shell = await started(fake);
+    const pending = fake.invoke('cc:invoke', 'cc-app://app/', 'principals.revoke', {
+      name: 'cli-default',
+    }) as Promise<InvokeAnswer>;
+    await settle(20);
+    const prompt = fake.prompts[0];
+    const window = fake.windows[0];
+    const sentBefore = window?.sent.length ?? 0;
+    expect(await shell?.openLink(`commandcenter://confirmations/${INTENT.id}`)).toEqual({
+      kind: 'confirmations',
+      target: INTENT.id,
+    });
+    expect(prompt?.focused).toBe(1);
+    expect(window?.sent).toHaveLength(sentBefore);
+    // Any other confirmation link opens the app page's inline prompt, as before.
+    await shell?.openLink('commandcenter://confirmations/cfm_7q2');
+    expect(window?.sent.at(-1)).toEqual({
+      channel: 'cc:navigate',
+      payload: { kind: 'confirmations', target: 'cfm_7q2' },
+    });
+    prompt?.close();
+    await pending;
+    // Once it is answered, its link routes the app page too.
+    await shell?.openLink(`commandcenter://confirmations/${INTENT.id}`);
+    expect(window?.sent.at(-1)).toEqual({
+      channel: 'cc:navigate',
+      payload: { kind: 'confirmations', target: INTENT.id },
+    });
   });
 
   it('registers commandcenter:// with the OS only in a packaged build', async () => {

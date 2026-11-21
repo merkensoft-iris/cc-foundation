@@ -5,12 +5,15 @@
  * first, then restarts on the restored one), the restore check with Check now, and what is
  * kept.
  *
- * The passphrase goes to main, which derives the key and keeps it in the system keychain; it
- * never reaches the core (04 §9.1 rule 3).
+ * The password is typed in the app shell's own window, never on this screen: main derives the
+ * key and keeps it in the system keychain, and it never reaches the core (04 §9.1 rule 3). The
+ * second copy's folder is chosen in the system's folder picker (04 §9.1 rule 5). Restore is a
+ * Tier H operation: this screen explains it, and the user confirms it in the app shell's
+ * confirm window (C-04-12).
  */
 import type { BackupRecord, BackupStatus } from '../app/api.js';
-import { act, errorText, type Ui } from '../app/screen.js';
-import { button, link } from '../ui/parts.js';
+import { act, actInWindow, errorText, IN_WINDOW, waitingInWindow, type Ui } from '../app/screen.js';
+import { button, inWindowNote, link } from '../ui/parts.js';
 import { h, type VNode } from '../ui/vnode.js';
 import {
   advanced,
@@ -32,14 +35,10 @@ export interface BackupsState {
 }
 
 export interface BackupsForm {
-  passphrase: string;
-  confirm: string;
   label: string;
-  path: string;
-  /** The archive whose Restore is waiting for the second click. */
+  /** The archive whose Restore is explained, before the shell confirms it. */
   confirming?: string | undefined;
-  /** Change… opened the password or second-copy form. */
-  changingPassphrase: boolean;
+  /** Change… opened the second-copy form. */
   changingDestination: boolean;
 }
 
@@ -68,11 +67,7 @@ export async function loadBackups(ui: Ui): Promise<BackupsState> {
 
 export function backupsForm(ui: Ui): BackupsForm {
   return ui.keep<BackupsForm>('backups-form', () => ({
-    passphrase: '',
-    confirm: '',
     label: '',
-    path: '',
-    changingPassphrase: false,
     changingDestination: false,
   }));
 }
@@ -123,160 +118,128 @@ function statusRow(status: BackupStatus, ui: Ui): VNode {
   });
 }
 
-function passphraseRow(status: BackupStatus, form: BackupsForm, ui: Ui): VNode {
-  // Until a password is set the form is open: backups cannot leave this computer without it.
-  const open = !status.passphraseSet || form.changingPassphrase;
+/** Set password…: the app shell asks for it in its own window (04 §9.1 rule 3). */
+export function setPassphrase(ui: Ui, key: string): Promise<boolean> {
+  return actInWindow(
+    ui,
+    key,
+    () => ui.call('backups.passphrase', {}),
+    'Backup password set. The next backup is checked with it.',
+  );
+}
+
+function passphraseRow(status: BackupStatus, ui: Ui): VNode {
+  const waiting = waitingInWindow(ui, 'backup-passphrase');
   return row({
     test: 'backup-passphrase-form',
     label: 'Backup password',
-    help: 'Locks every backup. Command Center cannot recover a lost one, so keep it somewhere safe.',
-    value: open
-      ? fields(
-          input('Password', form.passphrase, (value) => (form.passphrase = value), {
-            type: 'password',
-            test: 'settings-backup-passphrase',
-          }),
-          input('Type it again', form.confirm, (value) => (form.confirm = value), {
-            type: 'password',
-            test: 'settings-backup-passphrase-confirm',
-          }),
-        )
-      : pill('Set', 'good', 'backup-passphrase-state'),
-    action: open
-      ? [
-          button(
-            status.passphraseSet ? 'Change password' : 'Set password',
-            () => {
-              if (form.passphrase !== form.confirm) {
-                ui.flash('The two passwords differ.', 'error');
-                return;
-              }
-              const passphrase = form.passphrase;
-              void (async () => {
-                const ok = await act(
-                  ui,
-                  () => ui.call('backups.passphrase', { passphrase }),
-                  'Backup password set. The next backup is checked with it.',
-                );
-                if (ok) {
-                  form.passphrase = '';
-                  form.confirm = '';
-                  form.changingPassphrase = false;
-                  ui.render();
-                }
-              })();
-            },
-            { test: 'settings-backup-passphrase-set', primary: !status.passphraseSet },
+    help: 'Locks every backup. Command Center cannot recover a lost one, so keep it somewhere safe. You type it in Command Center’s own window, not on this page.',
+    value: waiting
+      ? inWindowNote(IN_WINDOW.secret, 'backup-passphrase-in-window')
+      : status.passphraseSet
+        ? pill('Set', 'good', 'backup-passphrase-state')
+        : h(
+            'span',
+            { class: 'vtext muted', test: 'backup-passphrase-state' },
+            'Not set: backups stay on this computer until it is.',
           ),
-          status.passphraseSet
-            ? button(
-                'Cancel',
-                () => {
-                  form.changingPassphrase = false;
-                  form.passphrase = '';
-                  form.confirm = '';
-                  ui.render();
-                },
-                { test: 'settings-backup-passphrase-cancel' },
-              )
-            : null,
-        ]
+    action: waiting
+      ? null
       : button(
-          'Change…',
-          () => {
-            form.changingPassphrase = true;
-            ui.render();
-          },
-          { test: 'settings-backup-passphrase-change' },
+          status.passphraseSet ? 'Change password…' : 'Set password…',
+          () => void setPassphrase(ui, 'backup-passphrase'),
+          { test: 'settings-backup-passphrase-set', primary: !status.passphraseSet },
         ),
   });
 }
 
+/** Choose folder…: the app shell asks for it in the system folder picker (04 §9.1 rule 5). */
+export function chooseDestination(ui: Ui, key: string, label: string): Promise<boolean> {
+  return actInWindow(
+    ui,
+    key,
+    () => ui.call('backups.destination', { destination: { kind: 'folder', label } }),
+    `Backups are copied to ${label} from the next one on.`,
+  );
+}
+
 function destinationRow(status: BackupStatus, form: BackupsForm, ui: Ui): VNode {
   const open = status.destination === undefined || form.changingDestination;
+  const waiting = waitingInWindow(ui, 'backup-destination');
   return row({
     test: 'backup-destination-form',
     label: 'Second copy',
     help: 'A folder such as Google Drive, Dropbox, a NAS or a USB disk. Only locked backups go there, never your live data.',
-    value: open
-      ? [
-          fields(
-            input('Name', form.label, (value) => (form.label = value), {
-              test: 'settings-backup-label',
-              placeholder: 'Synced folder',
-            }),
-            input('Folder', form.path, (value) => (form.path = value), {
-              test: 'settings-backup-path',
-              placeholder: '/Users/you/Google Drive/Command Center',
-            }),
-          ),
-          status.destination === undefined
-            ? null
-            : h(
-                'span',
-                { class: 'link-action' },
-                link(
-                  'Stop copying: keep backups on this computer only',
+    value: waiting
+      ? inWindowNote(IN_WINDOW.folder, 'backup-destination-in-window')
+      : open
+        ? [
+            fields(
+              input('Name', form.label, (value) => (form.label = value), {
+                test: 'settings-backup-label',
+                placeholder: 'Synced folder',
+              }),
+            ),
+            status.destination === undefined
+              ? null
+              : h(
+                  'span',
+                  { class: 'link-action' },
+                  link(
+                    'Stop copying: keep backups on this computer only',
+                    () => {
+                      form.changingDestination = false;
+                      void act(
+                        ui,
+                        () => ui.call('backups.destination', { destination: null }),
+                        'Backups now stay on this computer only.',
+                      );
+                    },
+                    'settings-backup-destination-clear',
+                  ),
+                ),
+          ]
+        : h('span', { test: 'backup-destination' }, status.destination ?? ''),
+    action: waiting
+      ? null
+      : open
+        ? [
+            button(
+              'Choose folder…',
+              () => {
+                const label = form.label.trim();
+                if (label === '') {
+                  ui.flash('Name the second copy first, such as Synced folder.', 'error');
+                  return;
+                }
+                void (async () => {
+                  if (await chooseDestination(ui, 'backup-destination', label)) {
+                    form.changingDestination = false;
+                    ui.render();
+                  }
+                })();
+              },
+              { test: 'settings-backup-destination-set' },
+            ),
+            status.destination === undefined
+              ? null
+              : button(
+                  'Cancel',
                   () => {
                     form.changingDestination = false;
-                    void act(
-                      ui,
-                      () => ui.call('backups.destination', { destination: null }),
-                      'Backups now stay on this computer only.',
-                    );
+                    ui.render();
                   },
-                  'settings-backup-destination-clear',
+                  { test: 'settings-backup-destination-cancel' },
                 ),
-              ),
-        ]
-      : h('span', { test: 'backup-destination' }, status.destination ?? ''),
-    action: open
-      ? [
-          button(
-            'Save',
+          ]
+        : button(
+            'Change…',
             () => {
-              const label = form.label.trim();
-              const path = form.path.trim();
-              if (label === '' || path === '') {
-                ui.flash('A second copy needs a name and a folder.', 'error');
-                return;
-              }
-              void (async () => {
-                const ok = await act(
-                  ui,
-                  () =>
-                    ui.call('backups.destination', {
-                      destination: { kind: 'folder', label, path },
-                    }),
-                  `Backups are copied to ${label} from the next one on.`,
-                );
-                if (ok) {
-                  form.changingDestination = false;
-                  ui.render();
-                }
-              })();
+              form.changingDestination = true;
+              ui.render();
             },
-            { test: 'settings-backup-destination-set' },
+            { test: 'settings-backup-destination-change' },
           ),
-          status.destination === undefined
-            ? null
-            : button(
-                'Cancel',
-                () => {
-                  form.changingDestination = false;
-                  ui.render();
-                },
-                { test: 'settings-backup-destination-cancel' },
-              ),
-        ]
-      : button(
-          'Change…',
-          () => {
-            form.changingDestination = true;
-            ui.render();
-          },
-          { test: 'settings-backup-destination-change' },
-        ),
   });
 }
 
@@ -348,6 +311,17 @@ function historyView(state: BackupsState, form: BackupsForm, ui: Ui): VNode {
           : null,
       ),
     ),
+    waitingInWindow(ui, `restore-${record.id}`)
+      ? h(
+          'tr',
+          { class: 'confirm-row' },
+          h(
+            'td',
+            { colspan: '5' },
+            inWindowNote(IN_WINDOW.confirm, `restore-in-window-${record.id}`),
+          ),
+        )
+      : null,
     form.confirming === record.id && restorable(record)
       ? h(
           'tr',
@@ -359,14 +333,15 @@ function historyView(state: BackupsState, form: BackupsForm, ui: Ui): VNode {
               test: `restore-confirm-${record.id}`,
               question: `Restore the backup from ${when(record.at)}?`,
               detail:
-                'Command Center backs up the current data first, then restores this backup and restarts.',
-              confirm: 'Restore now',
+                'Command Center backs up the current data first, then restores this backup and restarts. You confirm it in Command Center’s own window next.',
+              confirm: 'Restore now…',
               confirmTest: `restore-now-${record.id}`,
               cancelTest: `restore-cancel-${record.id}`,
               onConfirm: () => {
                 form.confirming = undefined;
-                void act(
+                void actInWindow(
                   ui,
+                  `restore-${record.id}`,
                   () => ui.call('backups.restore', { id: record.id }),
                   `Restoring the backup of ${when(record.at)}; the current data was backed up first.`,
                 );
@@ -457,7 +432,7 @@ export function backupsView(state: BackupsState, open: boolean, toggle: () => vo
     card(
       'backups-basic',
       statusRow(state.status, ui),
-      passphraseRow(state.status, form, ui),
+      passphraseRow(state.status, ui),
       destinationRow(state.status, form, ui),
       advanced(
         {

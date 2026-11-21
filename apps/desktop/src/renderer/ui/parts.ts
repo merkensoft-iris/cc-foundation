@@ -56,6 +56,11 @@ export function table(headers: readonly string[], rows: readonly VNode[], empty:
   );
 }
 
+/** "Confirm in the window": the app shell's own window is asking the user (C-04-12). */
+export function inWindowNote(text: string, test: string): VNode {
+  return h('p', { class: 'in-window', role: 'status', test }, text);
+}
+
 export function chip(text: string, tone: 'neutral' | 'good' | 'warn' | 'bad' = 'neutral'): VNode {
   return h('span', { class: `chip ${tone}` }, text);
 }

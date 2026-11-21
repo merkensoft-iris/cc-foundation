@@ -1,12 +1,25 @@
 /**
  * S1 to S3 of the onboarding wizard (01 §3, §3.1 rows 1 to 33): the workspace with its backup
  * answers, the workstreams, and each workstream's profile.
+ *
+ * The backup passphrase is typed in the app shell's own window and the destination folder is
+ * chosen in the system's folder picker (04 §9.1 rules 3 and 5): neither passes through this
+ * screen, which says "Type the password in the window" while main asks.
  */
-import type { BackupDestination, WorkstreamAnswers } from '@cc/schemas';
+import type { WorkstreamAnswers } from '@cc/schemas';
 
 import type { Ui } from '../../app/screen.js';
-import { errorText } from '../../app/screen.js';
-import { button, checkbox, chip, field, section, select, table } from '../../ui/parts.js';
+import { errorText, IN_WINDOW, inWindow, waitingInWindow } from '../../app/screen.js';
+import {
+  button,
+  checkbox,
+  chip,
+  field,
+  inWindowNote,
+  section,
+  select,
+  table,
+} from '../../ui/parts.js';
 import { h, type VNode } from '../../ui/vnode.js';
 import {
   ask,
@@ -196,52 +209,46 @@ function backupAnswers(ui: Ui, state: WizardState): VNode[] {
       return false;
     }
   };
+  /** Runs a call main answers from its own window; flashes `done` or the error, then reloads. */
+  const inShellWindow = (key: string, run: () => Promise<unknown>, done: string) =>
+    void (async () => {
+      if (!(await saveFirst())) return;
+      try {
+        await inWindow(ui, key, run);
+        ui.flash(done, 'ok');
+      } catch (error) {
+        ui.flash(errorText(error), 'error');
+      }
+      await ui.reload();
+    })();
   return [
     ask(
       9,
       h(
         'p',
         { class: 'muted' },
-        'Backups are encrypted with this passphrase. Command Center cannot recover a lost one: keep it somewhere safe. It goes to the system keychain, never into the workspace.',
+        'Backups are encrypted with this passphrase. Command Center cannot recover a lost one: keep it somewhere safe. You type it in Command Center’s own window; it goes to the system keychain, never into the workspace.',
       ),
       backup?.passphraseSet === true ? chip('passphrase set', 'good') : chip('not set'),
-      field('Passphrase', form.passphrase, (value) => (form.passphrase = value), {
-        type: 'password',
-        test: 'backup-passphrase',
-      }),
-      field('Passphrase again', form.confirm, (value) => (form.confirm = value), {
-        type: 'password',
-        test: 'backup-passphrase-confirm',
-      }),
-      button(
-        'Set passphrase',
-        () => {
-          if (form.passphrase !== form.confirm) {
-            ui.flash('The two passphrases differ.', 'error');
-            return;
-          }
-          void (async () => {
-            if (!(await saveFirst())) return;
-            try {
-              await ui.call('backups.passphrase', { passphrase: form.passphrase });
-              form.passphrase = '';
-              form.confirm = '';
-              ui.flash('Backup passphrase set.', 'ok');
-            } catch (error) {
-              ui.flash(errorText(error), 'error');
-            }
-            await ui.reload();
-          })();
-        },
-        { test: 'backup-passphrase-set' },
-      ),
+      waitingInWindow(ui, 'onboarding-passphrase')
+        ? inWindowNote(IN_WINDOW.secret, 'backup-passphrase-in-window')
+        : button(
+            backup?.passphraseSet === true ? 'Change passphrase…' : 'Set passphrase…',
+            () =>
+              inShellWindow(
+                'onboarding-passphrase',
+                () => ui.call('backups.passphrase', {}),
+                'Backup passphrase set.',
+              ),
+            { test: 'backup-passphrase-set' },
+          ),
     ),
     ask(
       10,
       h(
         'p',
         { class: 'muted' },
-        'Encrypted archives are copied here: a folder such as the Google Drive or Dropbox synced folder. Google Drive and S3 arrive with their connectors. You may skip this; Command Center reminds you in the weekly review.',
+        'Encrypted archives are copied here: a folder such as the Google Drive or Dropbox synced folder, chosen in your system’s folder picker. Google Drive and S3 arrive with their connectors. You may skip this; Command Center reminds you in the weekly review.',
       ),
       backup?.destination === undefined
         ? chip('no destination')
@@ -250,38 +257,27 @@ function backupAnswers(ui: Ui, state: WizardState): VNode[] {
         test: 'backup-label',
         placeholder: 'Synced folder',
       }),
-      field('Folder', form.path, (value) => (form.path = value), {
-        test: 'backup-path',
-        placeholder: '/Users/you/Google Drive/Command Center',
-      }),
       h(
         'div',
         { class: 'actions' },
-        button(
-          'Set destination',
-          () => {
-            if (form.label.trim() === '' || form.path.trim() === '') {
-              ui.flash('A destination needs a label and a folder.', 'error');
-              return;
-            }
-            const destination: BackupDestination = {
-              kind: 'folder',
-              label: form.label.trim(),
-              path: form.path.trim(),
-            };
-            void (async () => {
-              if (!(await saveFirst())) return;
-              try {
-                await ui.call('backups.destination', { destination });
-                ui.flash(`Backups will be copied to ${destination.label}.`, 'ok');
-              } catch (error) {
-                ui.flash(errorText(error), 'error');
-              }
-              await ui.reload();
-            })();
-          },
-          { test: 'backup-destination-set' },
-        ),
+        waitingInWindow(ui, 'onboarding-destination')
+          ? inWindowNote(IN_WINDOW.folder, 'backup-destination-in-window')
+          : button(
+              'Choose folder…',
+              () => {
+                const label = form.label.trim();
+                if (label === '') {
+                  ui.flash('A destination needs a label, such as Synced folder.', 'error');
+                  return;
+                }
+                inShellWindow(
+                  'onboarding-destination',
+                  () => ui.call('backups.destination', { destination: { kind: 'folder', label } }),
+                  `Backups will be copied to ${label}.`,
+                );
+              },
+              { test: 'backup-destination-set' },
+            ),
         backup?.destination === undefined
           ? null
           : button(

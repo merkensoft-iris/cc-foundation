@@ -7,8 +7,11 @@
  *
  * A packaged build reads the build stamp `cc-build` wrote at its app root (inside the asar)
  * for the start check and Rebuild now; an unpackaged run has none (`start-mode.ts`).
+ *
+ * Main's prompt windows (the confirm window and the secret prompt, `shell-prompts.ts`) live on
+ * their own scheme in their own in-memory session, hardened like the app's: the app window's
+ * session does not serve that scheme at all.
  */
-import { randomBytes } from 'node:crypto';
 import { chmodSync, existsSync, mkdirSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
@@ -33,14 +36,12 @@ import {
 } from 'electron';
 
 import {
-  APP_ORIGIN,
   APP_SCHEME,
   APP_SCHEME_PRIVILEGES,
   APP_URL,
   resolveAppRequest,
   type AppResource,
 } from './app-protocol.js';
-import { CONFIRM_PATH, confirmChoice, confirmPage } from './confirm-prompt.js';
 import { parseShellArgs } from './args.js';
 import { systemClock } from './clock.js';
 import type { CoreLauncher, CoreProcess, MainPort } from './core-supervisor.js';
@@ -56,6 +57,16 @@ import {
 import type { IpcMainLike } from './ipc.js';
 import type { ShownNotification } from './notifications/center.js';
 import type { RebuildOutcome } from './rebuild-offer.js';
+import {
+  PROMPT_ORIGIN,
+  PROMPT_PARTITION,
+  PROMPT_SCHEME,
+  PROMPT_SCHEME_PRIVILEGES,
+  promptUrl,
+  resolvePromptRequest,
+  type PromptResource,
+  type PromptWindow,
+} from './shell-prompts.js';
 import type { ShellPlatform, ShellTray, ShellWindow, SmokeResult } from './shell.js';
 import { APP_NAME, stampCheck, unpackagedCheck } from './start-mode.js';
 import { trayIconBitmap, TRAY_ICON_SIZE } from './tray-icon.js';
@@ -63,8 +74,13 @@ import type { TrayMenuItem } from './tray.js';
 
 const here = (relative: string): string => fileURLToPath(new URL(relative, import.meta.url));
 
-/** Build layout: dist/main, dist/preload, dist/renderer, dist/core-host. */
+/** Build layout: dist/main, dist/preload, dist/renderer, dist/prompt-page, dist/core-host. */
 const PRELOAD = here('../preload/index.cjs');
+const PROMPT_PRELOADS = {
+  confirm: here('../preload/confirm.cjs'),
+  secret: here('../preload/secret.cjs'),
+} as const;
+const PROMPT_SCRIPT = here('../prompt-page/index.js');
 const RENDERER_ROOT = here('../renderer');
 const CORE_HOST = here('../core-host/index.js');
 
@@ -76,7 +92,7 @@ const RESPONSE_HEADERS = {
   'Referrer-Policy': 'no-referrer',
 };
 
-async function respond(resource: AppResource): Promise<Response> {
+async function respond(resource: AppResource | PromptResource): Promise<Response> {
   if (resource.kind === 'not-found') return new Response('not found', { status: 404 });
   const headers = { ...RESPONSE_HEADERS, 'Content-Type': resource.contentType };
   if (resource.kind === 'inline') return new Response(resource.body, { headers });
@@ -114,7 +130,7 @@ export function createElectronPlatform(argv: readonly string[]): ShellPlatform {
   // An unpackaged run has no productName; <userData> is "Command Center" either way (04 §9).
   app.setName(APP_NAME);
   app.setPath('userData', args.profileDir ?? join(app.getPath('appData'), APP_NAME));
-  protocol.registerSchemesAsPrivileged([APP_SCHEME_PRIVILEGES]);
+  protocol.registerSchemesAsPrivileged([APP_SCHEME_PRIVILEGES, PROMPT_SCHEME_PRIVILEGES]);
   const userData = app.getPath('userData');
 
   // The build stamp and the compiled theme sit at the packaged app's root (the asar).
@@ -158,8 +174,10 @@ export function createElectronPlatform(argv: readonly string[]): ShellPlatform {
     log('secrets.stored', { name });
   };
 
-  /** The page of each open Tier H prompt, by its token (`confirm-prompt.ts`). */
-  const confirmPages = new Map<string, string>();
+  /** The page of each open prompt window, by its token (`shell-prompts.ts`). */
+  const promptPages = new Map<string, string>();
+  /** The app window, the parent of the folder picker. */
+  let appWindow: BrowserWindow | undefined;
 
   /** Notifications are kept referenced until closed, or their click handler is lost. */
   const live = new Set<Notification>();
@@ -254,10 +272,22 @@ export function createElectronPlatform(argv: readonly string[]): ShellPlatform {
         ),
       );
       protocol.handle(APP_SCHEME, (request) =>
+        respond(resolveAppRequest(request.url, RENDERER_ROOT, themeFile)),
+      );
+      // The prompt windows' session: only the prompt origin, no permissions, no DevTools.
+      const prompts = session.fromPartition(PROMPT_PARTITION);
+      hardenSession(prompts as unknown as HardenableSession, {
+        allowDevTools: false,
+        origin: PROMPT_ORIGIN,
+        onBlocked: (url) => log('hardening.request_blocked', { url: url.slice(0, 200) }),
+      });
+      prompts.protocol.handle(PROMPT_SCHEME, (request) =>
         respond(
-          resolveAppRequest(request.url, RENDERER_ROOT, themeFile, (token) =>
-            confirmPages.get(token),
-          ),
+          resolvePromptRequest(request.url, {
+            page: (token) => promptPages.get(token),
+            scriptFile: PROMPT_SCRIPT,
+            themeFile,
+          }),
         ),
       );
     },
@@ -276,6 +306,7 @@ export function createElectronPlatform(argv: readonly string[]): ShellPlatform {
           devTools: !app.isPackaged,
         },
       });
+      appWindow = win;
       // The window title is the shell's (it carries the mode label), not the page's.
       win.on('page-title-updated', (event) => event.preventDefault());
       const loaded = new Promise<void>((resolve) => {
@@ -297,53 +328,60 @@ export function createElectronPlatform(argv: readonly string[]): ShellPlatform {
         },
       };
     },
-    confirm: (prompt) =>
-      new Promise<boolean>((resolve) => {
-        // TEMPORARY (C-04-12): replaced by the foundation-owned confirm window (F2).
-        const token = randomBytes(16).toString('hex');
-        confirmPages.set(token, confirmPage(prompt, token));
-        const win = new BrowserWindow({
-          title: prompt.title,
-          width: 560,
-          height: 440,
-          show: false,
-          resizable: false,
-          minimizable: false,
-          maximizable: false,
-          fullscreenable: false,
-          alwaysOnTop: true,
-          // No preload: the page has no script and no `window.cc`.
-          webPreferences: { ...SECURE_WEB_PREFERENCES, devTools: false },
-        });
-        let settled = false;
-        const settle = (confirmed: boolean): void => {
-          if (settled) return;
-          settled = true;
-          clearTimeout(timer);
-          confirmPages.delete(token);
-          log('confirm.answered', { confirmed });
-          resolve(confirmed);
-          if (!win.isDestroyed()) win.close();
-        };
-        const timer = setTimeout(
-          () => settle(false),
-          Math.max(0, Date.parse(prompt.expiresAt) - Date.now()),
-        );
-        // The hardening blocks every navigation; in this window only, a blocked navigation to
-        // one of the prompt's two links is the user's choice.
-        win.webContents.on('will-navigate', (_event, url) => {
-          if (!url.startsWith(`${APP_ORIGIN}${CONFIRM_PATH}`)) return;
-          const choice = confirmChoice(url, token);
-          if (choice !== undefined) settle(choice === 'confirm');
-        });
-        win.on('page-title-updated', (event) => event.preventDefault());
-        win.once('ready-to-show', () => {
+    openPrompt: (spec): PromptWindow => {
+      promptPages.set(spec.token, spec.page);
+      const win = new BrowserWindow({
+        title: spec.title,
+        width: spec.width,
+        height: spec.height,
+        show: false,
+        resizable: false,
+        minimizable: false,
+        maximizable: false,
+        fullscreenable: false,
+        alwaysOnTop: true,
+        webPreferences: {
+          ...SECURE_WEB_PREFERENCES,
+          partition: PROMPT_PARTITION,
+          preload: PROMPT_PRELOADS[spec.kind],
+          devTools: false,
+        },
+      });
+      const senderId = win.webContents.id;
+      win.on('page-title-updated', (event) => event.preventDefault());
+      win.once('ready-to-show', () => {
+        win.show();
+        win.focus();
+      });
+      win.once('closed', () => promptPages.delete(spec.token));
+      void win.loadURL(promptUrl(spec.token));
+      return {
+        senderId,
+        isDestroyed: () => win.isDestroyed(),
+        focus: () => {
+          if (win.isDestroyed()) return;
           win.show();
           win.focus();
-        });
-        win.once('closed', () => settle(false));
-        void win.loadURL(`${APP_ORIGIN}${CONFIRM_PATH}${token}`);
-      }),
+        },
+        close: () => win.close(),
+        onClosed: (listener) => {
+          win.once('closed', listener);
+        },
+      };
+    },
+    chooseFolder: async (title) => {
+      const options: Electron.OpenDialogOptions = {
+        title,
+        buttonLabel: 'Choose',
+        properties: ['openDirectory', 'createDirectory'],
+      };
+      const parent = appWindow !== undefined && !appWindow.isDestroyed() ? appWindow : undefined;
+      const result = await (parent === undefined
+        ? dialog.showOpenDialog(options)
+        : dialog.showOpenDialog(parent, options));
+      const [folder] = result.filePaths;
+      return result.canceled || folder === undefined ? undefined : folder;
+    },
     createTray: (): ShellTray => {
       const tray = new Tray(trayImage('normal'));
       return {

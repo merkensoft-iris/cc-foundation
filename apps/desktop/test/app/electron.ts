@@ -3,7 +3,9 @@
  * its own profile directory, as `pnpm dev` does, and drives the renderer the user sees. The app
  * runs unchanged: its own core in a `utilityProcess`, its hardening, its single-instance lock and
  * its system clock. Nothing here reaches past the UI: human-only operations happen only by
- * clicking the screens (04 §4.3).
+ * clicking the screens (04 §4.3), and a Tier H operation, the backup password and the like are
+ * answered in main's own windows (the confirm window and the secret prompt), which these tests
+ * drive like any window: there is no test hook (C-04-12, AGENTS rule 4).
  *
  * A seeded profile comes from `seedScenario` (the `cc:seed` seeder), stopped before the app
  * opens it, so the store has one writer at a time. The scenario's own clock is fake; the app's
@@ -83,4 +85,32 @@ export async function launchApp(profileDir: string, link?: string): Promise<Runn
 /** The status line an action leaves (`flash`), once it says `text`. */
 export async function flashSays(running: RunningApp, text: string | RegExp): Promise<void> {
   await running.byTest('flash').filter({ hasText: text }).waitFor();
+}
+
+/**
+ * Does `action` (a click on a screen) and returns the window of main's that it opens: the
+ * confirm window or the secret prompt (C-04-12, 04 §9.1 rule 3).
+ */
+export async function windowOpenedBy(
+  running: RunningApp,
+  action: () => Promise<void>,
+): Promise<Page> {
+  const opened = running.app.waitForEvent('window');
+  await action();
+  const prompt = await opened;
+  await prompt.waitForLoadState('domcontentloaded');
+  return prompt;
+}
+
+/** Clicks a button in one of main's windows that closes it, and waits until it has closed. */
+export async function clickClosing(prompt: Page, test: string): Promise<void> {
+  const closed = prompt.waitForEvent('close');
+  await prompt
+    .locator(`[data-test="${test}"]`)
+    .click()
+    .catch((error: unknown) => {
+      // The window may close before the click's own wait ends.
+      if (!prompt.isClosed()) throw error;
+    });
+  await closed;
 }

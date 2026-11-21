@@ -262,6 +262,13 @@ td {
 .reason {
   color: var(--cc-color-warning, #8a5a00);
 }
+/* An action waits for the app shell's own window (C-04-12): the screen says so. */
+.in-window {
+  margin: 0;
+  padding: var(--cc-pad) calc(var(--cc-pad) * 1.5);
+  border-left: 3px solid var(--cc-color-accent, #0b6e4f);
+  font-weight: 600;
+}
 .facts {
   display: grid;
   grid-template-columns: max-content 1fr;
