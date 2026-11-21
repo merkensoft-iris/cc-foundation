@@ -1,14 +1,14 @@
 /**
- * The app frame, Home, Decisions and Settings (09 P1-11): the navigation, deep links (no
- * Confirmations screen in phase 1, owner decision Q3), load failures, deciding a decision, and
- * Settings → Agent access, Notifications and the AI placeholder.
+ * The app frame, Home and Decisions (09 P1-11): the navigation, deep links (no
+ * Confirmations screen in phase 1, owner decision Q3), load failures and deciding a decision.
+ * Settings has its own file, `settings.test.ts`.
  */
 import type { Decision } from '@cc/schemas';
 import { describe, expect, it } from 'vitest';
 
 import { App } from '../../src/renderer/app/app.js';
 import { NAV, routeOfLink } from '../../src/renderer/app/routes.js';
-import { allByTest, byTest, queryByTest, textOf, type VNode } from '../../src/renderer/ui/vnode.js';
+import { byTest, queryByTest, textOf, type VNode } from '../../src/renderer/ui/vnode.js';
 import { apiError, click, startApp, type } from './harness.js';
 
 const home = {
@@ -195,134 +195,5 @@ describe('Decisions', () => {
         optionId: 'o1',
       },
     ]);
-  });
-});
-
-describe('Settings', () => {
-  const principals = [
-    {
-      name: 'cli-default',
-      kind: 'cli',
-      scopes: ['read', 'items:write'],
-      workstreamFilter: 'all',
-      sensitiveAccess: false,
-    },
-    {
-      name: 'old-agent',
-      kind: 'mcp_client',
-      scopes: ['read'],
-      workstreamFilter: 'all',
-      sensitiveAccess: false,
-      revokedAt: '2026-11-01T00:00:00Z',
-    },
-  ];
-
-  it('Agent access grants and revokes scopes, revokes a principal and adds one', async () => {
-    const app = await startApp(
-      {
-        'principals.list': () => ({ principals, total: principals.length }),
-        'principals.update': () => ({ principal: principals[0] }),
-        'principals.revoke': () => ({ principal: principals[0] }),
-        'principals.create': () => ({
-          principal: principals[0],
-          tokenPath: '/tmp/x/run/tokens/claude-code.token',
-        }),
-      },
-      { screen: 'settings' },
-    );
-    const grant = byTest(app.tree(), 'scope-cli-default-items:claim');
-    grant.props.onCheck?.(true);
-    await app.settle();
-    expect(app.callsOf('principals.update')).toEqual([
-      { name: 'cli-default', scopes: ['read', 'items:write', 'items:claim'] },
-    ]);
-    // A revoked principal shows its scopes but offers no changes.
-    expect(allByTest(app.tree(), 'scope-old-agent-read')).toEqual([]);
-    expect(queryByTest(app.tree(), 'revoke-old-agent')).toBeUndefined();
-
-    await click(app, byTest(app.tree(), 'revoke-cli-default'));
-    expect(app.callsOf('principals.revoke')).toEqual([{ name: 'cli-default' }]);
-
-    const form = byTest(app.tree(), 'add-principal');
-    type(byTest(form, 'principal-name'), 'claude-code');
-    byTest(form, 'add-scope-meetings:capture').props.onCheck?.(true);
-    await click(app, byTest(form, 'add-principal-submit'));
-    expect(app.callsOf('principals.create')).toEqual([
-      { name: 'claude-code', kind: 'mcp_client', scopes: ['read', 'meetings:capture'] },
-    ]);
-    expect(textOf(byTest(app.tree(), 'flash'))).toMatch(
-      /claude-code added\. Its token is in .*claude-code\.token/,
-    );
-  });
-
-  it('AC-07-03 Add client creates an mcp_client principal with the MCP defaults and prints its registration command (04 §8 rule 3)', async () => {
-    const registered = {
-      name: 'claude-code',
-      kind: 'mcp_client',
-      scopes: ['read', 'items:write'],
-      workstreamFilter: 'all',
-      sensitiveAccess: false,
-    };
-    const listed = [...principals];
-    const app = await startApp(
-      {
-        'principals.list': () => ({ principals: listed, total: listed.length }),
-        'principals.create': () => {
-          listed.push(registered);
-          return { principal: registered, tokenPath: '/tmp/x/run/tokens/claude-code.token' };
-        },
-      },
-      { screen: 'settings' },
-    );
-    // The revoked MCP client gets no command.
-    expect(textOf(byTest(app.tree(), 'mcp-registrations'))).toBe('No MCP client yet.');
-    const form = byTest(app.tree(), 'add-mcp-client');
-    await click(app, byTest(form, 'add-mcp-client-submit'));
-    expect(app.callsOf('principals.create')).toEqual([
-      {
-        name: 'claude-code',
-        kind: 'mcp_client',
-        scopes: [
-          'read',
-          'items:write',
-          'items:claim',
-          'decisions:propose',
-          'meetings:capture',
-          'connectors:read',
-        ],
-      },
-    ]);
-    const command = 'claude mcp add command-center -- cc-axi mcp --principal claude-code';
-    expect(textOf(byTest(app.tree(), 'flash'))).toBe(
-      `claude-code added. Register it with: ${command}`,
-    );
-    expect(textOf(byTest(app.tree(), 'mcp-command-claude-code'))).toBe(command);
-
-    type(byTest(app.tree(), 'mcp-client'), 'codex');
-    await app.settle();
-    expect(textOf(byTest(app.tree(), 'mcp-command-claude-code'))).toBe(
-      'codex mcp add command-center -- cc-axi mcp --principal claude-code',
-    );
-    type(byTest(app.tree(), 'mcp-client'), 'other');
-    await app.settle();
-    expect(JSON.parse(textOf(byTest(app.tree(), 'mcp-command-claude-code')))).toEqual({
-      mcpServers: {
-        'command-center': { command: 'cc-axi', args: ['mcp', '--principal', 'claude-code'] },
-      },
-    });
-
-    type(byTest(app.tree(), 'mcp-client-name'), 'Not Valid');
-    await click(app, byTest(app.tree(), 'add-mcp-client-submit'));
-    expect(app.callsOf('principals.create')).toHaveLength(1);
-    expect(textOf(byTest(app.tree(), 'flash'))).toMatch(/lower-case letters/);
-  });
-
-  it('lists the pushed notification kinds and shows the AI placeholder without calling anything', async () => {
-    const notifications = await startApp({}, { screen: 'settings', tab: 'notifications' });
-    expect(allByTest(notifications.tree(), 'pushed-escalation')).toHaveLength(1);
-    expect(notifications.calls).toEqual([]);
-    const ai = await startApp({}, { screen: 'settings', tab: 'ai' });
-    expect(textOf(byTest(ai.tree(), 'ai-placeholder'))).toMatch(/No AI runs/);
-    expect(ai.calls).toEqual([]);
   });
 });

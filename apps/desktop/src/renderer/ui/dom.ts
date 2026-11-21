@@ -69,3 +69,31 @@ function create(node: VNode | string): Node {
 export function mount(container: Element, node: VNode): void {
   container.replaceChildren(create(node));
 }
+
+/**
+ * Puts text on the clipboard after a click. The window grants no permissions (`hardening.ts`),
+ * so when the asynchronous clipboard refuses, the text is copied from a hidden selection, which
+ * a click allows.
+ */
+export async function copyText(text: string): Promise<boolean> {
+  try {
+    await navigator.clipboard.writeText(text);
+    return true;
+  } catch {
+    // Fall back to copying a selection.
+  }
+  const area = document.createElement('textarea');
+  area.value = text;
+  area.setAttribute('readonly', '');
+  area.style.position = 'fixed';
+  area.style.opacity = '0';
+  document.body.appendChild(area);
+  area.select();
+  try {
+    return document.execCommand('copy');
+  } catch {
+    return false;
+  } finally {
+    area.remove();
+  }
+}

@@ -142,6 +142,9 @@ Privacy rules for the scenario: no client names and no name for the client conta
 | Connector / binding | A plugin that talks to one tool / one configured account of it |
 | Browser session | A persistent, isolated browser profile that a browser connector uses |
 | Principal | A named agent identity with scopes and a token |
+| Agent (in the app) | What Settings calls a principal: an assistant or tool that can work with CC. Its kinds read "AI assistant" (`mcp_client`), "Command line" (`cli`) and "Agent framework" (`external_framework`) |
+| Permissions / permission set | What Settings calls a principal's scopes, each in plain words with the scope ID beside it under Advanced; a set (Helper, Drafts only, Read only, Custom) names a whole scope list ([07 §5](07-agent-friendly-design.md#5-agent-principals-and-scopes) rules 4 and 5) |
+| Remove access | What Settings calls revoking a principal: its token is deleted, after a confirmation |
 | Confirmation | A single-use, payload-bound approval request shown only in the UI |
 | Standing approval | A scoped, revocable pre-approval for a class of actions |
 | Discovery | An AI-assisted, supervised session that researches every route to a service, lets the user pick one, proves communication live, and ends in a connector-spec report |
@@ -156,7 +159,11 @@ Privacy rules for the scenario: no client names and no name for the client conta
 | Human step | A step only the user can do (sign-in, CAPTCHA, a code); recorded as a procedure, never a value |
 | Development request | A tracked request to build a connector, an adapter or an engine change, reviewed on the review screen |
 | Review screen | The human-only screen where the user approves, rejects or defers development requests |
-| Last good backup | The newest backup archive that completed, shown with the last restore test |
+| Last good backup | The newest backup archive that completed, shown with the last restore test; the app shows it as "Last backup" |
+| Backup password | What the app calls the backup passphrase ([04 §9.1](04-platform.md#91-backups) rule 3) |
+| Second copy | What the app calls the off-machine backup destination (04 §9.1 rule 5) |
+| Restore check | What the app calls the restore test (04 §9.1 rule 7) |
+| Backup state in words | `ok` "Protected", `warning` "Needs attention", `failing` "Not working", `not_configured` "Only on this computer" |
 | Dirty-tree mode | The labelled start from an engine checkout with uncommitted changes or lockfile drift ([04 §10](04-platform.md#10-packaging-updates-and-os-support) rule 4). Named apart from connector developer mode by owner decision, 10 Nov 2026 |
 | Connector developer mode | Settings → Developer → Load unpacked connector: a local connector loaded with an "unsigned" badge ([05 §15.5](05-connectors.md#155-connector-developer-mode)) |
 | Rebuild now | The in-app rebuild CC offers when the running app is older than the engine checkout the user pulled; it reads the checkout and writes only build output, outside it ([04 §10](04-platform.md#10-packaging-updates-and-os-support) rule 2; owner decisions C1 and Rebuild now, 10 Nov 2026) |

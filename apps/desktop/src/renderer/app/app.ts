@@ -32,6 +32,8 @@ export interface AppOptions {
   readonly call: (method: string, params?: unknown) => Promise<unknown>;
   readonly render: (node: VNode) => void;
   readonly now?: () => number;
+  /** The clipboard; without one, Copy reports that it did not work. */
+  readonly copy?: (text: string) => Promise<boolean>;
 }
 
 type Loaded =
@@ -63,6 +65,7 @@ export class App {
         this.render();
       },
       now: () => (options.now ?? Date.now)(),
+      copy: (text) => (options.copy === undefined ? Promise.resolve(false) : options.copy(text)),
       keep: <T extends object>(key: string, init: () => T): T => {
         let value = this.#memory.get(key) as T | undefined;
         if (value === undefined) {

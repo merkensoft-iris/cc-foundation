@@ -21,6 +21,8 @@ export interface Harness {
   /** The params of every call of a method. */
   callsOf(method: string): Record<string, unknown>[];
   answers: Record<string, Answer>;
+  /** What Copy put on the clipboard. */
+  readonly copied: string[];
 }
 
 /** An API error, as `window.cc.invoke` rejects with it. */
@@ -35,6 +37,7 @@ export async function startApp(
 ): Promise<Harness> {
   let last: VNode | undefined;
   const calls: Harness['calls'] = [];
+  const copied: string[] = [];
   const harness: Partial<Harness> & { answers: Record<string, Answer> } = { answers };
   const app = new App({
     call: async (method, params) => {
@@ -48,6 +51,10 @@ export async function startApp(
       last = node;
     },
     now: () => now,
+    copy: (text) => {
+      copied.push(text);
+      return Promise.resolve(true);
+    },
   });
   const settle = async () => {
     for (let i = 0; i < 10; i += 1) await new Promise((resolve) => setTimeout(resolve, 0));
@@ -57,6 +64,7 @@ export async function startApp(
   return Object.assign(harness, {
     app,
     calls,
+    copied,
     tree: () => {
       if (last === undefined) throw new Error('nothing rendered');
       return last;
