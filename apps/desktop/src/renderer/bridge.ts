@@ -25,6 +25,8 @@ export type StartMode =
 export interface ShellInfo {
   readonly mode: StartMode;
   readonly version: string;
+  /** The extension API version of this `window.cc` contract (08 §4.3, ADR 0003 decision 1). */
+  readonly apiVersion: number;
 }
 
 /** The Rebuild now offer, as main sends it (`src/main/rebuild-offer.ts`). */
@@ -37,9 +39,13 @@ export type RebuildState =
   | { readonly kind: 'restarting' };
 
 export interface CcBridge {
-  /** One local API call as the user. Rejects with a `CcError`. */
+  /**
+   * One local API call as the user. Main passes only the methods marked `ui` in @cc/schemas
+   * (ADR 0003 decision 9); any other rejects with E_FORBIDDEN or E_USAGE. Rejects with a
+   * `CcError`.
+   */
   invoke(method: string, params?: unknown): Promise<unknown>;
-  /** The shell's mode and version. */
+  /** The shell's mode, version and `window.cc` API version. */
   shell(): Promise<ShellInfo>;
   /** Deep links opened while the app runs; returns an unsubscribe function. */
   onNavigate(listener: (route: Route) => void): () => void;

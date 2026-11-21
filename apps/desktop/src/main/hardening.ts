@@ -3,6 +3,14 @@
  * isolation, the sandbox, no Node integration, a strict CSP, no remote content, window
  * opening denied, navigation blocked and every permission request denied.
  *
+ * The renderer has no network (rule D3, ADR 0003 decision 9). The CSP and `webRequest` do not
+ * see WebRTC, which ADR 0003 measured sending STUN over UDP and TURN over TCP past both. So
+ * every web contents uses the WebRTC IP handling policy `disable_non_proxied_udp` (no UDP
+ * that does not go through the proxy), and the renderer's session (the default session, which
+ * main uses for nothing else) sends everything through a proxy on a port where nothing
+ * listens, loopback included. With both, none of the prototype's 25 escape attempts reached a
+ * loopback probe; `test/app/hostile-renderer.app.test.ts` repeats that against the app.
+ *
  * The fuses of 04 §10 rule 5 are flipped in the packaged binary by `@cc/build` (P1-16); their
  * list is `@cc/build`'s `REQUIRED_FUSES`. This module is what the running shell enforces.
  *
@@ -48,6 +56,21 @@ export const CONTENT_SECURITY_POLICY = [
   "frame-ancestors 'none'",
 ].join('; ');
 
+/** The WebRTC IP handling policy of every web contents (ADR 0003 decision 9). */
+export const WEBRTC_IP_HANDLING_POLICY = 'disable_non_proxied_udp';
+
+/**
+ * The renderer sessions' proxy (ADR 0003 decision 9): port 9 (discard) on loopback, where
+ * nothing answers, and `<-loopback>` removes the implicit bypass, so loopback goes there too.
+ * The app's own pages (`cc-app://`) and main's prompts are served by protocol handlers and
+ * never use it.
+ */
+export const NO_NETWORK_PROXY = {
+  mode: 'fixed_servers',
+  proxyRules: 'http://127.0.0.1:9',
+  proxyBypassRules: '<-loopback>',
+} as const;
+
 /**
  * URLs a session may load: its own origin's pages (the app's, or for the prompt session main's
  * prompt origin), and DevTools in development.
@@ -75,6 +98,7 @@ export interface HardenableSession {
   ): void;
   setPermissionCheckHandler(handler: (...args: unknown[]) => boolean): void;
   setDevicePermissionHandler(handler: (...args: unknown[]) => boolean): void;
+  setProxy(config: typeof NO_NETWORK_PROXY): Promise<void>;
   readonly webRequest: {
     onBeforeRequest(
       listener: (
@@ -86,8 +110,9 @@ export interface HardenableSession {
 }
 
 /**
- * Denies every permission and cancels every request that is not for the session's origin
- * (`origin`, the app's by default).
+ * Denies every permission, cancels every request that is not for the session's origin
+ * (`origin`, the app's by default) and sends the rest through the no-network proxy. Resolves
+ * once the proxy is in place; no window may open before that.
  */
 export function hardenSession(
   session: HardenableSession,
@@ -96,7 +121,7 @@ export function hardenSession(
     readonly origin?: string;
     readonly onBlocked?: (url: string) => void;
   },
-): void {
+): Promise<void> {
   session.setPermissionRequestHandler((_webContents, _permission, callback) => callback(false));
   session.setPermissionCheckHandler(() => false);
   session.setDevicePermissionHandler(() => false);
@@ -105,6 +130,7 @@ export function hardenSession(
     if (!allowed) options.onBlocked?.(details.url);
     callback({ cancel: !allowed });
   });
+  return session.setProxy(NO_NETWORK_PROXY);
 }
 
 interface PreventableEvent {
@@ -113,6 +139,7 @@ interface PreventableEvent {
 
 /** The parts of `Electron.WebContents` the shell hardens. */
 export interface HardenableWebContents {
+  setWebRTCIPHandlingPolicy(policy: typeof WEBRTC_IP_HANDLING_POLICY): void;
   setWindowOpenHandler(handler: (details: { readonly url: string }) => { action: 'deny' }): void;
   on(event: 'will-navigate', listener: (event: PreventableEvent, url: string) => void): void;
   on(event: 'will-redirect', listener: (event: PreventableEvent, url: string) => void): void;
@@ -120,14 +147,15 @@ export interface HardenableWebContents {
 }
 
 /**
- * Blocks window opening, navigation, redirects and `<webview>` in a web contents. The app
- * is one page; moving between screens never navigates the document, and a reload is not a
- * navigation event.
+ * Blocks window opening, navigation, redirects and `<webview>` in a web contents, and keeps
+ * its WebRTC off the network. The app is one page; moving between screens never navigates
+ * the document, and a reload is not a navigation event.
  */
 export function hardenWebContents(
   contents: HardenableWebContents,
   onBlocked?: (what: string, url: string) => void,
 ): void {
+  contents.setWebRTCIPHandlingPolicy(WEBRTC_IP_HANDLING_POLICY);
   contents.setWindowOpenHandler(({ url }) => {
     onBlocked?.('window.open', url);
     return { action: 'deny' };

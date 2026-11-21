@@ -5,7 +5,8 @@
  * fuses of `fuses.ts`, which electron-builder flips in the Electron binary after packing
  * (`electronFuses`). The rest of the hardening (contextIsolation, sandbox, CSP, navigation
  * and permission handlers, the WebRTC policy and the no-network renderer session of ADR 0003
- * decision 9) is in `@cc/desktop` main, which every build packages.
+ * decision 9, and the `window.cc` method allowlist) is in `@cc/desktop` main
+ * (`src/main/hardening.ts`, `src/main/ipc.ts`), which every build packages.
  *
  * Signing is optional for a personal build (OQ-08-03), so the config never asks for a
  * certificate; electron-builder signs when the environment provides one.

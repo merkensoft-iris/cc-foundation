@@ -43,6 +43,7 @@ import {
   NAVIGATE_CHANNEL,
   REBUILD_STATE_CHANNEL,
   registerBridge,
+  SHELL_API_VERSION,
   type IpcMainLike,
   type ShellInfo,
 } from './ipc.js';
@@ -139,8 +140,11 @@ export interface ShellPlatform {
   onWindowAllClosed(listener: () => void): void;
   onBeforeQuit(listener: (event: { preventDefault(): void }) => void): void;
   whenReady(): Promise<void>;
-  /** After ready: the app protocol, session and web-contents hardening. */
-  prepare(): void;
+  /**
+   * After ready: the app protocol, session and web-contents hardening. It resolves once the
+   * renderer session has no network (ADR 0003 decision 9), before any window opens.
+   */
+  prepare(): Promise<void>;
   /** Makes CC the OS handler of `commandcenter://` (packaged builds only). */
   registerProtocolClient(): void;
   createWindow(title: string): ShellWindow;
@@ -333,7 +337,7 @@ export async function startShell(
   });
 
   await platform.whenReady();
-  platform.prepare();
+  await platform.prepare();
   // safeStorage works only once the app is ready; the core starts after the keys are loaded.
   const keysLoaded = (keyring?.load() ?? Promise.resolve([])).catch((error: unknown) => {
     platform.log('backups.keys_unavailable', {
@@ -384,7 +388,11 @@ export async function startShell(
       approve: (intentId, payloadHash) => core.approveIntent(intentId, payloadHash),
       deny: (intentId) => core.denyIntent(intentId),
     },
-    shellInfo: async () => ({ mode: await modePromise, version: platform.version }),
+    shellInfo: async () => ({
+      mode: await modePromise,
+      version: platform.version,
+      apiVersion: SHELL_API_VERSION,
+    }),
     rebuild: {
       state: async () => {
         await verdictPromise;
