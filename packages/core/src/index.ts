@@ -37,6 +37,19 @@ export {
 export { DEFAULT_RETENTION, selectKept, type Retention } from './backups/retention.js';
 export { systemClock, type Clock, type TimerHandle } from './clock.js';
 export {
+  canonicalJson,
+  ConfirmIntents,
+  DEFAULT_INTENT_TTL_MS,
+  isNeedsConfirmation,
+  MAX_PENDING_INTENTS,
+  payloadHashOf,
+  type ConfirmationIntent,
+  type ConfirmIntentsOptions,
+  type ConfirmRule,
+  type NeedsConfirmation,
+} from './confirm-intents.js';
+export { confirmRules } from './confirm-previews.js';
+export {
   actorOf,
   AUTH_METHODS,
   Dispatcher,
@@ -77,6 +90,7 @@ export {
   humanOnlyOperation,
   humanRequired,
   isHumanOnlyMethod,
+  isShellConfirmed,
   type HumanOnlyOperation,
   type LinkKind,
 } from './human-only.js';

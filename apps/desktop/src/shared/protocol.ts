@@ -10,6 +10,11 @@
  * says `refused` when the core refuses to open the store (a data directory inside a synced
  * folder, 04 §9 rule 5): main then shows the help and exits instead of restarting it.
  *
+ * Tier H confirmations (04 §4.3 rule 4, C-04-12): a safety-critical UI call answers
+ * `{ status: 'needs_confirmation', intent }` instead of running. Only main can approve it, with
+ * `approve-intent { id, intentId, payloadHash }` on this channel; the host answers with
+ * `intent-result`. `deny-intent` drops it. The UI port has no message that approves.
+ *
  * UI calls do not travel on this channel: they go over the transferred port as
  * `{ id, method, params }` and come back as `{ id, result }` or `{ id, error }`, the shape
  * `@cc/core`'s `serveUiPort` serves (04 §4.3 rule 1: calls on that port run as the user).
@@ -66,6 +71,15 @@ export type MainToHost =
     }
   | { readonly type: 'activity'; readonly id: number }
   | { readonly type: 'backup-keys'; readonly keys: readonly SerializedBackupKey[] }
+  /** The shell confirmed a Tier H intent: run it once, if `payloadHash` still matches. */
+  | {
+      readonly type: 'approve-intent';
+      readonly id: number;
+      readonly intentId: string;
+      readonly payloadHash: string;
+    }
+  /** The shell's Cancel: drop the intent. */
+  | { readonly type: 'deny-intent'; readonly intentId: string }
   | { readonly type: 'stop' };
 
 /** core host → main. */
@@ -87,7 +101,24 @@ export type HostToMain =
       readonly message: string;
       readonly help: readonly string[];
     }
-  | { readonly type: 'fatal'; readonly message: string };
+  | { readonly type: 'fatal'; readonly message: string }
+  /** The answer to `approve-intent`: the operation's result, or why it was refused. */
+  | { readonly type: 'intent-result'; readonly id: number; readonly result: unknown }
+  | { readonly type: 'intent-result'; readonly id: number; readonly error: ApiErrorData };
+
+/** What a Tier H UI call answers in place of its result (`@cc/core` `NeedsConfirmation`). */
+export interface ConfirmationIntent {
+  readonly id: string;
+  readonly method: string;
+  /** What the operation will do, written by the core from the canonical payload. */
+  readonly preview: string;
+  readonly payloadHash: string;
+  readonly expiresAt: string;
+}
+export interface NeedsConfirmation {
+  readonly status: 'needs_confirmation';
+  readonly intent: ConfirmationIntent;
+}
 
 /** A UI call on the port, and its answer (`@cc/core` `UiRequest` / `UiResponse`). */
 export interface UiRequest {
@@ -165,9 +196,37 @@ export function parseHostMessage(value: unknown): HostToMain | undefined {
         : undefined;
     case 'fatal':
       return isString(value['message']) ? (value as HostToMain) : undefined;
+    case 'intent-result':
+      return typeof value['id'] === 'number' && ('result' in value || isApiError(value['error']))
+        ? (value as HostToMain)
+        : undefined;
     default:
       return undefined;
   }
+}
+
+function isApiError(value: unknown): value is ApiErrorData {
+  return (
+    isRecord(value) &&
+    isString(value['code']) &&
+    isString(value['message']) &&
+    Array.isArray(value['help']) &&
+    value['help'].every(isString)
+  );
+}
+
+/** A UI call's result that asks the shell to confirm (C-04-12). */
+export function isNeedsConfirmation(value: unknown): value is NeedsConfirmation {
+  if (!isRecord(value) || value['status'] !== 'needs_confirmation') return false;
+  const intent = value['intent'];
+  return (
+    isRecord(intent) &&
+    isString(intent['id']) &&
+    isString(intent['method']) &&
+    isString(intent['preview']) &&
+    isString(intent['payloadHash']) &&
+    isString(intent['expiresAt'])
+  );
 }
 
 export function isUiResponse(value: unknown): value is UiResponse {

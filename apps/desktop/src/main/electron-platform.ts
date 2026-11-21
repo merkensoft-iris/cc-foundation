@@ -8,6 +8,7 @@
  * A packaged build reads the build stamp `cc-build` wrote at its app root (inside the asar)
  * for the start check and Rebuild now; an unpackaged run has none (`start-mode.ts`).
  */
+import { randomBytes } from 'node:crypto';
 import { chmodSync, existsSync, mkdirSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
@@ -32,12 +33,14 @@ import {
 } from 'electron';
 
 import {
+  APP_ORIGIN,
   APP_SCHEME,
   APP_SCHEME_PRIVILEGES,
   APP_URL,
   resolveAppRequest,
   type AppResource,
 } from './app-protocol.js';
+import { CONFIRM_PATH, confirmChoice, confirmPage } from './confirm-prompt.js';
 import { parseShellArgs } from './args.js';
 import { systemClock } from './clock.js';
 import type { CoreLauncher, CoreProcess, MainPort } from './core-supervisor.js';
@@ -155,6 +158,9 @@ export function createElectronPlatform(argv: readonly string[]): ShellPlatform {
     log('secrets.stored', { name });
   };
 
+  /** The page of each open Tier H prompt, by its token (`confirm-prompt.ts`). */
+  const confirmPages = new Map<string, string>();
+
   /** Notifications are kept referenced until closed, or their click handler is lost. */
   const live = new Set<Notification>();
 
@@ -248,7 +254,11 @@ export function createElectronPlatform(argv: readonly string[]): ShellPlatform {
         ),
       );
       protocol.handle(APP_SCHEME, (request) =>
-        respond(resolveAppRequest(request.url, RENDERER_ROOT, themeFile)),
+        respond(
+          resolveAppRequest(request.url, RENDERER_ROOT, themeFile, (token) =>
+            confirmPages.get(token),
+          ),
+        ),
       );
     },
     registerProtocolClient: () => {
@@ -287,6 +297,53 @@ export function createElectronPlatform(argv: readonly string[]): ShellPlatform {
         },
       };
     },
+    confirm: (prompt) =>
+      new Promise<boolean>((resolve) => {
+        // TEMPORARY (C-04-12): replaced by the foundation-owned confirm window (F2).
+        const token = randomBytes(16).toString('hex');
+        confirmPages.set(token, confirmPage(prompt, token));
+        const win = new BrowserWindow({
+          title: prompt.title,
+          width: 560,
+          height: 440,
+          show: false,
+          resizable: false,
+          minimizable: false,
+          maximizable: false,
+          fullscreenable: false,
+          alwaysOnTop: true,
+          // No preload: the page has no script and no `window.cc`.
+          webPreferences: { ...SECURE_WEB_PREFERENCES, devTools: false },
+        });
+        let settled = false;
+        const settle = (confirmed: boolean): void => {
+          if (settled) return;
+          settled = true;
+          clearTimeout(timer);
+          confirmPages.delete(token);
+          log('confirm.answered', { confirmed });
+          resolve(confirmed);
+          if (!win.isDestroyed()) win.close();
+        };
+        const timer = setTimeout(
+          () => settle(false),
+          Math.max(0, Date.parse(prompt.expiresAt) - Date.now()),
+        );
+        // The hardening blocks every navigation; in this window only, a blocked navigation to
+        // one of the prompt's two links is the user's choice.
+        win.webContents.on('will-navigate', (_event, url) => {
+          if (!url.startsWith(`${APP_ORIGIN}${CONFIRM_PATH}`)) return;
+          const choice = confirmChoice(url, token);
+          if (choice !== undefined) settle(choice === 'confirm');
+        });
+        win.on('page-title-updated', (event) => event.preventDefault());
+        win.once('ready-to-show', () => {
+          win.show();
+          win.focus();
+        });
+        win.once('closed', () => settle(false));
+        void win.loadURL(`${APP_ORIGIN}${CONFIRM_PATH}${token}`);
+      }),
     createTray: (): ShellTray => {
       const tray = new Tray(trayImage('normal'));
       return {

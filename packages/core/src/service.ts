@@ -30,6 +30,8 @@ import type { Retention } from './backups/retention.js';
 
 import type { Clock } from './clock.js';
 import { systemClock } from './clock.js';
+import { ConfirmIntents } from './confirm-intents.js';
+import { confirmRules } from './confirm-previews.js';
 import { Dispatcher } from './dispatch.js';
 import {
   type EndpointRecord,
@@ -104,6 +106,8 @@ export interface CoreOptions {
   readonly notify?: (push: BackupPush) => void;
   /** Asks the host to restart the core: a staged restore applies at the next start. */
   readonly requestRestart?: (reason: string) => void;
+  /** How long a Tier H confirmation intent waits for the shell; 5 minutes by default. */
+  readonly intentTtlMs?: number;
   /** Overrides for tests: retention, the restore-test period, chunk size, check interval. */
   readonly backups?: {
     readonly retention?: Retention;
@@ -133,10 +137,23 @@ export interface CoreService extends CoreHandle {
   readonly dispatcher: Dispatcher;
   /** The endpoint as recorded in `<userData>/run/endpoint`. */
   readonly endpoint: EndpointRecord;
-  /** Runs one call as the user, as the UI path does (04 §4.3 rule 1). */
+  /**
+   * Runs one call as the user, in process: the headless runner, the scenario seeder and tests.
+   * No transport reaches it. Unlike the UI port it runs Tier H operations at once.
+   */
   callAsUser(method: string, params?: unknown): Promise<unknown>;
-  /** Serves UI calls from a port as the user (P1-10 passes the MessagePort from main). */
+  /**
+   * Serves UI calls from a port as the user (P1-10 passes the MessagePort from main). Tier H
+   * operations answer with a confirmation intent (C-04-12).
+   */
   serveUi(port: UiPort): void;
+  /**
+   * The app shell confirmed a Tier H intent: runs its payload once (C-04-12). Main calls it
+   * over the core-host channel (`approve-intent`), never the UI port.
+   */
+  approveIntent(id: string, payloadHash: string): Promise<unknown>;
+  /** The app shell's Cancel: drops the intent. */
+  denyIntent(id: string): boolean;
   /** The rhythm jobs the scheduler runs (02 §4.1 rule 2, §4.2 rule 2, §4.7, §7.2 rule 1). */
   readonly rhythm: RhythmJobs;
   /** One watchdog pass (ADR 0002 decision 4); the scheduler runs it every interval. */
@@ -321,6 +338,13 @@ async function serve(options: CoreOptions, basics: Basics): Promise<CoreService>
   });
   registerBackupHandlers(dispatcher, backups);
   options.register?.(dispatcher, handle);
+  const intents = new ConfirmIntents({
+    dispatcher,
+    clock,
+    logger,
+    rules: confirmRules({ principals, backups }),
+    ...(options.intentTtlMs === undefined ? {} : { ttlMs: options.intentTtlMs }),
+  });
 
   const api = new LocalApiServer({
     dispatcher,
@@ -432,7 +456,9 @@ async function serve(options: CoreOptions, basics: Basics): Promise<CoreService>
       return record;
     },
     callAsUser: (method, params) => dispatcher.call({ kind: 'user' }, method, params),
-    serveUi: (port) => serveUiPort(dispatcher, port),
+    serveUi: (port) => serveUiPort(intents, port),
+    approveIntent: (id, payloadHash) => intents.approve(id, payloadHash),
+    denyIntent: (id) => intents.deny(id),
     checkEndpoint,
     busy: () => busyReasons(store),
     setBackupKeys: (keys) => backups.setKeys(keys),

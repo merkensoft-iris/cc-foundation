@@ -7,7 +7,8 @@
  * The profile is the reference scenario with a folder destination, set through the core as the
  * user before the app opens it. In the app the user sets a passphrase (main derives the key and
  * keeps it with `safeStorage`) and backs up; that archive is then corrupted in the folder, the
- * restore test fails, and a second backup is restored from the history.
+ * restore test fails, and a second backup is restored from the history. Restoring is a Tier H
+ * operation (C-04-12): the user confirms it in the prompt main draws, outside the app page.
  */
 import fs from 'node:fs';
 import path from 'node:path';
@@ -129,7 +130,7 @@ describe('P1-17 backups in the app', { timeout: 120_000 }, () => {
     );
   });
 
-  it('AC-04-11 C-04-10 restoring a good archive in the app first backs up the current store, then the core restarts on the restored one', async () => {
+  it('AC-04-11 C-04-10 C-04-12 restoring a good archive in the app is confirmed in the shell, first backs up the current store, then the core restarts on the restored one', async () => {
     // Retention keeps the newest archive of each day (rule 4), so in one day of real time the
     // good archive is the next one; the core test covers the previous day's archive.
     await openBackups();
@@ -142,7 +143,22 @@ describe('P1-17 backups in the app', { timeout: 120_000 }, () => {
     ids.good = archives(folder.path).find((id) => id !== ids.corrupted) ?? '';
     await openAdvanced();
     await app().byTest(`restore-${ids.good}`).click();
+    const opened = app().app.waitForEvent('window');
     await app().byTest(`restore-now-${ids.good}`).click();
+    // C-04-12: main's prompt shows the core's preview; the user confirms there.
+    const prompt = await opened;
+    const preview = prompt.locator('[data-test="confirm-preview"]');
+    await preview.waitFor();
+    await expect(preview.textContent()).resolves.toContain(ids.good);
+    // Choosing closes the prompt window, which may end the click's own wait.
+    const closed = prompt.waitForEvent('close');
+    await prompt
+      .locator('[data-test="confirm-approve"]')
+      .click()
+      .catch((error: unknown) => {
+        if (!prompt.isClosed()) throw error;
+      });
+    await closed;
     await flashSays(/the current data was backed up first/);
     // The restart applies the staged restore before the store opens (04 §9.1 rule 9).
     await expect

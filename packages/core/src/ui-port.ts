@@ -3,12 +3,17 @@
  * Calls arriving here run as actor `user`; the main process attaches it, and the renderer
  * cannot claim another actor because messages carry only a method and params.
  *
+ * Calls go through `ConfirmIntents.fromUi`, not straight to the dispatcher: a Tier H operation
+ * (04 §4.3 rule 4, C-04-12) answers `{ status: 'needs_confirmation', intent }` and changes
+ * nothing until the app shell approves the intent over the main ↔ core-host channel. No
+ * message on this port can approve one.
+ *
  * The desktop shell (P1-10) adapts Electron's `MessagePortMain` to `UiPort`; tests use a
  * Node `MessageChannel`.
  */
 import type { ApiErrorData } from '@cc/schemas';
 
-import type { Dispatcher } from './dispatch.js';
+import type { ConfirmIntents } from './confirm-intents.js';
 import { CoreError, isCoreError } from './errors.js';
 
 export interface UiPort {
@@ -37,8 +42,11 @@ function isUiRequest(value: unknown): value is UiRequest {
   );
 }
 
-/** Serves UI calls from `port` as the user, through the same dispatcher (C-04-01). */
-export function serveUiPort(dispatcher: Dispatcher, port: UiPort): void {
+/**
+ * Serves UI calls from `port` as the user, through the same dispatcher (C-04-01), with Tier H
+ * operations turned into confirmation intents (C-04-12).
+ */
+export function serveUiPort(intents: Pick<ConfirmIntents, 'fromUi'>, port: UiPort): void {
   port.onMessage((message) => {
     if (!isUiRequest(message)) {
       const id =
@@ -51,7 +59,7 @@ export function serveUiPort(dispatcher: Dispatcher, port: UiPort): void {
       });
       return;
     }
-    dispatcher.call({ kind: 'user' }, message.method, message.params).then(
+    intents.fromUi(message.method, message.params).then(
       (result) => port.postMessage({ id: message.id, result }),
       (error: unknown) =>
         port.postMessage({

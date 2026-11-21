@@ -46,6 +46,8 @@ export function realCore(overrides: Omit<CoreOptions, 'userData'> = {}): StartCo
       serveUi: (port) => core.serveUi(port),
       busy: () => core.busy(),
       setBackupKeys: (keys) => core.setBackupKeys(parseKeys(keys)),
+      approveIntent: (intentId, payloadHash) => core.approveIntent(intentId, payloadHash),
+      denyIntent: (intentId) => void core.denyIntent(intentId),
       stop: () => core.stop(),
     };
   };

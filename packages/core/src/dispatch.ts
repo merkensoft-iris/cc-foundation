@@ -104,48 +104,18 @@ export class Dispatcher {
     return [...this.#handlers.keys()];
   }
 
+  /**
+   * Runs steps 1 to 4 of the gate without the handler, and returns the validated params: the
+   * canonical payload a confirmation intent stores (`confirm-intents.ts`). Throws as `call`.
+   */
+  check(caller: Caller, method: string, params: unknown): unknown {
+    return this.#check(caller, method, params).params;
+  }
+
   /** Runs one call through the gate and its handler. Failures are thrown as `CoreError`. */
   async call(caller: Caller, method: string, params: unknown): Promise<unknown> {
-    const registration = this.#handlers.get(method);
-
-    // 1. Human-only, before anything else.
-    if (
-      caller.kind === 'agent' &&
-      (isHumanOnlyMethod(method) || registration?.definition.humanOnly === true)
-    ) {
-      throw humanRequired(method, params);
-    }
-
-    // 2. The method must exist.
-    if (registration === undefined) {
-      throw new CoreError('E_USAGE', `unknown method ${method}`, [
-        AUTH_METHODS.has(method)
-          ? `${method} is only valid as the first call on a connection`
-          : 'Methods are <namespace>.<verb>; see packages/schemas/api/ for the list',
-      ]);
-    }
+    const { registration, params: parsed } = this.#check(caller, method, params);
     const { definition, handler } = registration;
-
-    // 3. Scope.
-    if (caller.kind === 'agent' && definition.scope !== undefined) {
-      if (!caller.principal.scopes.includes(definition.scope)) {
-        throw new CoreError(
-          'E_FORBIDDEN',
-          `principal ${caller.principal.name} lacks scope ${definition.scope} for ${method}`,
-          [AGENT_ACCESS_HELP],
-        );
-      }
-    }
-
-    // 4. Parameters.
-    const parsed = definition.params.safeParse(params ?? {});
-    if (!parsed.success) {
-      throw new CoreError(
-        'E_USAGE',
-        `invalid params for ${method}: ${describeIssues(parsed.error)}`,
-        [`See packages/schemas/api/${method}.json for the parameters`],
-      );
-    }
 
     // 5. The handler, with the transport's actor.
     const context: HandlerContext = {
@@ -155,7 +125,7 @@ export class Dispatcher {
     };
     let result: unknown;
     try {
-      result = await handler(parsed.data, context);
+      result = await handler(parsed, context);
     } catch (thrown) {
       const error = asCoreError(thrown);
       if (isCoreError(error)) throw error;
@@ -181,5 +151,54 @@ export class Dispatcher {
       return checked.data;
     }
     return result;
+  }
+
+  /** Steps 1 to 4 of the gate. */
+  #check(
+    caller: Caller,
+    method: string,
+    params: unknown,
+  ): { readonly registration: Registration; readonly params: unknown } {
+    const registration = this.#handlers.get(method);
+
+    // 1. Human-only, before anything else.
+    if (
+      caller.kind === 'agent' &&
+      (isHumanOnlyMethod(method) || registration?.definition.humanOnly === true)
+    ) {
+      throw humanRequired(method, params);
+    }
+
+    // 2. The method must exist.
+    if (registration === undefined) {
+      throw new CoreError('E_USAGE', `unknown method ${method}`, [
+        AUTH_METHODS.has(method)
+          ? `${method} is only valid as the first call on a connection`
+          : 'Methods are <namespace>.<verb>; see packages/schemas/api/ for the list',
+      ]);
+    }
+    const { definition } = registration;
+
+    // 3. Scope.
+    if (caller.kind === 'agent' && definition.scope !== undefined) {
+      if (!caller.principal.scopes.includes(definition.scope)) {
+        throw new CoreError(
+          'E_FORBIDDEN',
+          `principal ${caller.principal.name} lacks scope ${definition.scope} for ${method}`,
+          [AGENT_ACCESS_HELP],
+        );
+      }
+    }
+
+    // 4. Parameters.
+    const parsed = definition.params.safeParse(params ?? {});
+    if (!parsed.success) {
+      throw new CoreError(
+        'E_USAGE',
+        `invalid params for ${method}: ${describeIssues(parsed.error)}`,
+        [`See packages/schemas/api/${method}.json for the parameters`],
+      );
+    }
+    return { registration, params: parsed.data };
   }
 }

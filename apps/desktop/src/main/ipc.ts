@@ -16,10 +16,22 @@
  * key in the OS secret store (`safeStorage`, `<userData>/secrets/`) and hands it to the core,
  * and the core is told only that a passphrase is set. The passphrase never reaches the core,
  * the store or a log, and is not stored anywhere.
+ *
+ * Tier H operations (04 §4.3 rule 4, C-04-12) answer `needs_confirmation` with an intent
+ * instead of running. Main shows the intent's preview, which the core wrote, in a prompt only
+ * main draws (`ShellPlatform.confirm`); on Confirm it sends `approve-intent` with the intent's
+ * payload hash over the core-host channel and returns the operation's result, on Cancel it
+ * drops the intent. The renderer cannot answer the prompt: it only learns the outcome.
+ * TEMPORARY: the prompt is the minimal one of `confirm-prompt.ts`, until the foundation-owned
+ * confirm window replaces it (the next step of the UI-to-engine plan, F2).
  */
 import type { ApiErrorData } from '@cc/schemas';
 
-import type { StartMode } from '../shared/protocol.js';
+import {
+  isNeedsConfirmation,
+  type ConfirmationIntent,
+  type StartMode,
+} from '../shared/protocol.js';
 import { APP_URL } from './app-protocol.js';
 import { UiCallError } from './core-supervisor.js';
 import type { RebuildState } from './rebuild-offer.js';
@@ -66,9 +78,21 @@ export interface BridgeOptions {
     readonly now: () => Promise<RebuildState>;
     readonly later: () => Promise<RebuildState>;
   };
+  /** Tier H confirmations (C-04-12); absent, a Tier H call is refused and its intent dropped. */
+  readonly intents?: ShellIntents;
   /** Derives and keeps the backup key from a passphrase; absent where there is no secret store. */
   readonly setBackupPassphrase?: (passphrase: string) => Promise<void>;
   readonly log?: (event: string, fields?: Record<string, unknown>) => void;
+}
+
+/** How main confirms a Tier H intent (C-04-12). */
+export interface ShellIntents {
+  /** Shows the core's preview in a prompt main draws; true when the user confirmed. */
+  readonly confirm: (intent: ConfirmationIntent) => Promise<boolean>;
+  /** `approve-intent` over the core-host channel; the operation's result. */
+  readonly approve: (intentId: string, payloadHash: string) => Promise<unknown>;
+  /** `deny-intent` over the core-host channel. */
+  readonly deny: (intentId: string) => void;
 }
 
 const METHOD = /^[a-z]+(?:\.[a-zA-Z]+)+$/;
@@ -122,6 +146,36 @@ async function setBackupPassphrase(options: BridgeOptions, params: unknown): Pro
   }
 }
 
+/** A Tier H call: the user confirms in main's prompt, then main approves the intent. */
+async function confirmInShell(
+  options: BridgeOptions,
+  intent: ConfirmationIntent,
+): Promise<InvokeAnswer> {
+  const intents = options.intents;
+  const notConfirmed = (help: string[]): InvokeAnswer =>
+    failed('E_HUMAN_REQUIRED', `${intent.method} was not confirmed, so nothing changed`, help);
+  if (intents === undefined) {
+    return notConfirmed(['This app cannot show a confirmation; use the installed app']);
+  }
+  let confirmed = false;
+  try {
+    confirmed = await intents.confirm(intent);
+  } catch {
+    options.log?.('ipc.confirm_failed', { method: intent.method });
+  }
+  options.log?.('ipc.confirmation', { method: intent.method, confirmed });
+  if (!confirmed) {
+    intents.deny(intent.id);
+    return notConfirmed(['Do it again, and choose Confirm in the confirmation window']);
+  }
+  try {
+    return { ok: true, result: await intents.approve(intent.id, intent.payloadHash) };
+  } catch (error) {
+    if (error instanceof UiCallError) return { ok: false, error: error.data };
+    return failed('E_CRASH', `${intent.method} failed in the app`);
+  }
+}
+
 export async function handleInvoke(
   options: BridgeOptions,
   event: InvokeEvent,
@@ -139,8 +193,9 @@ export async function handleInvoke(
     };
   }
   if (method === BACKUP_PASSPHRASE_METHOD) return setBackupPassphrase(options, params);
+  let result: unknown;
   try {
-    return { ok: true, result: await options.call(method, params) };
+    result = await options.call(method, params);
   } catch (error) {
     if (error instanceof UiCallError) return { ok: false, error: error.data };
     options.log?.('ipc.internal_error', { method });
@@ -149,6 +204,10 @@ export async function handleInvoke(
       error: { code: 'E_CRASH', message: `${method} failed in the app`, help: [] },
     };
   }
+  if (isNeedsConfirmation(result) && result.intent.method === method) {
+    return confirmInShell(options, result.intent);
+  }
+  return { ok: true, result };
 }
 
 export function registerBridge(ipc: IpcMainLike, options: BridgeOptions): void {

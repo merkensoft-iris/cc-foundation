@@ -8,6 +8,15 @@
  * and the build step that adds each one's handler and schema uses the name given here. The
  * gate refuses a catalogued method by name, before looking for a handler, so an agent gets
  * `E_HUMAN_REQUIRED` even for an operation whose handler does not exist yet.
+ *
+ * Two tiers (04 §4.3 rule 4, C-04-12). Tier H operations (`confirm: 'shell'`) are the
+ * safety-critical ones: a call from the app UI returns a confirmation intent, and the
+ * operation runs only once the app shell has confirmed it (`confirm-intents.ts`). Some are
+ * Tier H only for some payloads, decided in `confirm-previews.ts`: `principals.create` and
+ * `principals.update` when they grant a scope of `GRANT_ONLY_SCOPES`, turn on sensitive access
+ * or widen the workstream filter. `confirmations.approve` is narrowed to `write_external` and
+ * above when its handler arrives (P2-01). Every other operation is Tier R: the UI calls it
+ * directly, and the actor gate and its domain invariants are its protection.
  */
 import { CoreError } from './errors.js';
 
@@ -27,6 +36,12 @@ export interface HumanOnlyOperation {
   readonly target?: string;
   /** Where in the app to go when there is no record to link to. */
   readonly screen?: string;
+  /**
+   * Tier H (`'shell'`): a call from the app UI does not run; it becomes a confirmation intent
+   * the app shell confirms (`confirm-intents.ts`, C-04-12). Without it the operation is Tier R:
+   * the UI calls it directly, and only the actor gate and the domain invariants apply.
+   */
+  readonly confirm?: 'shell';
 }
 
 const op = (entry: HumanOnlyOperation): HumanOnlyOperation => entry;
@@ -39,6 +54,7 @@ export const HUMAN_ONLY_OPERATIONS: readonly HumanOnlyOperation[] = [
     spec: '04 §4.3, 04 §7.3, AC-04-04',
     link: 'confirmations',
     target: 'id',
+    confirm: 'shell',
   }),
   op({
     method: 'confirmations.deny',
@@ -111,6 +127,7 @@ export const HUMAN_ONLY_OPERATIONS: readonly HumanOnlyOperation[] = [
     spec: '04 §4.3, 05',
     link: 'app',
     screen: 'Settings → Connectors',
+    confirm: 'shell',
   }),
   op({
     method: 'connectors.update',
@@ -118,6 +135,7 @@ export const HUMAN_ONLY_OPERATIONS: readonly HumanOnlyOperation[] = [
     spec: '04 §4.3, 05 §15.4',
     link: 'app',
     screen: 'Settings → Connectors',
+    confirm: 'shell',
   }),
   op({
     method: 'connectors.uninstall',
@@ -125,6 +143,7 @@ export const HUMAN_ONLY_OPERATIONS: readonly HumanOnlyOperation[] = [
     spec: '04 §4.3, 05',
     link: 'app',
     screen: 'Settings → Connectors',
+    confirm: 'shell',
   }),
   op({
     method: 'principals.create',
@@ -132,6 +151,7 @@ export const HUMAN_ONLY_OPERATIONS: readonly HumanOnlyOperation[] = [
     spec: '07 §5 rule 1, 04 §4.2 rule 2',
     link: 'app',
     screen: 'Settings → Agent access',
+    confirm: 'shell',
   }),
   op({
     method: 'principals.update',
@@ -139,6 +159,7 @@ export const HUMAN_ONLY_OPERATIONS: readonly HumanOnlyOperation[] = [
     spec: '04 §4.3, 07 §5 rule 1',
     link: 'app',
     screen: 'Settings → Agent access',
+    confirm: 'shell',
   }),
   op({
     method: 'principals.revoke',
@@ -146,6 +167,7 @@ export const HUMAN_ONLY_OPERATIONS: readonly HumanOnlyOperation[] = [
     spec: '07 §5 rule 1, 04 §4.2 rule 2',
     link: 'app',
     screen: 'Settings → Agent access',
+    confirm: 'shell',
   }),
   op({
     method: 'sessions.create',
@@ -153,6 +175,7 @@ export const HUMAN_ONLY_OPERATIONS: readonly HumanOnlyOperation[] = [
     spec: '04 §4.3, 04 §5.4',
     link: 'app',
     screen: 'Settings → Browser sessions',
+    confirm: 'shell',
   }),
   op({
     method: 'sessions.delete',
@@ -160,6 +183,7 @@ export const HUMAN_ONLY_OPERATIONS: readonly HumanOnlyOperation[] = [
     spec: '04 §4.3, 04 §5.4',
     link: 'app',
     screen: 'Settings → Browser sessions',
+    confirm: 'shell',
   }),
   op({
     method: 'discovery.start',
@@ -167,6 +191,7 @@ export const HUMAN_ONLY_OPERATIONS: readonly HumanOnlyOperation[] = [
     spec: '04 §4.3, 06 §4',
     link: 'app',
     screen: 'Connectors → Discover',
+    confirm: 'shell',
   }),
   op({
     method: 'discovery.choose',
@@ -174,6 +199,7 @@ export const HUMAN_ONLY_OPERATIONS: readonly HumanOnlyOperation[] = [
     spec: '04 §4.3, 06 §4 step 2b',
     link: 'app',
     screen: 'Connectors → Discover',
+    confirm: 'shell',
   }),
   op({
     method: 'connectors.activate',
@@ -181,6 +207,7 @@ export const HUMAN_ONLY_OPERATIONS: readonly HumanOnlyOperation[] = [
     spec: '04 §4.3, 05 §15.6',
     link: 'app',
     screen: 'Settings → Connectors',
+    confirm: 'shell',
   }),
   op({
     method: 'connectors.rollback',
@@ -188,6 +215,7 @@ export const HUMAN_ONLY_OPERATIONS: readonly HumanOnlyOperation[] = [
     spec: '04 §4.3, 05 §15.6',
     link: 'app',
     screen: 'Settings → Connectors',
+    confirm: 'shell',
   }),
   op({
     method: 'approvals.grant',
@@ -195,6 +223,7 @@ export const HUMAN_ONLY_OPERATIONS: readonly HumanOnlyOperation[] = [
     spec: '04 §4.3, 04 §7.4 rule 5',
     link: 'app',
     screen: 'Settings → Approvals',
+    confirm: 'shell',
   }),
   op({
     method: 'approvals.revoke',
@@ -209,6 +238,7 @@ export const HUMAN_ONLY_OPERATIONS: readonly HumanOnlyOperation[] = [
     spec: '04 §4.3, 06 §11.1, AC-06-13',
     link: 'requests',
     target: 'id',
+    confirm: 'shell',
   }),
   op({
     method: 'requests.reject',
@@ -258,6 +288,7 @@ export const HUMAN_ONLY_OPERATIONS: readonly HumanOnlyOperation[] = [
     spec: '04 §4.3, 04 §9.1 rule 9, C-04-10',
     link: 'app',
     screen: 'Settings → Backups',
+    confirm: 'shell',
   }),
   op({
     method: 'goals.update',
@@ -277,6 +308,11 @@ export function humanOnlyOperation(method: string): HumanOnlyOperation | undefin
 
 export function isHumanOnlyMethod(method: string): boolean {
   return BY_METHOD.has(method);
+}
+
+/** Whether a UI call of `method` needs the app shell's confirmation (Tier H, C-04-12). */
+export function isShellConfirmed(method: string): boolean {
+  return BY_METHOD.get(method)?.confirm === 'shell';
 }
 
 export const DEEP_LINK_SCHEME = 'commandcenter://';

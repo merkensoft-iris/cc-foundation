@@ -18,6 +18,10 @@
  * core. A staged restore asks for a core restart. A core that refuses to open the store
  * (`<userData>` inside a synced folder, 04 §9 rule 5) is not restarted: the shell shows the
  * help and exits (AC-04-12).
+ *
+ * Tier H operations (04 §4.3 rule 4, C-04-12): the core answers a safety-critical UI call with
+ * a confirmation intent; main asks the user in a prompt it draws (`ShellPlatform.confirm`, one
+ * at a time) and approves the intent over the core-host channel (`ipc.ts`).
  */
 import type { BackupKey } from '@cc/core/backup-keys';
 
@@ -31,6 +35,7 @@ import {
   type SupervisorTiming,
 } from './core-supervisor.js';
 import { BackupKeyring, type SecretStore } from './backup-keys.js';
+import { confirmPromptOf, type ConfirmPrompt } from './confirm-prompt.js';
 import { deepLinkInArgv, parseDeepLink, type Route } from './deep-links.js';
 import {
   NAVIGATE_CHANNEL,
@@ -129,6 +134,12 @@ export interface ShellPlatform {
   /** Makes CC the OS handler of `commandcenter://` (packaged builds only). */
   registerProtocolClient(): void;
   createWindow(title: string): ShellWindow;
+  /**
+   * Asks the user to confirm a Tier H operation in a prompt main draws, outside the app page
+   * (C-04-12); true when they confirmed. It closes unconfirmed at `prompt.expiresAt`.
+   * TEMPORARY: the minimal prompt of `confirm-prompt.ts`, until the confirm window replaces it.
+   */
+  confirm(prompt: ConfirmPrompt): Promise<boolean>;
   createTray(): ShellTray;
   showNotification(notification: ShownNotification, onClick: () => void): void;
   quit(): void;
@@ -337,8 +348,23 @@ export async function startShell(
     log: (event, fields) => platform.log(event, fields),
   });
 
+  // One prompt at a time: a second Tier H call while one is open is not confirmed.
+  let confirming = false;
   registerBridge(platform.ipc, {
     call: (method, params) => core.call(method, params),
+    intents: {
+      confirm: async (intent) => {
+        if (confirming) return false;
+        confirming = true;
+        try {
+          return await platform.confirm(confirmPromptOf(intent));
+        } finally {
+          confirming = false;
+        }
+      },
+      approve: (intentId, payloadHash) => core.approveIntent(intentId, payloadHash),
+      deny: (intentId) => core.denyIntent(intentId),
+    },
     shellInfo: async () => ({ mode: await modePromise, version: platform.version }),
     rebuild: {
       state: async () => {

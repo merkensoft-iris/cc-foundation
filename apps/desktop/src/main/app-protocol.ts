@@ -9,12 +9,15 @@
  * - `/theme.css`: the engine's compiled theme tokens, `cc-theme.css` at the packaged app's
  *   root (`cc-build` writes it); empty in an unpackaged run
  * - `/renderer/<name>.js` (and `.js.map`): the compiled renderer, from the renderer root
+ * - `/confirm/<token>` and `/confirm.css`: main's prompt for a Tier H operation, only while
+ *   that prompt is open (`confirm-prompt.ts`, C-04-12)
  *
  * Everything else is 404. The resolver is pure; `electron-platform.ts` turns its answer
  * into a `Response` inside `protocol.handle`.
  */
 import path from 'node:path';
 
+import { CONFIRM_CSS, CONFIRM_CSS_PATH, confirmTokenOf } from './confirm-prompt.js';
 import { APP_CSS, APP_PAGE } from './renderer-page.js';
 
 export const APP_SCHEME = 'cc-app';
@@ -37,12 +40,14 @@ const RENDERER_FILE = /^\/renderer\/((?:[a-z0-9-]+\/)*[a-z0-9-]+\.js(?:\.map)?)$
 
 /**
  * Maps an app URL to what it serves. `rendererRoot` is the renderer's build directory;
- * `themeFile` the packaged app's compiled theme, when there is one.
+ * `themeFile` the packaged app's compiled theme, when there is one; `confirmPages` the page of
+ * each open Tier H prompt, by token.
  */
 export function resolveAppRequest(
   url: string,
   rendererRoot: string,
   themeFile?: string,
+  confirmPages?: (token: string) => string | undefined,
 ): AppResource {
   let parsed: URL;
   try {
@@ -63,6 +68,16 @@ export function resolveAppRequest(
     return themeFile === undefined
       ? { kind: 'inline', body: '', contentType: 'text/css; charset=utf-8' }
       : { kind: 'file', path: themeFile, contentType: 'text/css; charset=utf-8' };
+  }
+  if (pathname === CONFIRM_CSS_PATH) {
+    return { kind: 'inline', body: CONFIRM_CSS, contentType: 'text/css; charset=utf-8' };
+  }
+  const token = confirmTokenOf(pathname);
+  if (token !== undefined) {
+    const page = confirmPages?.(token);
+    return page === undefined
+      ? { kind: 'not-found' }
+      : { kind: 'inline', body: page, contentType: 'text/html; charset=utf-8' };
   }
   const match = RENDERER_FILE.exec(pathname);
   if (match?.[1] === undefined) return { kind: 'not-found' };
