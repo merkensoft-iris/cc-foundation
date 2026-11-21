@@ -1,10 +1,12 @@
 # 0003. Engine extension API
 
-- **Status:** accepted
+- **Status:** accepted; decisions 5 and 8 and owner decision D-3 superseded by [0008](0008-engine-owned-ui.md) (21 Nov 2026); decision 9 not yet implemented (see the note below)
 - **Date:** 2026-11-10
 - **Task:** P0-10
 - **Closes:** none
 - **Spec:** 08 §4.3, 08 §4.2 (rule D3), 08 §6, 04 §3, 04 §10 (rules 2 and 5), 02 §9.6; proves AC-08-10 as a prototype
+
+> **Note, 21 Nov 2026 (ADR 0008).** The engine now owns the app UI, so the slots of decision 5, the import allowlist of decision 8 (which gains `@cc/ui/v<N>` and the engine's chosen UI libraries) and owner decision D-3 (read-only widgets, a read allowlist in main) are superseded by [ADR 0008](0008-engine-owned-ui.md). Decisions 1 to 4, 6, 7 and 10 and owner decisions D-1 and D-2 stand. **Decision 9 was never implemented:** `@cc/desktop` main sets no WebRTC IP handling policy, no no-network renderer session and no method allowlist, although `packages/build/src/builder-config.ts` says it does. It ships as P1-23 (09 §6.1). The text below is the record as accepted.
 
 ## Question
 
