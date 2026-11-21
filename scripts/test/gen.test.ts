@@ -25,6 +25,7 @@ import {
   runGen,
   SKILL_DIR,
   TEMPLATES_DIR,
+  UI_METHODS_DIR,
   validateFixtures,
 } from '../gen.ts';
 
@@ -46,6 +47,7 @@ function copyRepo(): { path: string; cleanup(): void } {
     CLI_REFERENCE_DIR,
     SKILL_DIR,
     MCP_DIR,
+    UI_METHODS_DIR,
   ]) {
     cpSync(join(root, path), join(dir.path, path), { recursive: true });
   }
@@ -72,6 +74,21 @@ describe('cc:gen', { timeout: 30_000 }, () => {
       const result = await runGen(copy.path, true);
       expect(result.exitCode).toBe(1);
       expect(result.lines.join('\n')).toContain(`DRIFT ${SKILL_DIR}/SKILL.md: changed`);
+    } finally {
+      copy.cleanup();
+    }
+  });
+
+  it("ADR 0003 decision 9 main's window.cc allowlist is generated: a hand-added method fails cc:gen --check", async () => {
+    const copy = copyRepo();
+    try {
+      const file = join(copy.path, UI_METHODS_DIR, 'ui-methods.ts');
+      const text = readFileSync(file, 'utf8');
+      expect(text).toContain("'home.get'");
+      writeFileSync(file, text.replace("'home.get',", "'home.get',\n  'auth.hello',"));
+      const result = await runGen(copy.path, true);
+      expect(result.exitCode).toBe(1);
+      expect(result.lines.join('\n')).toContain(`DRIFT ${UI_METHODS_DIR}/ui-methods.ts: changed`);
     } finally {
       copy.cleanup();
     }

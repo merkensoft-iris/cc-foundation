@@ -260,12 +260,8 @@ export function createElectronPlatform(argv: readonly string[]): ShellPlatform {
       app.on('before-quit', (event) => listener(event));
     },
     whenReady: () => app.whenReady(),
-    prepare: () => {
+    prepare: async () => {
       const allowDevTools = !app.isPackaged;
-      hardenSession(session.defaultSession as unknown as HardenableSession, {
-        allowDevTools,
-        onBlocked: (url) => log('hardening.request_blocked', { url: url.slice(0, 200) }),
-      });
       app.on('web-contents-created', (_event, contents) =>
         hardenWebContents(contents as unknown as HardenableWebContents, (what, url) =>
           log('hardening.blocked', { what, url: url.slice(0, 200) }),
@@ -276,11 +272,6 @@ export function createElectronPlatform(argv: readonly string[]): ShellPlatform {
       );
       // The prompt windows' session: only the prompt origin, no permissions, no DevTools.
       const prompts = session.fromPartition(PROMPT_PARTITION);
-      hardenSession(prompts as unknown as HardenableSession, {
-        allowDevTools: false,
-        origin: PROMPT_ORIGIN,
-        onBlocked: (url) => log('hardening.request_blocked', { url: url.slice(0, 200) }),
-      });
       prompts.protocol.handle(PROMPT_SCHEME, (request) =>
         respond(
           resolvePromptRequest(request.url, {
@@ -290,6 +281,18 @@ export function createElectronPlatform(argv: readonly string[]): ShellPlatform {
           }),
         ),
       );
+      // Both sessions get the no-network proxy before any window opens (ADR 0003 decision 9).
+      await Promise.all([
+        hardenSession(session.defaultSession as unknown as HardenableSession, {
+          allowDevTools,
+          onBlocked: (url) => log('hardening.request_blocked', { url: url.slice(0, 200) }),
+        }),
+        hardenSession(prompts as unknown as HardenableSession, {
+          allowDevTools: false,
+          origin: PROMPT_ORIGIN,
+          onBlocked: (url) => log('hardening.request_blocked', { url: url.slice(0, 200) }),
+        }),
+      ]);
     },
     registerProtocolClient: () => {
       app.setAsDefaultProtocolClient(DEEP_LINK_PROTOCOL);
