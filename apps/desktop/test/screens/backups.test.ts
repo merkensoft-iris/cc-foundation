@@ -1,7 +1,8 @@
 /**
  * The backup screens (04 §9.1, 09 P1-17): "Last good backup" and the state on Home, and
- * Settings → Backups with the human-only Restore (AC-04-11, C-04-10), run and test now, the
- * passphrase and the folder destination.
+ * Settings → Backups: the state in words, Back up now, the backup password and the second copy,
+ * and under Advanced the past backups with the human-only Restore (AC-04-11, C-04-10) and the
+ * restore check.
  */
 import { describe, expect, it } from 'vitest';
 
@@ -95,9 +96,10 @@ describe('Home: last good backup (04 §9.1 rule 8)', () => {
     );
     await click(app, open as never);
     expect(app.app.route).toEqual({ screen: 'settings', tab: 'backups' });
-    expect(textOf(byTest(app.tree(), 'backup-last-good'))).toMatch(
-      /2026-11-12 18:00 UTC · Synced folder/,
+    expect(textOf(byTest(app.tree(), 'backup-last-good'))).toBe(
+      'Last backup 15 hours ago · Synced folder',
     );
+    expect(byTest(app.tree(), 'backup-last-good').props.title).toBe('2026-11-12 18:00 UTC');
   });
 
   it('04 §9.1 rule 8: not_configured is no attention item on Home', async () => {
@@ -110,11 +112,14 @@ describe('Home: last good backup (04 §9.1 rule 8)', () => {
 });
 
 describe('Settings → Backups (04 §9.1)', () => {
-  it('AC-04-11 shows the state, the last good backup and the failed restore test with its reason', async () => {
+  it('AC-04-11 shows the state in words, the last good backup and, under Advanced, the failed restore check with its reason', async () => {
     const app = await startApp(backupApi(), { screen: 'settings', tab: 'backups' });
-    expect(textOf(byTest(app.tree(), 'backup-state'))).toBe('failing');
+    expect(textOf(byTest(app.tree(), 'backup-state'))).toBe('Not working');
+    // Past backups and the restore check are under Advanced, closed until asked for.
+    expect(queryByTest(app.tree(), 'backups-advanced')).toBeUndefined();
+    await click(app, byTest(app.tree(), 'backups-advanced-toggle'));
     expect(textOf(byTest(app.tree(), 'backup-last-test'))).toMatch(
-      /failed.*chunk 3 fails authentication/,
+      /Failed.*chunk 3 fails authentication/,
     );
     expect(textOf(byTest(app.tree(), 'backup-reasons'))).toMatch(/The last restore test failed/);
     // The archive the test failed cannot be restored; the previous one can.
@@ -124,6 +129,7 @@ describe('Settings → Backups (04 §9.1)', () => {
 
   it('AC-04-11 C-04-10 restoring the previous archive in the UI takes a second click, then calls the human-only backups.restore', async () => {
     const app = await startApp(backupApi(), { screen: 'settings', tab: 'backups' });
+    await click(app, byTest(app.tree(), 'backups-advanced-toggle'));
     await click(app, byTest(app.tree(), `restore-${PREVIOUS}`));
     expect(app.callsOf('backups.restore')).toEqual([]);
     expect(textOf(byTest(app.tree(), `restore-confirm-${PREVIOUS}`))).toMatch(
@@ -138,34 +144,62 @@ describe('Settings → Backups (04 §9.1)', () => {
     expect(app.text()).toMatch(/the current data was backed up first/);
   });
 
-  it('04 §9.1 rules 1 and 7: Back up now and Test restore now call the human-only methods', async () => {
+  it('04 §9.1 rules 1 and 7: Back up now and Check now call the human-only methods', async () => {
     const app = await startApp(backupApi(), { screen: 'settings', tab: 'backups' });
     await click(app, byTest(app.tree(), 'backup-run'));
     expect(app.callsOf('backups.run')).toEqual([{}]);
+    await click(app, byTest(app.tree(), 'backups-advanced-toggle'));
     await click(app, byTest(app.tree(), 'backup-test'));
     expect(app.callsOf('backups.test')).toEqual([{}]);
-    expect(app.text()).toMatch(/The restore test failed: the backup archive is damaged/);
+    expect(app.text()).toMatch(/The restore check failed: the backup archive is damaged/);
   });
 
   it('04 §9.1 rules 3 and 5: sets the passphrase (only when both match) and the folder destination', async () => {
     const app = await startApp(backupApi(), { screen: 'settings', tab: 'backups' });
+    // Both are set, so their forms open from Change….
+    expect(textOf(byTest(app.tree(), 'backup-passphrase-state'))).toBe('Set');
+    expect(queryByTest(app.tree(), 'settings-backup-passphrase')).toBeUndefined();
+    await click(app, byTest(app.tree(), 'settings-backup-passphrase-change'));
     type(byTest(app.tree(), 'settings-backup-passphrase'), 'lantern over quillmarsh');
     type(byTest(app.tree(), 'settings-backup-passphrase-confirm'), 'lantern over quillmarsh!');
     await click(app, byTest(app.tree(), 'settings-backup-passphrase-set'));
     expect(app.callsOf('backups.passphrase')).toEqual([]);
-    expect(app.text()).toMatch(/The two passphrases differ/);
+    expect(app.text()).toMatch(/The two passwords differ/);
 
     type(byTest(app.tree(), 'settings-backup-passphrase-confirm'), 'lantern over quillmarsh');
     await click(app, byTest(app.tree(), 'settings-backup-passphrase-set'));
     expect(app.callsOf('backups.passphrase')).toEqual([{ passphrase: 'lantern over quillmarsh' }]);
+    expect(queryByTest(app.tree(), 'settings-backup-passphrase')).toBeUndefined();
 
+    expect(textOf(byTest(app.tree(), 'backup-destination'))).toBe('Synced folder');
+    await click(app, byTest(app.tree(), 'settings-backup-destination-change'));
     type(byTest(app.tree(), 'settings-backup-label'), 'NAS');
     type(byTest(app.tree(), 'settings-backup-path'), '/Volumes/nas/command-center');
     await click(app, byTest(app.tree(), 'settings-backup-destination-set'));
     expect(app.callsOf('backups.destination')).toEqual([
       { destination: { kind: 'folder', label: 'NAS', path: '/Volumes/nas/command-center' } },
     ]);
+    // Stopping the second copy is in the Change… form.
+    expect(queryByTest(app.tree(), 'settings-backup-destination-clear')).toBeUndefined();
+    await click(app, byTest(app.tree(), 'settings-backup-destination-change'));
     await click(app, byTest(app.tree(), 'settings-backup-destination-clear'));
     expect(app.callsOf('backups.destination')[1]).toEqual({ destination: null });
+  });
+});
+
+describe('Settings → Backups for a first-time user', () => {
+  it('04 §9.1 rule 3: until a password and a second copy are set, their forms are open and the state reads "Only on this computer"', async () => {
+    const fresh: BackupStatus = { state: 'not_configured', passphraseSet: false, reasons: [] };
+    const app = await startApp(
+      { ...backupApi(fresh), 'backups.list': () => ({ backups: [], total: 0 }) },
+      { screen: 'settings', tab: 'backups' },
+    );
+    expect(textOf(byTest(app.tree(), 'backup-state'))).toBe('Only on this computer');
+    expect(textOf(byTest(app.tree(), 'backup-last-good'))).toBe('No backup yet');
+    expect(queryByTest(app.tree(), 'settings-backup-passphrase')).toBeDefined();
+    expect(queryByTest(app.tree(), 'settings-backup-label')).toBeDefined();
+    expect(queryByTest(app.tree(), 'settings-backup-destination-clear')).toBeUndefined();
+    await click(app, byTest(app.tree(), 'backups-advanced-toggle'));
+    expect(textOf(byTest(app.tree(), 'backups-advanced'))).toMatch(/No backups yet/);
   });
 });

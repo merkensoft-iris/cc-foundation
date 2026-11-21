@@ -18,6 +18,11 @@ export interface Ui {
   render(): void;
   /** A short message under the header: what an action did, or why it failed. */
   flash(message: string, kind?: 'ok' | 'error'): void;
+  /**
+   * Puts text on the clipboard, such as a command to paste elsewhere; resolves to whether it
+   * worked. It needs no permission beyond the click that asks for it.
+   */
+  copy(text: string): Promise<boolean>;
   /** Milliseconds since the epoch; tests pass a fixed clock. */
   now(): number;
   /**

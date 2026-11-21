@@ -261,7 +261,17 @@ Rules:
 
 1. Principals are created, changed and revoked only in the app (human-only). Every call records the principal in its domain event.
 2. Scopes give least privilege among cooperating agents. They do not secure against code running as the same OS user ([04 §4.2](04-platform.md#42-principals-and-tokens) rule 4). Outward effects stay behind UI-only confirmations.
-3. No `cli`, `mcp_client` or `external_framework` principal has `connectors:invoke`, `discovery:request`, `requests:propose` or `onboarding:apply` by default. Internal orchestrator principals get only what their profile and step allow. The user grants these scopes per principal in Settings → Agent access, for example `onboarding:apply` to `cli-default` while setting up from a terminal (AC-01-06).
+3. No `cli`, `mcp_client` or `external_framework` principal has `connectors:invoke`, `discovery:request`, `requests:propose` or `onboarding:apply` by default. Internal orchestrator principals get only what their profile and step allow. The user grants these scopes per principal in Settings → Agent access, for example `onboarding:apply` to `cli-default` while setting up from a terminal (AC-01-06). Granting one of these four takes an inline confirmation that says what the scope allows and what stays with the user; removing a scope does not.
+4. **Permission sets.** Settings → Agent access names a principal's scopes with a permission set, and offers the sets as a quick choice under Advanced. A set is an exact scope list; any other list is **Custom**. No set holds one of the four scopes of rule 3, so choosing a set never grants them.
+
+| Set | Scopes | Used for |
+|---|---|---|
+| Helper | read, items:write, items:claim, decisions:propose, meetings:capture, connectors:read | the `claude-code` row above; Connect an assistant gives it to every new MCP client ([04 §8](04-platform.md#8-mcp-server) rule 3) |
+| Drafts only | read, items:write | an agent that drafts but never claims work done, such as `grok-cc` |
+| Read only | read | an agent that only looks |
+| Custom | any other list, chosen scope by scope under Advanced | `cli-default`'s defaults are Custom |
+
+5. **Plain labels.** The app shows each scope in plain words, with the scope ID beside it only under Advanced: `read` "See your work", `items:write` "Draft items and update notes", `items:claim` "Mark its work done, with evidence", `decisions:propose` "Suggest decisions", `meetings:capture` "Add notes in a live meeting", `measures:write` "Enter scorecard numbers", `connectors:read` "See connected services", `sessions:read` "See browser sign-in status", and the four of rule 3, marked "Needs care": `connectors:invoke` "Use connected services", `discovery:request` "Ask to set up a new connection", `requests:propose` "Suggest changes to your setup", `onboarding:apply` "Apply setup changes".
 
 ## 6. Agent framework integration
 

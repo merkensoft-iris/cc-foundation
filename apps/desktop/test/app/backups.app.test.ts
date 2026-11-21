@@ -50,10 +50,20 @@ async function flashSays(text: string | RegExp): Promise<void> {
     .toMatch(text);
 }
 
+/** Settings opens on its Overview; Backups is a section of the Settings menu. */
 async function openBackups(): Promise<void> {
   await app().byTest('nav-settings').click();
+  await app().byTest('overview').waitFor();
   await app().byTest('tab-backups').click();
   await app().byTest('backup-status').waitFor();
+}
+
+/** Past backups, restore and the restore check are under Advanced; it stays open once opened. */
+async function openAdvanced(): Promise<void> {
+  if ((await app().byTest('backups-advanced').count()) === 0) {
+    await app().byTest('backups-advanced-toggle').click();
+  }
+  await app().byTest('backups-advanced').waitFor();
 }
 
 beforeAll(async () => {
@@ -84,7 +94,7 @@ describe('P1-17 backups in the app', { timeout: 120_000 }, () => {
     await app().byTest('settings-backup-passphrase').fill(passphrase);
     await app().byTest('settings-backup-passphrase-confirm').fill(passphrase);
     await app().byTest('settings-backup-passphrase-set').click();
-    await flashSays('Backup passphrase set.');
+    await flashSays('Backup password set.');
 
     await app().byTest('backup-run').click();
     await flashSays('Backup written.');
@@ -103,10 +113,11 @@ describe('P1-17 backups in the app', { timeout: 120_000 }, () => {
     bytes[middle] = (bytes[middle] ?? 0) ^ 0xff;
     fs.writeFileSync(file, bytes);
 
+    await openAdvanced();
     await app().byTest('backup-test').click();
-    await flashSays(/The restore test failed/);
-    await expect.poll(() => app().byTest('backup-state').textContent()).toBe('failing');
-    await expect(app().byTest('backup-last-test').textContent()).resolves.toMatch(/failed/);
+    await flashSays(/The restore check failed/);
+    await expect.poll(() => app().byTest('backup-state').textContent()).toBe('Not working');
+    await expect(app().byTest('backup-last-test').textContent()).resolves.toMatch(/Failed/);
     await app().byTest(`backup-${ids.corrupted}`).waitFor();
     await expect(app().byTest(`restore-${ids.corrupted}`).count()).resolves.toBe(0);
 
@@ -129,6 +140,7 @@ describe('P1-17 backups in the app', { timeout: 120_000 }, () => {
       })
       .not.toBe('');
     ids.good = archives(folder.path).find((id) => id !== ids.corrupted) ?? '';
+    await openAdvanced();
     await app().byTest(`restore-${ids.good}`).click();
     await app().byTest(`restore-now-${ids.good}`).click();
     await flashSays(/the current data was backed up first/);

@@ -20,6 +20,8 @@ export interface Props {
   readonly 'aria-label'?: string;
   readonly 'aria-current'?: string;
   readonly 'aria-pressed'?: string;
+  readonly 'aria-expanded'?: string;
+  readonly colspan?: string;
   readonly for?: string;
   readonly id?: string;
   readonly name?: string;

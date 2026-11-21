@@ -8,7 +8,7 @@ import { App } from './app/app.js';
 import { routeOfLink } from './app/routes.js';
 import type { CcBridge, RebuildState, StartMode } from './bridge.js';
 import { describeRebuild } from './rebuild-view.js';
-import { mount } from './ui/dom.js';
+import { copyText, mount } from './ui/dom.js';
 
 export const PROCESS = 'renderer';
 
@@ -58,6 +58,7 @@ async function start(): Promise<void> {
   const app = new App({
     call: (method, params) => window.cc.invoke(method, params),
     render: (node) => mount(container, node),
+    copy: copyText,
   });
   let navigated = false;
   window.cc.onNavigate((route) => {

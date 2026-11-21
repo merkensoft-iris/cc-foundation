@@ -15,14 +15,16 @@ export type AppRoute =
   | { readonly screen: 'issues' }
   | { readonly screen: 'meetings'; readonly ref?: string; readonly from?: string }
   | { readonly screen: 'scorecard'; readonly tab?: 'measures' | 'goals'; readonly ref?: string }
-  | {
-      readonly screen: 'settings';
-      readonly tab?: 'agents' | 'notifications' | 'backups' | 'ai';
-    }
+  | { readonly screen: 'settings'; readonly tab?: SettingsSection }
   /** Onboarding (01 §3): not in the navigation; the app opens it until it is committed. */
   | { readonly screen: 'onboarding'; readonly step?: OnboardingStep };
 
 export type ItemsTab = 'list' | 'review' | 'drafts';
+/**
+ * The Settings pages (09 P1-11): the Overview, then one page per section. The section names
+ * are the ones core error help sends the user to ("Settings → Agent access", "→ Backups").
+ */
+export type SettingsSection = 'overview' | 'backups' | 'agents' | 'notifications' | 'ai';
 export type ScreenName = AppRoute['screen'];
 
 /** The navigation, in its fixed order (owner decision Q9: the layout is the foundation's). */
