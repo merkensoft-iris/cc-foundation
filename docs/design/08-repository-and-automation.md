@@ -7,11 +7,11 @@
 ## 1. Summary
 
 1. CC is built in **three new repositories**, not in workie. workie stays the user's personal workspace. It holds private material (such as `regime/`), and none of it is copied into any CC repository.
-   - **`cc-foundation`**: the essence of the app, modular. A pnpm-workspace TypeScript monorepo of focused packages, published as versioned `@cc/*` packages released in lockstep: schemas, store, domain, frameworks, rhythm, policy, core, the connector SDK and host, the browser host, the orchestrator (profiles, data policy, budgets, the tool loop; no AI SDK), the UI kit with extension slots and theme tokens, the desktop shell, `cc-axi` and the MCP relay, and the build tooling.
-   - **`cc-engine`**: the template a user copies, and the only repository a user clones to set up their own CC. It holds no foundation code: exact pins of the `@cc/*` packages, and all business customisation (configuration, theme, UI widgets in declared slots, framework and pack files, the calendar mapping, `connectors.lock`). Its `AGENTS.md` forbids the engine's own AI from changing code. When the app first starts, it asks the onboarding questions ([01 §3](01-onboarding-and-frameworks.md#3-onboarding-flow)).
+   - **`cc-foundation`**: the essence of the app, modular. A pnpm-workspace TypeScript monorepo of focused packages, published as versioned `@cc/*` packages released in lockstep: schemas, store, domain, frameworks, rhythm, policy, core, the connector SDK and host, the browser host, the orchestrator (profiles, data policy, budgets, the tool loop; no AI SDK), the UI contract `@cc/ui-sdk` and the default UI `@cc/ui` (versioned, [ADR 0008](../adr/0008-engine-owned-ui.md)), the desktop shell (main, preload, confirm window), `cc-axi` and the MCP relay, and the build tooling.
+   - **`cc-engine`**: the template a user copies, and the only repository a user clones to set up their own CC. It holds no foundation backend code: exact pins of the `@cc/*` packages, and all business customisation (configuration, theme, the app UI in `ui/`, framework and pack files, the calendar mapping, `connectors.lock`). The UI is the engine's: it uses `@cc/ui` as it is, restyles it, replaces screens one by one, or replaces it, and an ejected screen is tracked against its upstream version ([ADR 0008](../adr/0008-engine-owned-ui.md)). Its `AGENTS.md` forbids the engine's own AI from changing code; development agents may change `ui/`, `theme/` and config only through PRs the user reviews (§5.2). When the app first starts, it asks the onboarding questions ([01 §3](01-onboarding-and-frameworks.md#3-onboarding-flow)).
    - **`cc-connectors`**: connectors (no AI) and AI adapters (the only AI SDK code), the signed index, and the connector templates. It doubles as the template for a user's own connectors repository.
 2. **Each user owns two private copies:** *your-engine* (from the `cc-engine` template) and *your-connectors* (from the `cc-connectors` template). Copies are made with GitHub's "Use this template", never as forks: a fork of a public repository is public and cannot be made private by itself, and a template copy starts with a single commit and unrelated history.
-3. Architecture rules from [04](04-platform.md) and [05](05-connectors.md) are enforced mechanically, by dependency rules in each repository's CI: AI SDK code only in adapter packages, and none in the foundation; connectors import only the connector SDK; domain packages are pure; engine code reaches the app only through extension points.
+3. Architecture rules from [04](04-platform.md) and [05](05-connectors.md) are enforced mechanically, by dependency rules in each repository's CI: AI SDK code only in adapter packages, and none in the foundation; connectors import only the connector SDK; domain packages are pure; the engine's code reaches the app only through extension points, and its UI only through `window.cc`.
 4. Repeatable work follows firstmate's split ("Logic that can be exact lives in deterministic scripts; work that requires understanding lives in an agent", [07 §2](07-agent-friendly-design.md#2-sources-read)). Scripts (`pnpm cc:*`) do the exact parts. Development skills (`.agents/skills/`) guide an AI developer through the judgement parts and call the scripts.
 5. Everything that can be generated is generated from `packages/schemas` in the foundation: JSON Schemas, MCP and AI tool definitions, the CLI reference and the product skill. CI fails on drift.
 6. Every acceptance criterion in `docs/design` is traced to tests by ID.
@@ -29,7 +29,7 @@
 | Runtime | Electron (main, renderer, `utilityProcess`) and Node LTS for the CLI and headless core | Versions pinned in P0; Electron upgrades are their own PRs |
 | Workspace | pnpm workspaces, frozen lockfile in CI | `pnpm -r` runs package scripts in dependency order |
 | Packages | `@cc/*` foundation packages, released in lockstep at one version; the engine pins them exactly | The package registry is OQ-08-07 |
-| UI | React with Vite in the renderer; engine widgets through `@cc/ui-sdk` | No remote content ([04 §10](04-platform.md#10-packaging-updates-and-os-support)) |
+| UI | The default UI (`@cc/ui`) is built with `h` (a small virtual-node helper), TypeScript and no UI library, and no bundler. The engine chooses its own UI library, if it wants one, and `cc-build` bundles `ui/app.ts` with esbuild under the D3 import allowlist ([ADR 0008](../adr/0008-engine-owned-ui.md)) | No remote content ([04 §10](04-platform.md#10-packaging-updates-and-os-support)). The earlier "React with Vite" row did not match the code |
 | Schemas | zod 4, JSON Schema generated with `z.toJSONSchema()` | One source for API validation, MCP tools, AI tools and record files ([04 §4.1](04-platform.md#41-endpoint-and-protocol)) |
 | Database | SQLite (WAL) through `better-sqlite3`, rebuilt for Electron | FTS5 for search ([03 §12](03-decisions-and-action-items.md#12-persistence)); OQ-08-06 |
 | Dates and recurrence | `temporal-polyfill` (one Temporal per process, imported from `@cc/schemas`) and `rrule-temporal` in floating mode (only in `packages/rhythm`), both pinned exactly ([ADR 0001](../adr/0001-recurrence-and-time-zone-libraries.md)) | Recurrence fixtures from [02 §8.1](02-rhythm-and-calendar.md#81-series-all-times-ist-asiakolkata) decided the choice; they run as `packages/rhythm` fixture tests under three host time zones |
@@ -62,7 +62,7 @@ cc-foundation/
     desktop/                        # @cc/desktop: Electron shell
       src/main/                     # windows, tray, deep links, notifications, idle restart, process supervision
       src/preload/                  # contextBridge: window.cc.invoke(method, params)
-      src/renderer/                 # React UI (the screens listed in 09's P1 build steps) with extension slots
+      src/main/confirm/             # the confirm window (cc-confirm://), the secure prompts and the folder picker (04 §4.3 rule 4)
       src/core-host/                # the core's utilityProcess entry: starts @cc/core, serves the UI port
       src/shared/                   # the main <-> core-host message types
     cli/                            # cc-axi: commands, TOON views, MCP stdio relay, hook installer
@@ -94,7 +94,9 @@ cc-foundation/
                                     # budgets, the tool loop; imports no AI SDK (rule D1)
       profiles/<id>.md              # versioned profile prompts (04 §6.4)
     registry-client/                # index fetch, signature checks, lock verification, install, update, rollback
-    ui-sdk/                         # @cc/ui-sdk: slots, theme tokens and schema types for engine widgets
+    ui-sdk/                         # @cc/ui-sdk/v<N>: the UI contract: the window.cc client generated from the schemas,
+                                    # route types, the screen contract, token(), the `ui` stability marks
+    ui/                             # @cc/ui/v<N>: the default UI: screens, app frame, UI kit, styles/app.css, createApp(overrides)
     build/                          # @cc/build: electron-builder config, fuses, hardening, theme compile; the engine's
                                     # cc-build, cc-start, cc-install-stamp and cc-upgrade commands (a development dependency)
     build-runtime/                  # @cc/build-runtime: build and install stamps, clean-tree check, Rebuild now, idle restart;
@@ -132,12 +134,13 @@ cc-engine/
   pnpm-lock.yaml
   cc.config.ts                      # validated by @cc/schemas: modules on or off, vocabulary, calendars (02 §9.6)
   theme/tokens.json                 # theme tokens
-  ui/                               # widgets in declared slots, built with @cc/ui-sdk only (rule D3)
+  ui/                               # the app UI: app.ts (the composition root), screens/, styles/, .cc-ui.json (the upstream
+                                    # version and hash of each ejected screen); built on @cc/ui-sdk and @cc/ui (rule D3)
   frameworks/                       # custom: templates (01 §9)
   packs/                            # custom packs
   connectors.lock                   # the connector and adapter packages this CC may load (05 §15.6)
   profile.json                      # optional: exported, non-sensitive onboarding answers (01 §9.1)
-  .claude/settings.json             # harness deny rules for edits and shell (spike S9)
+  .claude/settings.json             # harness deny rules for the in-app AI's session (spike S9)
   .codex/config.toml                # read-only sandbox for Codex in this repository (spike S9)
   .github/
     CODEOWNERS                      # the user owns everything
@@ -170,7 +173,7 @@ The signed index lives in `cc-connectors` (it replaces a separate `command-cente
 |---|---|---|
 | D1 | **AI boundary, both sides.** In `cc-foundation`, no package imports an AI SDK (`@anthropic-ai/sdk`, `openai` and the §12 denylist of [05](05-connectors.md#12-no-ai-in-connectors-enforcement)) or starts an AI CLI (`claude`, `codex`); `packages/orchestrator` loads adapters through `AiProvider`. A test also searches the built output for spawns of `claude` or `codex`. In `cc-connectors` and user connectors repositories, only `adapters/ai/*` may do either | [04 §6.1](04-platform.md#61-boundary) |
 | D2 | `connectors/*` (in `cc-connectors` and user connectors repositories) may import only `@cc/connector-sdk` and an allowlist of pure libraries. They may not import Node built-ins for network, files or processes, any AI SDK, or anything under `adapters/`. Adapters may not import `@cc/connector-sdk` | [05 §12](05-connectors.md#12-no-ai-in-connectors-enforcement); the host supplies HTTP and the browser |
-| D3 | `apps/desktop/src/renderer` and the engine's `ui/` import only `@cc/ui-sdk`, `packages/schemas` types and UI libraries. No Node built-ins, no network and no internal runtime packages | [04 §3](04-platform.md#3-process-architecture) rules 1 and 3 |
+| D3 | `packages/ui` (the whole renderer of the default UI) and the engine's `ui/` import only `@cc/ui-sdk`, `@cc/ui`, `packages/schemas` types and UI libraries. No Node built-ins, no network and no internal runtime packages. For the engine, the check is the esbuild-metafile import allowlist (ADR 0003 decision 8, extended by ADR 0008) | [04 §3](04-platform.md#3-process-architecture) rules 1 and 3 |
 | D4 | `domain`, `frameworks`, `rhythm` and `policy` are pure: no I/O, no clock and no randomness. The clock, ID generator and stores are passed in. `rhythm` reaches calendars only through the `calendar@1` contract | Deterministic tests; "the two never mix"; [02](02-rhythm-and-calendar.md) C-02-09 |
 | D5 | Only `packages/core` imports `packages/store`. | One writer, one transaction per command ([03 §12](03-decisions-and-action-items.md#12-persistence)) |
 | D6 | `packages/schemas` imports nothing internal. | No cycles; generation stays simple |
@@ -182,11 +185,11 @@ The engine customises CC only through these, each validated by the foundation (C
 
 1. **`cc.config.ts`**: a typed object checked against `@cc/schemas` at build and at start: modules on or off, vocabulary, default framework parameters, the calendar mapping ([02 §9.6](02-rhythm-and-calendar.md#96-calendar-mapping-the-engines-choice-no-provider-code)).
 2. **Theme tokens** in `theme/tokens.json`.
-3. **UI slots**: widgets in `ui/`, registered for slots the foundation declares, built with `@cc/ui-sdk` (rule D3).
+3. **The app UI** in `ui/`: `ui/app.ts` is the composition root that decides what runs, with `@cc/ui` as it is, restyled, with screens replaced or ejected, or replaced altogether; built with `@cc/ui-sdk` (rule D3). The default UI may keep slots as a convenience ([ADR 0008](../adr/0008-engine-owned-ui.md), replacing the two declared slots of ADR 0003 decision 5).
 4. **Framework and pack files** in `frameworks/` and `packs/`, validated by the foundation's validators ([01 §9](01-onboarding-and-frameworks.md#9-customisation-and-forking), C-01-03).
 5. **`connectors.lock`** ([05 §15.6](05-connectors.md#156-connectorslock-and-the-users-own-connectors)).
 
-The foundation supports extension API N and N−1, so an engine keeps building across one foundation major; `pnpm cc:upgrade` applies codemods for template changes (spike S6). The user runs it locally, pulls merged foundation updates into the engine checkout themselves, and CC offers Rebuild now when the running build is older than the checkout ([04 §10](04-platform.md#10-packaging-updates-and-os-support) rule 2; owner decisions D-1 and C1, 10 Nov 2026). The theme tokens are colours, fonts, radius and density only. The layout is fixed by the foundation, and engine widgets appear only in the slots it declares (owner decision Q9, 10 Nov 2026).
+The foundation supports extension API N and N−1, so an engine keeps building across one foundation major; `pnpm cc:upgrade` applies codemods for template changes (spike S6). The user runs it locally, pulls merged foundation updates into the engine checkout themselves, and CC offers Rebuild now when the running build is older than the checkout ([04 §10](04-platform.md#10-packaging-updates-and-os-support) rule 2; owner decisions D-1 and C1, 10 Nov 2026). Foundation UI changes reach an engine through the same dependency PR: screens the engine has not replaced update with no edits, and `pnpm cc:upgrade --check` lists upstream changes to ejected screens (§6). Owner decision Q9 (10 Nov 2026: tokens only, a fixed layout, widgets in declared slots) is overturned for the app UI by [ADR 0008](../adr/0008-engine-owned-ui.md); it still holds for the confirm window, which main draws and tokens style (04 §4.3 rule 4). The theme tokens stay colours, fonts, radius and density.
 
 ## 5. AGENTS.md for each repository
 
@@ -249,25 +252,28 @@ Rule 11 and rule 12 follow firstmate's `AGENTS.md`: "Use `gh-axi` for GitHub, `c
 # Your Command Center engine: agent instructions
 
 This repository configures one person's Command Center. It holds configuration, theme,
-UI widgets, framework and pack files and connectors.lock, and pins the @cc/* foundation.
+the app UI, framework and pack files and connectors.lock, and pins the @cc/* foundation.
 
 ## Rules
-1. The engine's AI never changes code. You may read files, run cc-axi, and propose
-   changes through Command Center (cc-axi requests propose). You do not edit, create or
-   delete files here, run build scripts that write, commit, or push.
+1. Command Center's own AI never changes code: it has no file or shell tools and its GitHub
+   token has no Contents access (C-08-10). Development agents working for the user may change
+   ui/, theme/, cc.config.ts, frameworks/ and packs/ through pull requests the user reviews.
+   They never touch connectors.lock (rule 2), .claude/, .codex/, .github/, AGENTS.md or
+   CLAUDE.md, and never write UI code that tries to complete a safety-critical operation
+   without the user: those are confirmed by the app shell, not by your screens (04 §4.3).
 2. connectors.lock changes only through an include PR made with pnpm cc:include by the
    firstmate project for this repository; CI's path guard rejects anything else in it.
 3. Never put records, secrets, client names or personal data in this repository.
 4. Use gh-axi for GitHub. Never add an agent name as a commit co-author.
 ```
 
-`AGENTS.md` is advice that a model may ignore, so the rule is enforced in software as well ([04 §11](04-platform.md#11-security-model)):
+The rule's text is the one agreed in [ADR 0008](../adr/0008-engine-owned-ui.md); the `cc-engine` change that installs it is a later engine PR. `AGENTS.md` is advice that a model may ignore, so the rule for Command Center's own AI is enforced in software as well ([04 §11](04-platform.md#11-security-model)). Layers 1 and 2 are unchanged. Layers 3 to 5 apply as described to the in-app AI's session; a development agent runs under a development profile whose harness file allows edits to the paths in rule 1 and nowhere else, and the user reviews its PR. What keeps an AI-edited UI from completing a dangerous operation is not a layer here: it is the shell's confirmation of Tier H operations (04 §4.3 rule 4):
 
 1. **Capability.** The in-app AI has no file or shell tools: CLI adapters run with built-in tools off in an empty run directory outside the repository, and API adapters get only CC's tool definitions ([04 §6.3](04-platform.md#63-providers-and-adapter-rules), [07 §7](07-agent-friendly-design.md#7-mcp-server-surface)).
 2. **Credential.** CC's GitHub token has Issues read and write and no Contents access, so it cannot push.
 3. **Repository.** `main` is protected, the user is the CODEOWNER, and the path guard limits include PRs to `connectors.lock` (§9).
 4. **Runtime.** CC starts normally only from a clean tree that matches the lockfiles; a dirty tree runs in labelled dirty-tree mode ([04 §10](04-platform.md#10-packaging-updates-and-os-support) rule 4), which is not connector developer mode ([05 §15.5](05-connectors.md#155-connector-developer-mode)). CC itself never writes the checkout: the user pulls merged updates, and Rebuild now writes only build output outside the checkout ([04 §10](04-platform.md#10-packaging-updates-and-os-support) rule 2, owner decisions C1 and Rebuild now, 10 Nov 2026; C-01-09).
-5. **Harness.** The engine ships `.claude/settings.json` deny rules for edits and shell, and a read-only Codex sandbox configuration. The exact syntax is confirmed in spike S9 (P0-13).
+5. **Harness.** The engine ships `.claude/settings.json` deny rules for edits and shell, and a read-only Codex sandbox configuration, for the in-app AI's session. The exact syntax is confirmed in spike S9 (P0-13). The development profile for agents that change `ui/` is redesigned in the engine PR that installs rule 1 ([ADR 0008](../adr/0008-engine-owned-ui.md), which amends ADR 0005 decision A).
 
 ### 5.3 `cc-connectors` (and each *your-connectors*)
 
@@ -302,7 +308,8 @@ All scripts live in `scripts/` of the repository named in the table, run with `p
 | `cc:axi-conformance` | foundation | The AXI suite over every `cc-axi` command (AC-07-01, AC-07-02) | P1 | [07 §4.1](07-agent-friendly-design.md#41-axi-principles-applied) |
 | `cc:release --channel beta\|stable [--dry-run]`, `cc:release --tag` | foundation | On a release branch, `--channel` bumps every `@cc/*` package to one version, writes the changelog and commits; after the release PR merges, `--tag` on `main` checks the versions and changelog and creates the tag locally. The owner pushes the tag; CI publishes the packages (`release.yml`, which runs `--verify-tag` first). Two steps because `main` is protected (§9 rule 1) | P1 | §9 |
 | `cc:engine-template pack --out <dir>`, `cc:engine-template pin --engine <dir> --tarballs <dir>` | foundation | `pack` runs `pnpm pack` on every `@cc/*` package; `pin` pins those tarballs into a scratch copy of the `cc-engine` template the way the template's "Pinning the foundation" steps describe a release PR (`@cc/desktop` and `@cc/build`, `overrides` for the rest, `allowBuilds`, the build flags). CI's engine-template job uses it to install, build and start a fresh template copy on the current packages, without a registry | P1 | §9, AC-08-11 |
-| `cc:upgrade [--to <version>] [--check]` | engine | Runs the foundation's codemods for template changes between the pinned and the target version, then type-checks. The user runs it locally; `--check` writes nothing and lists the planned edits, for the engine's CI on dependency PRs (owner decision D-1, 10 Nov 2026). Exits 1 when `--check` finds an upgrade due, when a site is left marked for a person, or when the type-check fails ([ADR 0003](../adr/0003-engine-extension-api.md) decision 6) | P1 | §4.3 |
+| `cc:eject <screen>`, `cc:ui-update` | engine | `cc:eject` copies one default screen from `@cc/ui` into `ui/screens/` and records its upstream version and hash in `ui/.cc-ui.json`. `cc:ui-update` does a 3-way merge of upstream changes into an ejected screen. Both are planned ([ADR 0008](../adr/0008-engine-owned-ui.md)) | P1 | §4.3 |
+| `cc:upgrade [--to <version>] [--check]` | engine | Runs the foundation's codemods for template changes (the UI contract included) between the pinned and the target version, then type-checks. The user runs it locally; `--check` writes nothing, lists the planned edits and reports upstream changes to ejected screens, for the engine's CI on dependency PRs (owner decision D-1, 10 Nov 2026). Exits 1 when `--check` finds an upgrade due, when a site is left marked for a person, or when the type-check fails ([ADR 0003](../adr/0003-engine-extension-api.md) decision 6) | P1 | §4.3 |
 | `cc:include <id>@<version>` | engine | Adds or updates one `connectors.lock` entry from a release (sha256, permissions digest, source). Run by firstmate for include PRs | P5 | [05 §15.6](05-connectors.md#156-connectorslock-and-the-users-own-connectors) |
 | `cc:path-guard` | engine | In CI: a PR labelled `connector-include` may change only `connectors.lock`; fails otherwise | P1 | C-08-09 |
 | `cc:new-connector --id <id> --kind api\|browser [--from-spec <spec.json>]` | connectors | Scaffolds `connectors/<id>/` from `templates/connector-<kind>`. With `--from-spec`, fills the manifest from `manifestDraft`, adds handler stubs per action, fixture placeholders and one failing test per capability, with the spec's proven exchanges as the first live checks | P2 (spec input P6) | [05 §4](05-connectors.md#4-package-layout), [06 §11](06-connector-discovery.md#11-handoff-to-build) |
@@ -313,7 +320,7 @@ All scripts live in `scripts/` of the repository named in the table, run with `p
 
 ## 7. Skills (repeatable work that needs judgement)
 
-Development skills live in `.agents/skills/<name>/SKILL.md` of the repository they serve, with a trigger-shaped `description` in the frontmatter. Each lists its inputs, the scripts it calls, the decisions the agent must make, and when it is done. Skills never re-implement a script. The engine has no development skills: its AI does not develop.
+Development skills live in `.agents/skills/<name>/SKILL.md` of the repository they serve, with a trigger-shaped `description` in the frontmatter. Each lists its inputs, the scripts it calls, the decisions the agent must make, and when it is done. Skills never re-implement a script. The engine's own AI does not develop. The engine has one development skill, for the agents that change its UI ([ADR 0008](../adr/0008-engine-owned-ui.md)).
 
 | Skill | Repository | Use when | Calls | Done when |
 |---|---|---|---|---|
@@ -324,7 +331,9 @@ Development skills live in `.agents/skills/<name>/SKILL.md` of the repository th
 | `cc-change-schema` | foundation | Changing a record or API type | `cc:new-migration`, `cc:gen` | A migration exists if storage changed; a breaking change bumps the major version; fixtures validate |
 | `cc-add-framework-template` | foundation | Adding or changing a framework template or pack | `cc:new-template`, recommender tests | Invariants and bounds are cited to a source; the scenario's recommendations are unchanged unless the change intends it |
 | `cc-add-cli-command` | foundation | Adding a `cc-axi` command or MCP tool | `cc:gen`, `cc:axi-conformance` | The AXI checklist in [07 §4.1](07-agent-friendly-design.md#41-axi-principles-applied) holds; no human-only path is exposed |
-| `cc-change-extension-api` | foundation | Changing a slot, theme token, config field or the lock format | `cc:gen`, codemod tests | API N−1 still builds against the fixture engine, or a codemod upgrades it |
+| `cc-change-ui-contract` | foundation | Changing a method the UI uses (a `ui` stability mark), a route, the screen contract or the composition API of `@cc/ui` | `cc:gen`, codemod tests | A result only gains optional fields within an API version, or the API is bumped with a codemod; the default screens and the fixture UI still build |
+| `cc-engine-ui` | engine | A development agent changes the engine's `ui/` or theme: restyling, replacing or ejecting a screen | `cc:eject`, `cc:upgrade --check`, the UI tests | The UI tests pass; no screen tries to complete a Tier H operation itself; the PR is reviewed by the user |
+| `cc-change-extension-api` | foundation | Changing a theme token, config field or the lock format | `cc:gen`, codemod tests | API N−1 still builds against the fixture engine, or a codemod upgrades it |
 | `cc-review-connector-pr` | connectors | Reviewing a third-party connector, or a connector firstmate built for a user | `cc:test-connector` | The permission diff, flags, the no-AI checks and fixture sanitisation are reviewed and noted in the PR |
 | `cc-include-connector` | engine (firstmate's project for it) | Including a released connector or adapter in a user's engine | `cc:include` | The include PR changes only `connectors.lock` and links the request's issue |
 | `cc-spike-report` | foundation | Running a P0 spike, or any scout task | none | An ADR in `docs/adr/` with question, method, result, decision and evidence |
@@ -336,7 +345,7 @@ The product skill `skills/command-center/SKILL.md` is different: it is generated
 1. **Unit tests** cover the pure packages, table-driven where the design has tables: the recommender rules R1 to R9 and modifiers M1 to M8, lifecycle transitions, escalation levels E0 to E4, click classes K1 to K8, and policy evaluation order.
 2. **Fixture tests:** connectors against recorded HTTP exchanges or saved HTML; providers against recorded transcripts; calendar connectors against fake calendar services with the provider-neutral suite (AC-02-10); discovery against synthetic vendor pages; the fleet-ledger reader against `fixtures/ledger/`.
 3. **Scenario tests:** `cc:seed` seeds the reference scenario with `today = 2026-11-04`, then a fake clock advances through weeks 1 to 4. That covers the first weekly review on 2026-11-13, the monthly absorption on 2026-11-27 and carry-forward. Most acceptance criteria in 01, 02 and 03 run here. P1-15 builds them in `packages/test-kit/test/scenario/` on the seeder of `packages/test-kit/src/scenario/`, through 2026-12-04; checks of steps not yet built wait there as pending tests at the point in the timeline where they belong. The core's scheduler runs the rhythm jobs on the scenario's fake clock (the horizon extension and nightly escalation at 00:05 in the workspace zone, each pre-read at start − lead and the missed check at end + grace, [02 §4](02-rhythm-and-calendar.md#4-rhythm-engine), [§7.2](02-rhythm-and-calendar.md#72-escalation-ladder)), so moving the clock runs each at its spec time and the scenario checks what the core reports it did.
-4. **App end-to-end:** Playwright drives the Electron app built from a fixture engine for the human-only screens (confirmations, review queue, the review screen for requests, meeting runner, onboarding, backups) on macOS and Windows runners. From P1-15, `pnpm e2e:app` runs them from the desktop build on Linux (under `xvfb-run`), macOS and Windows, on profiles `cc:seed`'s seeder prepares (`apps/desktop/test/app/`); the packaged fixture-engine build is the engine-template job's (AC-08-11).
+4. **App end-to-end:** Playwright drives the Electron app built from a fixture engine (on the default UI, and from the engine-template job, on a fixture UI with one replaced screen) for the human-only screens, including the confirm window of Tier H operations, (confirmations, review queue, the review screen for requests, meeting runner, onboarding, backups) on macOS and Windows runners. From P1-15, `pnpm e2e:app` runs them from the desktop build on Linux (under `xvfb-run`), macOS and Windows, on profiles `cc:seed`'s seeder prepares (`apps/desktop/test/app/`); the packaged fixture-engine build is the engine-template job's (AC-08-11).
 5. **Security tests:** canary values for redaction (AC-04-09, AC-06-02), backups (AC-04-10) and human steps (AC-06-10), a guard suite for the browser host (AC-04-01, AC-04-03), a listening-socket check (AC-04-08), and an Electron hardening check (fuses, CSP, navigation blocks).
 6. **Hermetic and worktree-safe:** each test creates its own profile directory under a short base path (`/tmp/cc-test-<random>` on macOS and Linux, a short path under `%TEMP%` on Windows). macOS's default temp directory is long enough to push a UNIX socket path past 104 bytes.
 7. **Cross-repository end-to-end** (P7): fixture engine and connectors repositories in `fixtures/repos/` and a fixture GitHub run the loop of [06 §11](06-connector-discovery.md#11-handoff-to-build), from an approved request to an active connector, and a rollback (AC-07-07).
@@ -353,7 +362,7 @@ The product skill `skills/command-center/SKILL.md` is different: it is generated
 | `cc-connectors` | `release.yml` | A tag on `main` | In a protected environment: build and pack changed packages, upload them to a GitHub Release, compute `sha256` and `permissionsDigest`, rebuild and sign the index |
 | `cc-connectors` | `nightly.yml` | Daily | The `claude_cli` and `codex_cli` flag probes against the latest CLI releases, which open an issue when a flag changes ([04 §6.3](04-platform.md#63-providers-and-adapter-rules)) |
 | *your-connectors* | `ci.yml`, `release.yml` | PRs; tags | As `cc-connectors`, without the index: the release publishes each package with its sha256 (spike S8 for attestations) |
-| `cc-engine` and *your-engine* | `ci.yml` | Every PR and every push to `main` | Install (frozen), validate `cc.config` and the extension files, build and test the user's app, `cc:path-guard`, check every `connectors.lock` entry's sha256 against its release |
+| `cc-engine` and *your-engine* | `ci.yml` | Every PR and every push to `main` | Install (frozen), validate `cc.config` and the extension files, build and test the user's app, run the UI tests on the published headless harness, `cc:path-guard`, check every `connectors.lock` entry's sha256 against its release |
 | `cc-engine` and *your-engine* | Renovate or Dependabot | Schedule | One PR per foundation release, updating every `@cc/*` pin together. The engine's `ci.yml` runs `pnpm cc:upgrade --check` on it and comments the planned codemod edits; the PR merges as it is, and the user runs `pnpm cc:upgrade` locally (owner decision D-1, 10 Nov 2026). After the merge the user pulls; CC never pulls, and offers Rebuild now ([04 §10](04-platform.md#10-packaging-updates-and-os-support) rule 2, owner decision C1, 10 Nov 2026) |
 
 Rules:
@@ -372,9 +381,9 @@ Rules:
 5. **C-08-05** Tests are hermetic: no network beyond loopback fixture servers, no shared profile directory, no fixed socket path. Two worktrees can run the full suite at once.
 6. **C-08-06** Release artifacts come only from CI on a tag of `main`. Signing keys are never available to PR workflows.
 7. **C-08-07** A phase in [09](09-build-plan.md) is done only when `cc:trace --phase <P>` reports every acceptance ID of that phase covered by a passing test, except criteria marked *manual* there.
-8. **C-08-08** The engine holds no foundation code and no provider or connector code. It customises CC only through the extension points of §4.3.
+8. **C-08-08** The engine holds no foundation backend code and no provider or connector code. Its UI code is its own. It customises CC only through the extension points of §4.3.
 9. **C-08-09** In an engine repository, a PR labelled `connector-include` may change only `connectors.lock`, and CI enforces this.
-10. **C-08-10** The engine's AI never changes code. This is enforced by the five layers of §5.2, not by `AGENTS.md` alone.
+10. **C-08-10** Command Center's own AI never changes code. This is enforced by the five layers of §5.2, not by `AGENTS.md` alone. Development agents may change the engine's `ui/`, `theme/`, `cc.config.ts`, `frameworks/` and `packs/` only through PRs the user reviews, and never `connectors.lock`, `.claude/`, `.codex/`, `.github/`, `AGENTS.md` or `CLAUDE.md`.
 
 ## 11. Acceptance criteria
 
@@ -387,8 +396,8 @@ Rules:
 7. **AC-08-07** A commit adding a fixture with a string from the canary denylist, or a value matching a secret pattern, fails CI.
 8. **AC-08-08** Changing an existing file in `packages/store/migrations/` fails CI. `pnpm cc:new-migration add_x` creates the next number.
 9. **AC-08-09** In a fixture engine, a PR labelled `connector-include` that also changes `ui/` fails `cc:path-guard`; one that changes only `connectors.lock` passes.
-10. **AC-08-10** A fixture engine written against extension API N−1 builds against the current foundation, and `pnpm cc:upgrade` moves it to API N with type-checks passing.
-11. **AC-08-11** A fresh private copy of `cc-engine` builds and starts the app with `pnpm install && pnpm build && pnpm start`, contains no foundation source, and opens onboarding on first start.
+10. **AC-08-10** A fixture engine written against extension API N−1 builds against the current foundation, and `pnpm cc:upgrade` moves it to API N with type-checks passing. The fixture includes a `ui/` with a replaced screen (an extension of this criterion by ADR 0008).
+11. **AC-08-11** A fresh private copy of `cc-engine` builds and starts the app with `pnpm install && pnpm build && pnpm start`, contains no foundation backend source, and opens onboarding on first start. Its `ui/` is the composition root over `@cc/ui`, so the first start runs the default UI.
 
 ## 12. Open questions
 
