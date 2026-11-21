@@ -15,7 +15,8 @@
     "@cc/build-runtime": "workspace:*",
     "@cc/core": "workspace:*",
     "@cc/rhythm": "workspace:*",
-    "@cc/schemas": "workspace:*"
+    "@cc/schemas": "workspace:*",
+    "@cc/ui-sdk": "workspace:*"
   },
   "devDependencies": {
     "electron": "45.2.3",

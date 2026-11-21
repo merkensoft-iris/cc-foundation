@@ -1,23 +1,10 @@
 /**
- * The local API results the screens read (packages/schemas/api/<method>.json). Records are the
- * types of @cc/schemas, imported as types only: the renderer loads no package code at run time
- * (rule D3).
+ * Names for the local API results the screens read. Each is the result type of the typed client
+ * in `@cc/ui-sdk/v1`, which `pnpm cc:gen` generates from @cc/schemas (ADR 0008 decision 1), so
+ * no shape here is copied by hand; records are the types of @cc/schemas. Both are imported as
+ * types only: the renderer loads no package code at run time (rule D3).
  */
-import type {
-  ActionItem,
-  AgentPrincipal,
-  BackupLastGood,
-  BackupRecord,
-  BackupState,
-  BackupStatus,
-  Decision,
-  DomainEvent,
-  Evidence,
-  Goal,
-  ItemSummary,
-  MeetingInstance,
-  Risk,
-} from '@cc/schemas';
+import type { Assert, GrantOnlyScope, ListsAll, Result, Scope } from '@cc/ui-sdk/v1';
 
 export type {
   ActionItem,
@@ -29,149 +16,31 @@ export type {
   Goal,
   ItemSummary,
   Risk,
-};
+} from '@cc/schemas';
 
-export interface HomeResult {
-  readonly workspace: string;
-  readonly now: string;
-  readonly today: readonly { ref: string; time: string; title: string }[];
-  readonly attention: {
-    readonly overdue: number;
-    readonly atRisk: number;
-    readonly awaitingReview: number;
-    readonly confirmationsPending: number;
-    readonly sessionsNeedingYou: number;
-  };
-  readonly items: readonly ItemSummary[];
-  readonly counts: { readonly dueSoon: number; readonly open: number };
-  /** "Last good backup" and the backup state (04 §9.1 rule 8). */
-  readonly backup: { readonly state: BackupState; readonly lastGood?: BackupLastGood };
-}
+export type HomeResult = Result<'home.get'>;
+export type ItemsListResult = Result<'items.list'>;
+export type ItemReview = Result<'items.review'>;
+export type ReviewOptions = ItemReview['review'];
+export type HistoryResult = Result<'items.history'>;
+export type DecisionRow = Result<'decisions.list'>['decisions'][number];
+export type IssueRow = Result<'issues.list'>['issues'][number];
+export type RiskRow = Result<'risks.list'>['risks'][number];
+export type WorkstreamRow = Result<'workstreams.list'>['workstreams'][number];
+export type MeasureRow = Result<'measures.list'>['measures'][number];
+export type GoalRow = Result<'goals.list'>['goals'][number];
+export type MeetingsListResult = Result<'meetings.list'>;
+export type MeetingRow = MeetingsListResult['meetings'][number];
+export type MeetingView = Result<'meetings.get'>;
+export type MeetingSectionView = MeetingView['sections'][number];
+export type ReadBackLine = MeetingView['readBack'][number];
+export type PrincipalRow = Result<'principals.list'>['principals'][number];
 
-export interface ItemsListResult {
-  readonly items: readonly ItemSummary[];
-  readonly total: number;
-}
-
-export interface ReviewOptions {
-  readonly confirm: { readonly enabled: boolean; readonly reason?: string };
-  readonly attest: { readonly enabled: boolean };
-  readonly reject: { readonly enabled: boolean };
-  readonly notCheckable: readonly string[];
-}
-
-export interface ItemReview {
-  readonly item: ActionItem;
-  readonly evidence: readonly Evidence[];
-  readonly review: ReviewOptions;
-}
-
-export interface HistoryResult {
-  readonly events: readonly DomainEvent[];
-  readonly total: number;
-}
-
-export interface DecisionRow {
-  readonly ref: string;
-  readonly question: string;
-  readonly status: Decision['status'];
-  readonly dueBy?: string;
-}
-
-export interface IssueRow {
-  readonly ref: string;
-  readonly title: string;
-  readonly status: 'open' | 'resolved' | 'dropped';
-  readonly rank?: number;
-}
-
-export interface RiskRow {
-  readonly ref: string;
-  readonly description: string;
-  readonly trigger: string;
-  readonly status: Risk['status'];
-  readonly workstream: string;
-}
-
-export interface WorkstreamRow {
-  readonly slug: string;
-  readonly name: string;
-  readonly kind: string;
-  readonly status: string;
-}
-
-export interface MeasureRow {
-  readonly ref: string;
-  readonly name: string;
-  readonly unit: string;
-  readonly target: unknown;
-  readonly latest?: { periodStart: string; value: number | boolean; normal: boolean | null };
-}
-
-export interface GoalRow {
-  readonly ref: string;
-  readonly title: string;
-  readonly kind: string;
-  readonly status: string;
-  readonly health: string;
-}
-
-export interface MeetingRow {
-  readonly ref: string;
-  readonly title: string;
-  readonly start: string;
-  readonly end: string;
-  readonly state: MeetingInstance['state'];
-  readonly agendaTemplateId: string;
-}
-
-export interface MeetingsListResult {
-  readonly from: string;
-  readonly to: string;
-  readonly timeZone: string;
-  readonly meetings: readonly MeetingRow[];
-  readonly total: number;
-}
-
-export interface MeetingSectionView {
-  readonly sectionId: string;
-  readonly workstreamId?: string;
-  readonly absorbedFrom?: string;
-  readonly title: string;
-  readonly type: string;
-  readonly timeboxMinutes: number;
-  readonly status: 'pending' | 'done' | 'skipped';
-  readonly allowedOutputs: readonly string[];
-  readonly rows: readonly { ref: string; title: string; flags: readonly string[] }[];
-}
-
-export interface ReadBackLine {
-  readonly kind: 'action_item' | 'decision';
-  readonly ref: string;
-  readonly owner: string;
-  readonly ownerPresent: boolean;
-  readonly deliverable: string;
-  readonly due?: string;
-  readonly doneMeans?: string;
-  readonly state: string;
-}
-
-export interface MeetingView {
-  readonly meeting: MeetingInstance;
-  readonly title: string;
-  readonly agendaTemplateId: string;
-  readonly timeZone: string;
-  readonly workstreams: readonly { id: string; slug: string; name: string }[];
-  readonly sections: readonly MeetingSectionView[];
-  readonly readBack: readonly ReadBackLine[];
-}
-
-export type PrincipalRow = Pick<
-  AgentPrincipal,
-  'name' | 'kind' | 'scopes' | 'workstreamFilter' | 'sensitiveAccess' | 'lastUsedAt' | 'revokedAt'
->;
-
-/** The scopes of 07 §5, in its order. */
+/**
+ * The scopes of 07 §5, in its order. `@cc/ui-sdk/v1` has the same lists (`SCOPES`,
+ * `GRANT_ONLY_SCOPES`); the renderer keeps its own until it is bundled (P1-25), and
+ * `ScopesListed` stops it compiling when a scope of @cc/schemas is missing.
+ */
 export const SCOPES = [
   'read',
   'items:write',
@@ -185,4 +54,19 @@ export const SCOPES = [
   'discovery:request',
   'requests:propose',
   'onboarding:apply',
-] as const;
+] as const satisfies readonly Scope[];
+
+/**
+ * The scopes no agent has by default (07 §5 rule 3): `GrantOnlyScope` of @cc/schemas, the list
+ * the core checks. Granting one is confirmed in the app shell's window (C-04-12).
+ */
+export const GRANT_ONLY_SCOPES = [
+  'connectors:invoke',
+  'discovery:request',
+  'requests:propose',
+  'onboarding:apply',
+] as const satisfies readonly GrantOnlyScope[];
+export type ScopesListed = [
+  Assert<ListsAll<Scope, typeof SCOPES>>,
+  Assert<ListsAll<GrantOnlyScope, typeof GRANT_ONLY_SCOPES>>,
+];

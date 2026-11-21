@@ -56,7 +56,11 @@ import {
 } from '../frameworks/onboarding.js';
 import { Limit, MutationStatus, PersonRef, recordRef, WorkstreamRef } from './common.js';
 
-export interface ApiMethod<P extends z.ZodType = z.ZodType, R extends z.ZodType = z.ZodType> {
+export interface ApiMethod<
+  P extends z.ZodType = z.ZodType,
+  R extends z.ZodType = z.ZodType,
+  U extends z.ZodType | undefined = z.ZodType | undefined,
+> {
   /** `<namespace>.<verb>`. */
   readonly method: string;
   /** Where the method and its fields are specified. */
@@ -76,15 +80,32 @@ export interface ApiMethod<P extends z.ZodType = z.ZodType, R extends z.ZodType 
    * writes the methods marked `ui` into main's allowlist, and main refuses every other method
    * before it reaches the core. Methods only an agent uses are not marked: the connection
    * handshake (`auth.*`), waiting on a confirmation and invoking a connector action as a tool.
+   *
+   * The mark is also a stability mark (ADR 0008 decision 1): a method marked `ui` is part of
+   * the UI contract, `@cc/ui-sdk/v<N>`, whose typed client `pnpm cc:gen` generates from these
+   * definitions. Within one extension API version its params and result change only
+   * compatibly: a result only gains optional fields, and params accept everything they
+   * accepted. `pnpm cc:gen --check` compares them with the contract recorded for the version
+   * (`packages/ui-sdk/contract/v<N>.json`) and fails on any other change until
+   * `EXTENSION_API_CURRENT` is bumped.
    */
   readonly ui: boolean;
+  /**
+   * What the app window sends, when it differs from `params` because main answers part of the
+   * call itself before the core sees it (`apps/desktop/src/main/ipc.ts`): the window names a
+   * backup folder, and main's folder picker supplies its path. Absent, the window sends
+   * `params`. Only a method marked `ui` has one.
+   */
+  readonly uiParams?: U;
   readonly params: P;
   readonly result: R;
 }
 
-function method<P extends z.ZodType, R extends z.ZodType>(
-  definition: ApiMethod<P, R>,
-): ApiMethod<P, R> {
+function method<
+  P extends z.ZodType,
+  R extends z.ZodType,
+  U extends z.ZodType | undefined = undefined,
+>(definition: ApiMethod<P, R, U>): ApiMethod<P, R, U> {
   return definition;
 }
 
@@ -1532,6 +1553,16 @@ export const backupsDestination = method({
   description: 'Sets or clears the off-machine backup destination.',
   humanOnly: true,
   ui: true,
+  // The window names a folder and main's folder picker adds its path (04 §9.1 rule 5).
+  uiParams: z.strictObject({
+    destination: z
+      .discriminatedUnion('kind', [
+        BackupDestination.options[0].omit({ path: true }),
+        BackupDestination.options[1],
+        BackupDestination.options[2],
+      ])
+      .nullable(),
+  }),
   params: z.strictObject({ destination: BackupDestination.nullable() }),
   result: z.strictObject({ status: MutationStatus }),
 });
@@ -1700,4 +1731,26 @@ export function methodJsonSchema(definition: ApiMethod): Record<string, unknown>
           : `${definition.description} Scope: ${definition.scope}.`,
     );
   return z.toJSONSchema(pair, { target: 'draft-2020-12', io: 'input' }) as Record<string, unknown>;
+}
+
+/**
+ * The JSON Schemas (draft 2020-12) of a method as the app window sees it (ADR 0008 decision 1):
+ * what it sends (`uiParams` when main answers part of the call, else `params`) and what it
+ * reads back. `pnpm cc:gen` records them per extension API version as the UI contract.
+ */
+export function uiMethodJsonSchemas(definition: ApiMethod): {
+  readonly params: Record<string, unknown>;
+  readonly result: Record<string, unknown>;
+} {
+  const options = { target: 'draft-2020-12' } as const;
+  return {
+    params: z.toJSONSchema(definition.uiParams ?? definition.params, {
+      ...options,
+      io: 'input',
+    }) as Record<string, unknown>,
+    result: z.toJSONSchema(definition.result, { ...options, io: 'output' }) as Record<
+      string,
+      unknown
+    >,
+  };
 }

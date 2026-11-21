@@ -6,42 +6,22 @@
  * The grammar is closed. Only the token paths below may be set, and each value must match its
  * group's pattern, so a token can never carry `url(`, `;`, `}`, `@import` or anything else
  * that escapes a custom property. Anything else fails the build with the token's path. Tokens
- * are colours, fonts, radius and density only; the layout is fixed (owner decision Q9).
+ * are colours, fonts, radius and density only; the layout is the UI's own (ADR 0008).
  *
- * TODO(P1-18): the token list and grammar move to `@cc/schemas/engine/v1-tokens`, the entry
- * point engine widgets import (ADR 0003 decision 2); the cc-engine template keeps an interim
- * copy in `extension-api/v1/tokens.ts`, which this matches.
+ * The token paths and their CSS names are the UI contract's (`@cc/ui-sdk/v1`, ADR 0008
+ * decision 1), so the `token()` a UI calls and the custom property compiled here always agree;
+ * the value grammar is the build's.
  */
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { THEME_CSS } from '@cc/build-runtime';
+import { cssVariableName, TOKEN_PATHS, type TokenPath } from '@cc/ui-sdk/v1';
 
-export { THEME_CSS };
+export { cssVariableName, THEME_CSS, TOKEN_PATHS, type TokenPath };
 
 export const TOKENS_FILE = 'theme/tokens.json';
 
-export const TOKEN_PATHS = [
-  'color.background',
-  'color.surface',
-  'color.text',
-  'color.textMuted',
-  'color.border',
-  'color.accent',
-  'color.accentText',
-  'color.success',
-  'color.warning',
-  'color.danger',
-  'font.body',
-  'font.heading',
-  'font.mono',
-  'radius.small',
-  'radius.medium',
-  'radius.large',
-  'density.scale',
-] as const;
-
-export type TokenPath = (typeof TOKEN_PATHS)[number];
 type TokenGroup = TokenPath extends `${infer G}.${string}` ? G : never;
 
 const FAMILY = String.raw`(?:"[A-Za-z0-9 _-]{1,64}"|[A-Za-z][A-Za-z0-9 -]{0,63})`;
@@ -56,12 +36,6 @@ export const TOKEN_VALUE_PATTERNS: Readonly<Record<TokenGroup, RegExp>> = {
   radius: /^(?:0|\d{1,3}(?:\.\d{1,3})?(?:px|rem))$/,
   density: /^(?:compact|comfortable|spacious)$/,
 };
-
-/** `color.textMuted` compiles to `--cc-color-text-muted`. */
-export function cssVariableName(path: TokenPath): string {
-  const kebab = path.replace(/[A-Z]/g, (c) => `-${c.toLowerCase()}`).replace('.', '-');
-  return `--cc-${kebab}`;
-}
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value);

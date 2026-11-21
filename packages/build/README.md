@@ -141,7 +141,7 @@ candidate addition to 04 §10 rule 5 once the shell (P1-10) confirms nothing nee
 
 The engine's theme tokens are compiled at build time to `cc-theme.css` (`--cc-*` custom
 properties) under a closed grammar (`src/theme.ts`, ADR 0003 decision 4); the shell serves it
-as `/theme.css`. Not yet here: building the engine's `ui/` widgets into the renderer, which
-needs `@cc/ui-sdk/v1` (a stub today; the build lists any widget file it finds instead of
-dropping it silently), and the full `cc.config` schema (P1-18; until then the build checks the
+as `/theme.css`; the token paths are `@cc/ui-sdk/v1`'s, the ones its `token()` reads. Not yet
+here: bundling the engine's `ui/` on `@cc/ui-sdk/v1` into the app (P1-25; the build lists any
+file it finds there instead of dropping it silently), and the full `cc.config` schema (P1-18; until then the build checks the
 version and that the config is plain data).

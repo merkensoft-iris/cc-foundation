@@ -167,11 +167,11 @@ export function input(
 }
 
 /** A labelled select that sits on the row grid, the same height as an input. */
-export function choice(
+export function choice<V extends string>(
   label: string,
-  value: string,
-  options: readonly { readonly value: string; readonly label: string }[],
-  onInput: (value: string) => void,
+  value: V,
+  options: readonly { readonly value: V; readonly label: string }[],
+  onInput: (value: V) => void,
   test?: string,
 ): VNode {
   return h(
@@ -180,7 +180,13 @@ export function choice(
     h('span', null, label),
     h(
       'select',
-      { value, onInput, 'aria-label': label, ...(test === undefined ? {} : { test }) },
+      {
+        value,
+        // The select yields only its options' values.
+        onInput: (chosen: string) => onInput(chosen as V),
+        'aria-label': label,
+        ...(test === undefined ? {} : { test }),
+      },
       options.map((option) => h('option', { value: option.value }, option.label)),
     ),
   );

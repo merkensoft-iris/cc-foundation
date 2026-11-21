@@ -4,30 +4,28 @@
  * step. The answers are saved through `onboarding.save` after every step, so the wizard can be
  * left and resumed; the app keeps the working copy across screen changes (`ui.keep`).
  *
- * Types come from @cc/schemas as types only: the renderer loads no package code (rule D3).
+ * Types come from @cc/schemas and the typed client of @cc/ui-sdk/v1, as types only: the
+ * renderer loads no package code (rule D3).
  */
 import type {
   CalendarMapping,
   FrameworkRecommendation,
   FrameworkTemplate,
-  methods,
   OnboardingProfile,
   OnboardingStep,
   Pack,
   TailoringAnswers,
   WorkstreamAnswers,
 } from '@cc/schemas';
+import type { Result } from '@cc/ui-sdk/v1';
 
 import type { Ui } from '../../app/screen.js';
 import { h, type Child, type VNode } from '../../ui/vnode.js';
 import { question } from './questions.js';
 
-type ResultOf<M extends { result: { parse(value: unknown): unknown } }> = ReturnType<
-  M['result']['parse']
->;
-export type StatusResult = ResultOf<typeof methods.onboardingStatus>;
-export type RecommendResult = ResultOf<typeof methods.onboardingRecommend>;
-export type Preview = ResultOf<typeof methods.onboardingPreview>['preview'];
+export type StatusResult = Result<'onboarding.status'>;
+export type RecommendResult = Result<'onboarding.recommend'>;
+export type Preview = Result<'onboarding.preview'>['preview'];
 export type Notice = Preview['warnings'][number];
 
 export const WEEKDAYS = ['MO', 'TU', 'WE', 'TH', 'FR', 'SA', 'SU'] as const;

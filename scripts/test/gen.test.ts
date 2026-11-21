@@ -3,7 +3,14 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 
-import { apiMethods, MCP_TOOLS_BUDGET_BYTES, mcpToolList, recordTypes } from '@cc/schemas';
+import {
+  apiMethods,
+  MCP_TOOLS_BUDGET_BYTES,
+  mcpToolList,
+  methods,
+  recordTypes,
+  type ApiMethod,
+} from '@cc/schemas';
 import { createProfileDir } from '@cc/test-kit';
 
 import {
@@ -25,7 +32,11 @@ import {
   runGen,
   SKILL_DIR,
   TEMPLATES_DIR,
+  UI_CLIENT_DIR,
+  UI_CONTRACT_DIR,
   UI_METHODS_DIR,
+  uiContractDir,
+  uiContractGenerator,
   validateFixtures,
 } from '../gen.ts';
 
@@ -48,6 +59,8 @@ function copyRepo(): { path: string; cleanup(): void } {
     SKILL_DIR,
     MCP_DIR,
     UI_METHODS_DIR,
+    UI_CLIENT_DIR,
+    UI_CONTRACT_DIR,
   ]) {
     cpSync(join(root, path), join(dir.path, path), { recursive: true });
   }
@@ -92,6 +105,114 @@ describe('cc:gen', { timeout: 30_000 }, () => {
     } finally {
       copy.cleanup();
     }
+  });
+
+  it('AC-08-10 (UI part) the typed client of @cc/ui-sdk is generated from every method marked ui', async () => {
+    const copy = copyRepo();
+    try {
+      const file = join(copy.path, UI_CLIENT_DIR, 'methods.ts');
+      const text = readFileSync(file, 'utf8');
+      for (const definition of apiMethods) {
+        expect(text.includes(`readonly '${definition.method}': {`)).toBe(definition.ui);
+      }
+      expect(text).toContain('z.input<NonNullable<typeof methods.backupsDestination.uiParams>>');
+      writeFileSync(file, text.replace("readonly 'home.get': {", "readonly 'home.get2': {"));
+      const result = await runGen(copy.path, true);
+      expect(result.exitCode).toBe(1);
+      expect(result.lines.join('\n')).toContain(`DRIFT ${UI_CLIENT_DIR}/methods.ts: changed`);
+    } finally {
+      copy.cleanup();
+    }
+  });
+
+  describe('the UI contract guard (ADR 0008 decision 1)', () => {
+    const dir = uiContractDir(1);
+    const homeGet = methods.homeGet;
+    const withHomeGet = (replacement: ApiMethod | undefined): ApiMethod[] =>
+      apiMethods.flatMap((definition) =>
+        definition === homeGet ? (replacement === undefined ? [] : [replacement]) : [definition],
+      );
+
+    it('records one contract file per method marked ui, and it matches the schemas', async () => {
+      const files = await uiContractGenerator().generate(root);
+      expect(files.map((file) => file.path)).toEqual(
+        apiMethods
+          .filter((definition) => definition.ui)
+          .map((definition) => `${dir}/${definition.method}.json`)
+          .sort(),
+      );
+      expect(await uiContractGenerator().problems?.(root)).toEqual([]);
+    });
+
+    it('AC-08-10 (UI part) an incompatible change to a ui method fails cc:gen, with or without --check, until the API is bumped', async () => {
+      const copy = copyRepo();
+      try {
+        const broken = uiContractGenerator(
+          withHomeGet({ ...homeGet, result: homeGet.result.omit({ workspace: true }) }),
+        );
+        const file = join(copy.path, dir, 'home.get.json');
+        const recorded = readFileSync(file, 'utf8');
+        for (const check of [true, false]) {
+          const result = await runGen(copy.path, check, [broken]);
+          expect(result.exitCode).toBe(1);
+          expect(result.lines).toContain(`UI CONTRACT ${dir}: home.get result.workspace: removed`);
+          expect(result.lines.join('\n')).toContain('bump EXTENSION_API_CURRENT');
+        }
+        // Writing keeps the recorded contract, so running cc:gen does not wave the break through.
+        expect(readFileSync(file, 'utf8')).toBe(recorded);
+        // A bump records the new version beside the old one, which stays for API N−1.
+        const bumped = uiContractGenerator(
+          withHomeGet({ ...homeGet, result: homeGet.result.omit({ workspace: true }) }),
+          2,
+        );
+        const result = await runGen(copy.path, false, [bumped]);
+        expect(result.exitCode).toBe(0);
+        expect(
+          readFileSync(join(copy.path, uiContractDir(2), 'home.get.json'), 'utf8'),
+        ).not.toContain('"workspace"');
+        expect(readFileSync(file, 'utf8')).toBe(recorded);
+      } finally {
+        copy.cleanup();
+      }
+    });
+
+    it('AC-08-10 (UI part) a method that leaves the contract fails cc:gen --check', async () => {
+      const copy = copyRepo();
+      try {
+        for (const replacement of [{ ...homeGet, ui: false }, undefined]) {
+          const result = await runGen(copy.path, true, [
+            uiContractGenerator(withHomeGet(replacement)),
+          ]);
+          expect(result.exitCode).toBe(1);
+          expect(result.lines).toContain(
+            `UI CONTRACT ${dir}: home.get: left the UI contract (removed, or no longer marked ui)`,
+          );
+        }
+      } finally {
+        copy.cleanup();
+      }
+    });
+
+    it('AC-08-10 (UI part) a compatible change updates the recorded contract', async () => {
+      const copy = copyRepo();
+      try {
+        const grown = uiContractGenerator(
+          withHomeGet({
+            ...homeGet,
+            result: homeGet.result.extend({ hint: homeGet.result.shape.workspace.optional() }),
+          }),
+        );
+        const check = await runGen(copy.path, true, [grown]);
+        expect(check.exitCode).toBe(1);
+        expect(check.lines.join('\n')).toContain(`DRIFT ${dir}/home.get.json: changed`);
+        expect(check.lines.join('\n')).not.toContain('UI CONTRACT');
+        expect((await runGen(copy.path, false, [grown])).exitCode).toBe(0);
+        expect(readFileSync(join(copy.path, dir, 'home.get.json'), 'utf8')).toContain('"hint"');
+        expect((await runGen(copy.path, true, [grown])).exitCode).toBe(0);
+      } finally {
+        copy.cleanup();
+      }
+    });
   });
 
   it('AC-08-03 hand-editing a file under packages/schemas/records/ fails cc:gen --check', async () => {

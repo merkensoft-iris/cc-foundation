@@ -10,7 +10,7 @@
  * with one `agent_principal.<verb>` event each (`StorePrincipalDirectory`); the tokens are
  * files under `<userData>/tokens` (04 §4.2).
  */
-import type { Actor, AgentPrincipal, Scope } from '@cc/schemas';
+import { GrantOnlyScope, type Actor, type AgentPrincipal, type Scope } from '@cc/schemas';
 
 import type { Clock } from './clock.js';
 import { AGENT_ACCESS_HELP, CoreError } from './errors.js';
@@ -33,14 +33,10 @@ export const CLI_DEFAULT_SCOPES: readonly Scope[] = [
 
 /**
  * Scopes no `cli`, `mcp_client` or `external_framework` principal has by default; the user
- * grants them per principal (07 §5 rule 3).
+ * grants them per principal (07 §5 rule 3). The list is `GrantOnlyScope` in @cc/schemas, which
+ * the UI contract (`@cc/ui-sdk/v1`) exposes too.
  */
-export const GRANT_ONLY_SCOPES: readonly Scope[] = [
-  'connectors:invoke',
-  'discovery:request',
-  'requests:propose',
-  'onboarding:apply',
-];
+export const GRANT_ONLY_SCOPES: readonly Scope[] = GrantOnlyScope.options;
 
 /** What `auth.prove` returns and what handlers see of their caller. */
 export type PrincipalSummary = Pick<

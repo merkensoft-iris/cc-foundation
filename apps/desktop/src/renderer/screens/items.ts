@@ -12,7 +12,6 @@
 import type {
   DomainEvent,
   Evidence,
-  HistoryResult,
   ItemReview,
   ItemsListResult,
   ItemSummary,
@@ -323,21 +322,21 @@ function detailView(state: ItemsState, ui: Ui): VNode {
 
 async function loadTab(ui: Ui, state: ItemsState): Promise<void> {
   if (state.tab === 'list') {
-    state.list = await ui.call<ItemsListResult>('items.list', {
+    state.list = await ui.call('items.list', {
       ...(state.filter === 'active' ? { state: 'active' } : {}),
       fields: ['owner', 'health', 'workstream'],
       limit: 200,
     });
   } else if (state.tab === 'review') {
-    const claimed = await ui.call<ItemsListResult>('items.list', {
+    const claimed = await ui.call('items.list', {
       state: 'claimed_done',
       limit: 200,
     });
     state.queue = await Promise.all(
-      claimed.items.map((item) => ui.call<ItemReview>('items.review', { ref: item.ref })),
+      claimed.items.map((item) => ui.call('items.review', { ref: item.ref })),
     );
   } else {
-    const drafts = await ui.call<ItemsListResult>('items.list', {
+    const drafts = await ui.call('items.list', {
       state: 'draft',
       fields: ['owner', 'workstream'],
       limit: 200,
@@ -357,8 +356,8 @@ export const itemsScreen: Screen<ItemsState> = {
     const state: ItemsState = { tab: route.tab ?? 'list', filter: kept.filter, text: kept.text };
     if (route.ref !== undefined) {
       const [review, history] = await Promise.all([
-        ui.call<ItemReview>('items.review', { ref: route.ref }),
-        ui.call<HistoryResult>('items.history', { ref: route.ref, limit: 200 }),
+        ui.call('items.review', { ref: route.ref }),
+        ui.call('items.history', { ref: route.ref, limit: 200 }),
       ]);
       state.detail = { review, history: history.events };
       return state;

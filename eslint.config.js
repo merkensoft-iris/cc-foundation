@@ -59,6 +59,13 @@ const D3_GLOBALS = [
   message: `D3: the renderer has no network and no Node access (${name}); it talks to the app only through window.cc.invoke (08 §4.2, 04 §3).`,
 }));
 
+const D3_TYPES_ONLY = {
+  regex: '^(?:@cc/|zod$)',
+  allowTypeImports: true,
+  message:
+    'D3: the renderer and @cc/ui-sdk load no package code at run time; import @cc/* and zod with `import type` (08 §4.2, ADR 0008).',
+};
+
 const D4_MESSAGE =
   'D4: pure packages have no I/O, no clock and no randomness; pass the clock, ID generator and stores in (08 §4.2).';
 const D4_GLOBALS = [
@@ -128,6 +135,12 @@ export default defineConfig(
     files: ['apps/desktop/src/renderer/**'],
     languageOptions: { globals: { ...globals.browser } },
     rules: { 'no-restricted-globals': ['error', ...D3_GLOBALS] },
+  },
+  // D3: the renderer and the UI contract load no package code at run time, so they import
+  // @cc/* packages and zod as types only (ADR 0008; until cc-build bundles the UI, P1-25).
+  {
+    files: ['apps/desktop/src/renderer/**', 'packages/ui-sdk/src/**'],
+    rules: { '@typescript-eslint/no-restricted-imports': ['error', { patterns: [D3_TYPES_ONLY] }] },
   },
   // D4: pure packages. Tests may use the clock (they get it from @cc/test-kit).
   {

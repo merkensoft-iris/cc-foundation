@@ -96,14 +96,7 @@ function toggler(ui: Ui, section: SettingsSection): () => void {
 }
 
 async function loadQuiet(ui: Ui): Promise<QuietTimes> {
-  const status = await ui.call<{
-    profile?: {
-      workspace: {
-        quietHours: { start: string; end: string }[];
-        protectedBlocks: { policy: 'hard' | 'soft' }[];
-      };
-    };
-  }>('onboarding.status', {});
+  const status = await ui.call('onboarding.status', {});
   const workspace = status.profile?.workspace;
   return {
     quietHours: workspace?.quietHours ?? [],
@@ -112,7 +105,7 @@ async function loadQuiet(ui: Ui): Promise<QuietTimes> {
 }
 
 async function loadPrincipals(ui: Ui): Promise<PrincipalRow[]> {
-  const list = await ui.call<{ principals: PrincipalRow[] }>('principals.list', {});
+  const list = await ui.call('principals.list', {});
   return list.principals;
 }
 
@@ -363,7 +356,7 @@ export const settingsScreen: Screen<SettingsState> = {
     switch (section) {
       case 'overview': {
         const [backupStatus, principals, quiet] = await Promise.all([
-          ui.call<BackupStatus>('backups.status', {}),
+          ui.call('backups.status', {}),
           loadPrincipals(ui),
           loadQuiet(ui),
         ]);

@@ -2,18 +2,23 @@
   "name": "@cc/ui-sdk",
   "version": "0.0.0",
   "private": true,
-  "description": "Slots, theme tokens and schema types for engine widgets",
+  "description": "The UI contract: the typed window.cc client generated from @cc/schemas, routes, the screen contract and theme tokens",
   "type": "module",
   "exports": {
-    ".": {
-      "types": "./dist/index.d.ts",
-      "default": "./dist/index.js"
+    "./v1": {
+      "types": "./dist/v1.d.ts",
+      "default": "./dist/v1.js"
     }
   },
   "files": [
+    "contract",
     "dist"
   ],
   "scripts": {
     "build": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "@cc/schemas": "workspace:*",
+    "zod": "^4.6.7"
   }
 }

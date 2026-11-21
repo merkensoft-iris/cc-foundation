@@ -6,7 +6,9 @@
  * save is one `goal.update` call, which logs one `goal.updated` event with the changed fields
  * before and after, and the tab shows every goal's history (AC-03-10).
  */
-import type { DomainEvent, Goal, GoalRow, HistoryResult, MeasureRow } from '../app/api.js';
+import type { Params } from '@cc/ui-sdk/v1';
+
+import type { DomainEvent, Goal, GoalRow, MeasureRow } from '../app/api.js';
 import type { AppRoute } from '../app/routes.js';
 import { act, type Screen, type Ui } from '../app/screen.js';
 import {
@@ -29,7 +31,7 @@ export interface GoalForm {
   targetTo: string;
   targetUnit: string;
   targetBy: string;
-  health: string;
+  health: Goal['health'];
   healthNote: string;
 }
 
@@ -60,14 +62,14 @@ function formOf(goal: Goal): GoalForm {
 }
 
 /** The `goals.update` params for what the form changed, or a message when it is incomplete. */
-export function goalChanges(goal: Goal, form: GoalForm): Record<string, unknown> | string {
-  const params: Record<string, unknown> = { ref: goal.ref, version: goal.version };
+export function goalChanges(goal: Goal, form: GoalForm): Params<'goals.update'> | string {
+  const params: Params<'goals.update'> = { ref: goal.ref, version: goal.version };
   if (form.title.trim() !== goal.title) {
     if (form.title.trim() === '') return 'A goal needs a title.';
-    params['title'] = form.title.trim();
+    params.title = form.title.trim();
   }
   if (form.doneMeans.trim() !== (goal.doneMeans ?? '') && form.doneMeans.trim() !== '') {
-    params['doneMeans'] = form.doneMeans.trim();
+    params.doneMeans = form.doneMeans.trim();
   }
   const targetParts = [form.targetFrom, form.targetTo, form.targetUnit, form.targetBy];
   if (targetParts.some((part) => part.trim() !== '')) {
@@ -84,10 +86,10 @@ export function goalChanges(goal: Goal, form: GoalForm): Record<string, unknown>
       return 'A target needs from, to, a unit and a by date.';
     }
     const target = { from, to, unit: form.targetUnit.trim(), by: form.targetBy };
-    if (JSON.stringify(target) !== JSON.stringify(goal.target)) params['target'] = target;
+    if (JSON.stringify(target) !== JSON.stringify(goal.target)) params.target = target;
   }
   if (form.health !== goal.health || form.healthNote.trim() !== (goal.healthNote ?? '')) {
-    params['health'] = {
+    params.health = {
       value: form.health,
       ...(form.healthNote.trim() === '' ? {} : { note: form.healthNote.trim() }),
     };
@@ -282,19 +284,19 @@ export const scorecardScreen: Screen<ScorecardState> = {
     const tab = route.ref !== undefined ? 'goals' : (route.tab ?? 'measures');
     if (route.ref !== undefined) {
       const [{ goal }, history] = await Promise.all([
-        ui.call<{ goal: Goal }>('goals.get', { ref: route.ref }),
-        ui.call<HistoryResult>('goals.history', { ref: route.ref, limit: 200 }),
+        ui.call('goals.get', { ref: route.ref }),
+        ui.call('goals.history', { ref: route.ref, limit: 200 }),
       ]);
       return { tab, values, goal: { goal, history: history.events, form: formOf(goal) } };
     }
     if (tab === 'goals') {
-      const list = await ui.call<{ goals: GoalRow[] }>('goals.list', {
+      const list = await ui.call('goals.list', {
         period: 'current',
         limit: 200,
       });
       return { tab, values, goals: list.goals };
     }
-    const list = await ui.call<{ measures: MeasureRow[] }>('measures.list', { limit: 200 });
+    const list = await ui.call('measures.list', { limit: 200 });
     return { tab, values, measures: list.measures };
   },
   view(state, ui) {

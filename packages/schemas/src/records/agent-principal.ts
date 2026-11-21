@@ -22,6 +22,19 @@ export const Scope = z.enum([
 ]);
 export type Scope = z.infer<typeof Scope>;
 
+/**
+ * Scopes no `cli`, `mcp_client` or `external_framework` principal has by default; the user
+ * grants them per principal (07 §5 rule 3), and granting one is a Tier H operation confirmed
+ * in the app shell's window (04 §4.3 rule 4, C-04-12).
+ */
+export const GrantOnlyScope = Scope.extract([
+  'connectors:invoke',
+  'discovery:request',
+  'requests:propose',
+  'onboarding:apply',
+]);
+export type GrantOnlyScope = z.infer<typeof GrantOnlyScope>;
+
 /** "cli-default", "claude-code", "firstmate-main", "grok-cc", "orchestrator-drafter". */
 export const PrincipalName = z
   .string()

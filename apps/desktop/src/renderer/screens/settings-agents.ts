@@ -16,7 +16,9 @@
  * them inline, and the user confirms them in the app shell's confirm window, with text the
  * core wrote. While that window is open the screen says "Confirm in the window".
  */
-import { SCOPES, type PrincipalRow } from '../app/api.js';
+import type { Params } from '@cc/ui-sdk/v1';
+
+import { GRANT_ONLY_SCOPES, SCOPES, type PrincipalRow } from '../app/api.js';
 import {
   act,
   actInWindow,
@@ -44,6 +46,7 @@ import {
 } from './settings-parts.js';
 
 type Scope = (typeof SCOPES)[number];
+type PrincipalKind = Params<'principals.create'>['kind'];
 
 /** The MCP server name of 07 §7. */
 export const MCP_SERVER = 'command-center';
@@ -78,12 +81,7 @@ export const MCP_CLIENT_SCOPES = PRESETS[0].scopes;
  * The four scopes no agent has by default (07 §5 rule 3); granting one is confirmed in the app
  * shell's confirm window (C-04-12).
  */
-export const HIGH_RISK: ReadonlySet<string> = new Set<Scope>([
-  'connectors:invoke',
-  'discovery:request',
-  'requests:propose',
-  'onboarding:apply',
-]);
+export const HIGH_RISK: ReadonlySet<string> = new Set<Scope>(GRANT_ONLY_SCOPES);
 
 /** Each scope in plain words (the README glossary), and as a verb for the summary sentence. */
 export const SCOPE_LABELS: Readonly<Record<Scope, { label: string; verb: string }>> = {
@@ -172,16 +170,16 @@ export interface AgentsForm {
   /** The agent whose Remove access is waiting for the second click. */
   removing?: string | undefined;
   /** The high-risk grant waiting for the second click. */
-  granting?: { readonly name: string; readonly scope: string } | undefined;
+  granting?: { readonly name: string; readonly scope: Scope } | undefined;
   /** The agent whose exact permissions Advanced shows. */
   editing?: string | undefined;
-  readonly add: { name: string; kind: string; scopes: Set<string>; confirming: boolean };
+  readonly add: { name: string; kind: PrincipalKind; scopes: Set<Scope>; confirming: boolean };
   readonly client: { name: string; client: McpClient };
 }
 
 export function agentsForm(ui: Ui): AgentsForm {
   return ui.keep<AgentsForm>('settings-agents', () => ({
-    add: { name: '', kind: 'mcp_client', scopes: new Set<string>(['read']), confirming: false },
+    add: { name: '', kind: 'mcp_client', scopes: new Set<Scope>(['read']), confirming: false },
     client: { name: 'claude-code', client: 'claude-code' },
   }));
 }
@@ -189,8 +187,12 @@ export function agentsForm(ui: Ui): AgentsForm {
 const NAME = /^[a-z0-9][a-z0-9-]*$/;
 const NAME_RULE = 'A name is lower-case letters, digits and dashes, such as night-helper.';
 
-function update(ui: Ui, principal: PrincipalRow, scopes: readonly string[], done: string): void {
-  void act(ui, () => ui.call('principals.update', { name: principal.name, scopes }), done);
+function update(ui: Ui, principal: PrincipalRow, scopes: readonly Scope[], done: string): void {
+  void act(
+    ui,
+    () => ui.call('principals.update', { name: principal.name, scopes: [...scopes] }),
+    done,
+  );
 }
 
 function agentRow(principal: PrincipalRow, form: AgentsForm, ui: Ui): VNode {
@@ -289,7 +291,7 @@ function connectRows(active: readonly PrincipalRow[], form: AgentsForm, ui: Ui):
           ui.flash(NAME_RULE, 'error');
           return;
         }
-        const params = { name, kind: 'mcp_client', scopes: [...MCP_CLIENT_SCOPES] };
+        const params = { name, kind: 'mcp_client' as const, scopes: [...MCP_CLIENT_SCOPES] };
         void (async () => {
           try {
             await ui.call('principals.create', params);
@@ -389,8 +391,8 @@ function scopeCheck(
   );
 }
 
-function grantConfirm(principal: PrincipalRow, scope: string, form: AgentsForm, ui: Ui): VNode {
-  const label = SCOPE_LABELS[scope as Scope].label;
+function grantConfirm(principal: PrincipalRow, scope: Scope, form: AgentsForm, ui: Ui): VNode {
+  const label = SCOPE_LABELS[scope].label;
   return confirmPanel({
     test: `grant-confirm-${principal.name}-${scope}`,
     question: `Let ${principal.name} ${label.toLowerCase()} (${scope})?`,
@@ -408,7 +410,7 @@ function grantConfirm(principal: PrincipalRow, scope: string, form: AgentsForm, 
             name: principal.name,
             scopes: [...principal.scopes, scope],
           }),
-        `${principal.name} can now ${SCOPE_LABELS[scope as Scope].verb}.`,
+        `${principal.name} can now ${SCOPE_LABELS[scope].verb}.`,
       );
     },
     onCancel: () => {
@@ -502,7 +504,7 @@ function addAgentView(form: AgentsForm, ui: Ui): VNode {
     const params = { name, kind: add.kind, scopes: [...add.scopes] };
     add.confirming = false;
     // With a high-risk scope the core asks the app shell to confirm it (C-04-12).
-    const create = () => ui.call<{ tokenPath: string }>('principals.create', params);
+    const create = () => ui.call('principals.create', params);
     void (async () => {
       try {
         const created = await (risky.length > 0 ? inWindow(ui, 'add-principal', create) : create());
@@ -561,8 +563,7 @@ function addAgentView(form: AgentsForm, ui: Ui): VNode {
               question: `Add ${add.name.trim()} with ${risky.length === 1 ? 'a permission' : 'permissions'} that ${risky.length === 1 ? 'needs' : 'need'} care?`,
               detail: [
                 ...risky.map(
-                  (scope) =>
-                    `${SCOPE_LABELS[scope as Scope].label}: ${HIGH_RISK_DETAIL[scope] ?? ''}`,
+                  (scope) => `${SCOPE_LABELS[scope].label}: ${HIGH_RISK_DETAIL[scope] ?? ''}`,
                 ),
                 'You confirm it in Command Center’s own window next.',
               ].join(' '),

@@ -4,11 +4,12 @@
  */
 import { describe, expect, it } from 'vitest';
 
+import type { WorkstreamRow } from '../../src/renderer/app/api.js';
 import { riskGroups } from '../../src/renderer/screens/issues.js';
 import { allByTest, byTest, textOf } from '../../src/renderer/ui/vnode.js';
 import { click, startApp, type } from './harness.js';
 
-const workstreams = [
+const workstreams: WorkstreamRow[] = [
   { slug: 'alderwick', name: 'Alderwick', kind: 'company', status: 'active' },
   { slug: 'quillmarsh', name: 'Quillmarsh', kind: 'company', status: 'active' },
   { slug: 'workspace', name: 'Workspace', kind: 'workspace', status: 'active' },

@@ -184,13 +184,10 @@ export const decisionsScreen: Screen<DecisionsState> = {
       deciderId: '',
     }));
     if (route.screen === 'decisions' && route.ref !== undefined) {
-      const { decision, deciders } = await ui.call<{
-        decision: Decision;
-        deciders?: Person[];
-      }>('decisions.get', { ref: route.ref });
+      const { decision, deciders } = await ui.call('decisions.get', { ref: route.ref });
       return { rows: [], detail: decision, deciders: deciders ?? [], form };
     }
-    const list = await ui.call<{ decisions: DecisionRow[] }>('decisions.list', { limit: 200 });
+    const list = await ui.call('decisions.list', { limit: 200 });
     return { rows: list.decisions, deciders: [], form };
   },
   view(state, ui) {

@@ -9,6 +9,7 @@
     "paths": {
       "@cc/cli": ["./apps/cli/src/index.ts"],
       "@cc/core/*": ["./packages/core/src/*.ts"],
+      "@cc/ui-sdk/v1": ["./packages/ui-sdk/src/v1.ts"],
       "@cc/*": ["./packages/*/src/index.ts"]
     }
   },

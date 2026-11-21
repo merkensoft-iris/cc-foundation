@@ -18,10 +18,9 @@
  * The engine's `theme/tokens.json` is compiled to `cc-theme.css` in the app (`theme.ts`), which
  * the shell serves to the renderer.
  *
- * TODO(P1-18): bundle the engine's `ui/` widgets into the renderer once `@cc/ui-sdk/v1`
- * (`defineWidget`, `token`, the slot host) exists; it is a stub today and the renderer is
- * the shell's placeholder page (P1-11 brings the screens). Until then a widget file in `ui/`
- * is reported, not silently dropped.
+ * TODO(P1-25): bundle the engine's `ui/` (its composition root, `ui/app.ts`, on
+ * `@cc/ui-sdk/v1`) with esbuild under the D3 metafile allowlist (ADR 0008 decision 1). Until
+ * then the app runs the default UI, and a file in `ui/` is reported, not silently dropped.
  */
 import { existsSync, mkdirSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { isAbsolute, join, relative, resolve, sep } from 'node:path';
@@ -145,7 +144,7 @@ export async function runBuild(options: BuildOptions): Promise<CommandResult> {
   const widgets = widgetFiles(root);
   if (widgets.length > 0) {
     lines.push(
-      `cc-build: ui/ has ${widgets.length} widget file(s) (${widgets[0] ?? ''}); widgets are not built into the app until @cc/ui-sdk/v1 ships (P1-18)`,
+      `cc-build: ui/ has ${widgets.length} widget file(s) (${widgets[0] ?? ''}); the UI in ui/ is not built into the app until cc-build bundles it (P1-25)`,
     );
   }
 
