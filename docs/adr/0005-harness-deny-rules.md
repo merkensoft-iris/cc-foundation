@@ -1,11 +1,13 @@
 # 0005. Harness deny rules for the Command Center engine repository
 
-- **Status:** accepted
+- **Status:** accepted; decision A (deny `Bash` in the engine repository) amended by [0008](0008-engine-owned-ui.md) (21 Nov 2026)
 - **Date:** 2026-11-10
 - **Task:** P0-13 (spike S9)
 - **Closes:** OQ-08-08 — closed for Claude Code; stays open for Codex until spike P0-09 (S3b,
   `codex_cli` provider) reports, since no Codex CLI was available to verify §8 of the evidence
 - **Spec:** `08 §5.2` layer 5 (`docs/design/08-repository-and-automation.md:259`)
+
+> **Note, 21 Nov 2026 (ADR 0008).** Decision A stands for Command Center's own AI and for the session that loads the shipped file. It is amended for development agents: they may change `ui/`, `theme/`, `cc.config.ts`, `frameworks/` and `packs/` through pull requests the user reviews, under a development profile that the engine PR installing the new `AGENTS.md` rule 1 designs. Re-enabling decision A as written would mean that only a human edits the engine UI, which the owner did not choose. The text below is the record as accepted.
 
 ## Question
 

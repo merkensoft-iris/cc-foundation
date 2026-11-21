@@ -623,16 +623,16 @@ On the last Friday of each month, the monthly review absorbs the weekly CEO revi
 | 3. Packs | Add or remove packs; edit pack measures and action templates | yes |
 | 4. Extension sections | Pack sections placed in `extensionSlots` (e.g. `content_review` after `headlines`) | yes |
 | 5. Fork | `custom:<name>` template copied from the source; invariants become editable | only those kept; the UI labels it "custom (based on eos-lite 1.0.0)" |
-| 6. Engine | Files in the user's engine repository ([08 §4.3](08-repository-and-automation.md#43-engine-extension-points)): UI widgets in declared slots only, theme tokens (colours, fonts, radius and density only; the layout is fixed, owner decision Q9, 10 Nov 2026), vocabulary, `custom:` templates and packs, the calendar mapping | yes: the foundation's validators run on every engine file at build and at start (C-01-03) |
+| 6. Engine | Files in the user's engine repository ([08 §4.3](08-repository-and-automation.md#43-engine-extension-points)): the app UI (`ui/`: the default `@cc/ui` as it is, restyled, with screens replaced, or replaced altogether; owner decision of 21 Nov 2026, [ADR 0008](../adr/0008-engine-owned-ui.md), which overturns Q9 of 10 Nov 2026 for the app UI), theme tokens (colours, fonts, radius and density), vocabulary, `custom:` templates and packs, the calendar mapping | yes: the foundation's validators run on every engine file at build and at start (C-01-03) |
 
 Switching a workstream to another template is a **migration**. CC computes a mapping (rocks ↔ objectives ↔ WIG, scorecard ↔ lead measures, agenda sections), shows a dry-run diff and applies it only after confirmation. History is kept: the old instance is archived, and items and decisions keep their IDs.
 
 ### 9.1 Where answers live
 
 1. **The local store is the source of truth** for onboarding answers and every record ([04 §9](04-platform.md#9-storage-secrets-and-data-location)), with scheduled, encrypted backups ([04 §9.1](04-platform.md#91-backups)).
-2. The user's engine repository holds only non-sensitive configuration: theme, modules, framework and pack files, the calendar mapping, `connectors.lock`, and optionally an exported `profile.json`.
+2. The user's engine repository holds only non-sensitive configuration: theme, the app UI, modules, framework and pack files, the calendar mapping, `connectors.lock`, and optionally an exported `profile.json`.
 3. `cc-axi onboarding export --out profile.json` writes the answers only: no records, no secrets, no person names (people become role tokens such as `[Client contact]`), and workstreams by key, never by name. The user reviews the file and commits it if they wish. `onboarding apply --file` (C-01-07) rebuilds a workspace from it.
-4. CC never commits to any git repository, never pulls, and never writes into the engine checkout (C-01-09). The user pulls merged foundation updates; Rebuild now reads the clean checkout and writes only build output, outside it ([04 §10](04-platform.md#10-packaging-updates-and-os-support) rule 2; owner decisions C1 and Rebuild now, 10 Nov 2026). This keeps "CC writes no commits" and "AI edits no files" simple, and keeps workstream and client names out of git.
+4. CC never commits to any git repository, never pulls, and never writes into the engine checkout (C-01-09). The user pulls merged foundation updates; Rebuild now reads the clean checkout and writes only build output, outside it ([04 §10](04-platform.md#10-packaging-updates-and-os-support) rule 2; owner decisions C1 and Rebuild now, 10 Nov 2026). This keeps "CC writes no commits" and "CC's own AI edits no files" simple, and keeps workstream and client names out of git.
 
 ## 10. Contracts
 
