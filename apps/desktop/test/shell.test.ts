@@ -1,11 +1,13 @@
 import { EventEmitter } from 'node:events';
 
 import { deriveBackupKey, type SerializedBackupKey } from '@cc/core/backup-keys';
+import { apiMethods, EXTENSION_API_CURRENT } from '@cc/schemas';
 
 import { describe, expect, it } from 'vitest';
 
 import { KEYS_SECRET, LEGACY_PASSPHRASE_SECRET } from '../src/main/backup-keys.js';
 import type { CoreLauncher, CoreProcess, MainPort } from '../src/main/core-supervisor.js';
+import { AGENT_ONLY_METHODS, UI_METHODS } from '../src/main/generated/ui-methods.js';
 import type { InvokeAnswer, InvokeEvent } from '../src/main/ipc.js';
 import {
   IDLE_RESTART_POLL_MS,
@@ -211,7 +213,10 @@ function fakePlatform(overrides: Partial<ShellPlatform> = {}) {
     onWindowAllClosed: on('window-all-closed'),
     onBeforeQuit: on('before-quit'),
     whenReady: () => ready,
-    prepare: () => void (calls.prepare += 1),
+    prepare: () => {
+      calls.prepare += 1;
+      return Promise.resolve();
+    },
     registerProtocolClient: () => void (calls.registerProtocolClient += 1),
     createWindow: (title) => {
       const window = new FakeWindow(title);
@@ -557,7 +562,46 @@ describe('desktop shell main process (04 §3)', () => {
     expect(await fake.invoke('cc:shell', 'cc-app://app/')).toEqual({
       mode: { kind: 'developer', reasons: [UNPACKAGED_REASON] },
       version: '0.0.0-test',
+      apiVersion: EXTENSION_API_CURRENT,
     });
+  });
+
+  it('ADR 0003 decision 9 main refuses every method not marked ui before the core sees it', async () => {
+    const fake = fakePlatform();
+    await started(fake);
+    const core = fake.cores[0];
+    const call = async (method: string) =>
+      (await fake.invoke('cc:invoke', 'cc-app://app/', method, {})) as InvokeAnswer;
+
+    // Agent-only methods: the connection handshake and waiting on a confirmation.
+    for (const method of ['auth.hello', 'auth.prove', 'confirmations.wait', 'connectors.invoke']) {
+      expect(await call(method), method).toMatchObject({
+        ok: false,
+        error: { code: 'E_FORBIDDEN', message: `${method} is not available to the app window` },
+      });
+    }
+    // Names the local API does not have at all.
+    for (const method of ['fs.readFile', 'shell.openExternal', 'items.delete']) {
+      expect(await call(method), method).toMatchObject({
+        ok: false,
+        error: { code: 'E_USAGE', message: `unknown method ${method}` },
+      });
+    }
+    // None of them reached the core; an allowed method does.
+    expect(core?.calls).toEqual([]);
+    expect(await call('home.get')).toEqual({ ok: true, result: { method: 'home.get' } });
+    expect(core?.calls.map((c) => c.method)).toEqual(['home.get']);
+
+    // The allowlist is the methods marked ui, every one of them a local API method.
+    const marked = apiMethods.filter((definition) => definition.ui).map((d) => d.method);
+    expect([...UI_METHODS].sort()).toEqual(marked.sort());
+    expect([...AGENT_ONLY_METHODS].sort()).toEqual(
+      apiMethods
+        .filter((definition) => !definition.ui)
+        .map((d) => d.method)
+        .sort(),
+    );
+    expect(UI_METHODS.has('home.get')).toBe(true);
   });
 
   it("01 §3.1 row 9, 04 §9.1 rule 3: the passphrase is typed in main's secret prompt and becomes a key in the secret store and the core; the passphrase itself reaches neither, nor the app page", async () => {

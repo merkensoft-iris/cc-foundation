@@ -8,7 +8,9 @@ import {
   hardenSession,
   hardenWebContents,
   isAllowedRequestUrl,
+  NO_NETWORK_PROXY,
   SECURE_WEB_PREFERENCES,
+  WEBRTC_IP_HANDLING_POLICY,
   type HardenableSession,
   type HardenableWebContents,
 } from '../src/main/hardening.js';
@@ -45,7 +47,7 @@ describe('renderer hardening (04 §3, 04 §10 rule 5)', () => {
     expect(APP_PAGE).not.toMatch(/<script(?![^>]*\bsrc=)/);
   });
 
-  it('denies every permission and cancels every request outside the app origin', () => {
+  it('denies every permission and cancels every request outside the app origin', async () => {
     const handlers: {
       request?: (wc: unknown, permission: string, cb: (ok: boolean) => void, d: unknown) => void;
       check?: (...args: unknown[]) => boolean;
@@ -56,10 +58,11 @@ describe('renderer hardening (04 §3, 04 §10 rule 5)', () => {
       setPermissionRequestHandler: (handler) => (handlers.request = handler),
       setPermissionCheckHandler: (handler) => (handlers.check = handler),
       setDevicePermissionHandler: (handler) => (handlers.device = handler),
+      setProxy: () => Promise.resolve(),
       webRequest: { onBeforeRequest: (listener) => (handlers.before = listener) },
     };
     const blocked: string[] = [];
-    hardenSession(session, { allowDevTools: false, onBlocked: (url) => blocked.push(url) });
+    await hardenSession(session, { allowDevTools: false, onBlocked: (url) => blocked.push(url) });
 
     for (const permission of ['notifications', 'media', 'geolocation', 'clipboard-read']) {
       let granted: boolean | undefined;
@@ -82,10 +85,50 @@ describe('renderer hardening (04 §3, 04 §10 rule 5)', () => {
     expect(isAllowedRequestUrl('devtools://devtools/bundled/x', true)).toBe(true);
   });
 
+  it('ADR 0003 decision 9 the renderer session sends everything to a dead proxy, loopback included', async () => {
+    const proxies: unknown[] = [];
+    let resolveProxy: () => void = () => undefined;
+    const session: HardenableSession = {
+      setPermissionRequestHandler: () => undefined,
+      setPermissionCheckHandler: () => undefined,
+      setDevicePermissionHandler: () => undefined,
+      setProxy: (config) => {
+        proxies.push(config);
+        return new Promise((resolve) => (resolveProxy = resolve));
+      },
+      webRequest: { onBeforeRequest: () => undefined },
+    };
+    let done = false;
+    const hardened = hardenSession(session, { allowDevTools: false }).then(() => (done = true));
+    expect(proxies).toEqual([
+      { mode: 'fixed_servers', proxyRules: 'http://127.0.0.1:9', proxyBypassRules: '<-loopback>' },
+    ]);
+    expect(NO_NETWORK_PROXY.proxyBypassRules).toBe('<-loopback>');
+    // Hardening is done only once the proxy is in place.
+    await Promise.resolve();
+    expect(done).toBe(false);
+    resolveProxy();
+    await hardened;
+    expect(done).toBe(true);
+  });
+
+  it('ADR 0003 decision 9 every web contents keeps WebRTC UDP off the network', () => {
+    const policies: string[] = [];
+    const contents = {
+      setWebRTCIPHandlingPolicy: (policy: string) => policies.push(policy),
+      setWindowOpenHandler: () => undefined,
+      on: () => undefined,
+    } as unknown as HardenableWebContents;
+    hardenWebContents(contents);
+    expect(policies).toEqual(['disable_non_proxied_udp']);
+    expect(WEBRTC_IP_HANDLING_POLICY).toBe('disable_non_proxied_udp');
+  });
+
   it('blocks window.open, navigation, redirects and webviews', () => {
     const listeners = new Map<string, (event: { preventDefault(): void }, url: string) => void>();
     let openHandler: ((details: { url: string }) => { action: 'deny' }) | undefined;
     const contents = {
+      setWebRTCIPHandlingPolicy: () => undefined,
       setWindowOpenHandler: (handler: typeof openHandler) => (openHandler = handler),
       on: (event: string, listener: (event: { preventDefault(): void }, url: string) => void) =>
         listeners.set(event, listener),
