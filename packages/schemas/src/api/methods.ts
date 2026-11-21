@@ -71,6 +71,13 @@ export interface ApiMethod<P extends z.ZodType = z.ZodType, R extends z.ZodType 
   readonly scope?: Scope;
   /** Human-only (04 §4.3): only the app UI may call it; never the CLI, MCP or AI layer. */
   readonly humanOnly: boolean;
+  /**
+   * The app window may call it through `window.cc.invoke` (ADR 0003 decision 9). `pnpm cc:gen`
+   * writes the methods marked `ui` into main's allowlist, and main refuses every other method
+   * before it reaches the core. Methods only an agent uses are not marked: the connection
+   * handshake (`auth.*`), waiting on a confirmation and invoking a connector action as a tool.
+   */
+  readonly ui: boolean;
   readonly params: P;
   readonly result: R;
 }
@@ -153,6 +160,7 @@ export const authHello = method({
   description:
     'Starts authentication as an agent principal; the server first proves it knows the token.',
   humanOnly: false,
+  ui: false,
   params: z.strictObject({ principal: PrincipalName, nonce: Nonce }),
   result: z.strictObject({
     serverNonce: Nonce,
@@ -167,6 +175,7 @@ export const authProve = method({
   description:
     "Completes authentication with the client's proof; every other method needs it first.",
   humanOnly: false,
+  ui: false,
   params: z.strictObject({ proof: Proof }),
   result: z.strictObject({
     principal: AgentPrincipal.pick({
@@ -270,6 +279,7 @@ export const homeGet = method({
   description: "Today's meetings, attention counts and the most urgent items.",
   scope: 'read',
   humanOnly: false,
+  ui: true,
   params: z.strictObject({ workstream: WorkstreamRef.optional() }),
   result: z.strictObject({
     workspace: z.string().min(1),
@@ -303,6 +313,7 @@ export const itemsList = method({
   description: 'Lists action items, filtered by workstream, owner, state, health or due date.',
   scope: 'read',
   humanOnly: false,
+  ui: true,
   params: z.strictObject({
     workstream: WorkstreamRef.optional(),
     owner: PersonRef.optional(),
@@ -322,6 +333,7 @@ export const itemsGet = method({
   description: 'Returns one action item by ref or ID.',
   scope: 'read',
   humanOnly: false,
+  ui: true,
   params: z.strictObject({ ref: ItemRef }),
   result: z.strictObject({ item: ActionItem }),
 });
@@ -332,6 +344,7 @@ export const itemsCreate = method({
   description: 'Creates an action item as a draft for the user to accept.',
   scope: 'items:write',
   humanOnly: false,
+  ui: true,
   params: z.strictObject({
     workstream: WorkstreamRef,
     /** Verb + deliverable, at most 120 characters. */
@@ -354,6 +367,7 @@ export const itemsUpdate = method({
   description: "Sets an item's health with a note, or proposes a new due date with a reason.",
   scope: 'items:write',
   humanOnly: false,
+  ui: true,
   params: z.strictObject({
     ref: ItemRef,
     health: z.strictObject({ value: Health, note: z.string().min(1).optional() }).optional(),
@@ -370,6 +384,7 @@ export const itemsClaim = method({
   description: 'Claims an item as done with evidence; a repeat with the same evidence is a no-op.',
   scope: 'items:claim',
   humanOnly: false,
+  ui: true,
   params: z.strictObject({
     ref: ItemRef,
     /** May be empty when every required requirement already has evidence. */
@@ -388,6 +403,7 @@ export const itemsDrop = method({
   spec: '04 §4.1, 04 §4.3, 03 §7',
   description: 'Drops an item with a reason; human-only, so the CLI and MCP get E_HUMAN_REQUIRED.',
   humanOnly: true,
+  ui: true,
   params: z.strictObject({ ref: ItemRef, reason: z.string().min(1) }),
   result: z.strictObject({ status: MutationStatus, item: ActionItem }),
 });
@@ -398,6 +414,7 @@ export const itemsHistory = method({
   description: "Lists an item's domain events with their actors, oldest first.",
   scope: 'read',
   humanOnly: false,
+  ui: true,
   params: z.strictObject({ ref: ItemRef, limit: Limit.optional() }),
   result: z.strictObject({ events: z.array(DomainEvent), total: z.int().min(0) }),
 });
@@ -408,6 +425,7 @@ export const itemsHandoff = method({
   description: 'Prepares the handoff brief for an item done by an external agent framework.',
   scope: 'read',
   humanOnly: false,
+  ui: true,
   params: z.strictObject({ ref: ItemRef, to: z.enum(['firstmate', 'grok', 'other']) }),
   result: z.strictObject({
     handoff: z.strictObject({
@@ -427,6 +445,7 @@ export const itemsLink = method({
   description: 'Links an item to a firstmate task so CC can follow it in the fleet ledger.',
   scope: 'items:write',
   humanOnly: false,
+  ui: true,
   params: z.strictObject({
     ref: ItemRef,
     firstmateTask: z.string().min(1),
@@ -444,6 +463,7 @@ export const evidenceAdd = method({
   description: 'Attaches one piece of evidence to an item, optionally for one requirement.',
   scope: 'items:claim',
   humanOnly: false,
+  ui: true,
   params: z.strictObject({ ref: ItemRef, evidence: EvidenceInput }),
   result: z.strictObject({ status: MutationStatus, evidence: Evidence }),
 });
@@ -458,6 +478,7 @@ export const searchQuery = method({
   description: 'Full-text search over items, decisions, issues and meetings.',
   scope: 'read',
   humanOnly: false,
+  ui: true,
   params: z.strictObject({
     text: z.string().min(1),
     types: z.array(SearchType).min(1).optional(),
@@ -484,6 +505,7 @@ export const decisionsList = method({
   description: 'Lists decisions, filtered by workstream or status.',
   scope: 'read',
   humanOnly: false,
+  ui: true,
   params: z.strictObject({
     workstream: WorkstreamRef.optional(),
     status: DecisionStatus.optional(),
@@ -508,6 +530,7 @@ export const decisionsGet = method({
   description: 'Returns one decision by ref or ID.',
   scope: 'read',
   humanOnly: false,
+  ui: true,
   params: z.strictObject({ ref: DecisionRef }),
   result: z.strictObject({
     decision: Decision,
@@ -522,6 +545,7 @@ export const decisionsPropose = method({
   description: 'Proposes a decision as a question with options; only its person decider decides.',
   scope: 'decisions:propose',
   humanOnly: false,
+  ui: true,
   params: z.strictObject({
     workstream: WorkstreamRef,
     /** Phrased as a question. */
@@ -544,6 +568,7 @@ export const issuesList = method({
   description: 'Lists issues, filtered by workstream or status.',
   scope: 'read',
   humanOnly: false,
+  ui: true,
   params: z.strictObject({
     workstream: WorkstreamRef.optional(),
     status: IssueStatus.optional(),
@@ -568,6 +593,7 @@ export const issuesGet = method({
   description: 'Returns one issue by ref or ID.',
   scope: 'read',
   humanOnly: false,
+  ui: true,
   params: z.strictObject({ ref: IssueRef }),
   result: z.strictObject({ issue: Issue }),
 });
@@ -579,6 +605,7 @@ export const issuesRaise = method({
   /** 07 §5 names no issues scope; `items:write` is this schema's reading. */
   scope: 'items:write',
   humanOnly: false,
+  ui: true,
   params: z.strictObject({ workstream: WorkstreamRef, title: z.string().min(1) }),
   result: z.strictObject({ status: MutationStatus, issue: Issue }),
 });
@@ -591,6 +618,7 @@ export const measuresList = method({
   description: 'Lists scorecard measures with their targets and latest values.',
   scope: 'read',
   humanOnly: false,
+  ui: true,
   params: z.strictObject({ workstream: WorkstreamRef.optional(), limit: Limit.optional() }),
   result: z.strictObject({
     measures: z.array(
@@ -612,6 +640,7 @@ export const measuresGet = method({
   description: 'Returns one measure by ref or ID.',
   scope: 'read',
   humanOnly: false,
+  ui: true,
   params: z.strictObject({ ref: MeasureRef }),
   result: z.strictObject({ measure: Measure }),
 });
@@ -622,6 +651,7 @@ export const measuresRecord = method({
   description: 'Records a manual measure value for a period, by default the current one.',
   scope: 'measures:write',
   humanOnly: false,
+  ui: true,
   params: z.strictObject({
     ref: MeasureRef,
     value: z.union([z.number(), z.boolean()]),
@@ -640,6 +670,7 @@ export const goalsList = method({
   description: 'Lists goals of the current, previous or next period.',
   scope: 'read',
   humanOnly: false,
+  ui: true,
   params: z.strictObject({
     workstream: WorkstreamRef.optional(),
     period: z.enum(['current', 'previous', 'next']).optional(),
@@ -665,6 +696,7 @@ export const goalsGet = method({
   description: 'Returns one goal by ref or ID.',
   scope: 'read',
   humanOnly: false,
+  ui: true,
   params: z.strictObject({ ref: GoalRef }),
   result: z.strictObject({ goal: Goal }),
 });
@@ -677,6 +709,7 @@ export const workstreamsList = method({
   description: 'Lists the workstreams of the workspace.',
   scope: 'read',
   humanOnly: false,
+  ui: true,
   params: z.strictObject({ limit: Limit.optional() }),
   result: z.strictObject({
     workstreams: z.array(
@@ -697,6 +730,7 @@ export const workstreamsGet = method({
   description: 'Returns one workstream by slug or ID.',
   scope: 'read',
   humanOnly: false,
+  ui: true,
   params: z.strictObject({ workstream: WorkstreamRef }),
   result: z.strictObject({ workstream: Workstream }),
 });
@@ -710,6 +744,7 @@ export const exportRun = method({
   /** 07 §5 names no export scope; `read` is this schema's reading, flagged in the P1-01 PR. */
   scope: 'read',
   humanOnly: false,
+  ui: true,
   params: z.strictObject({ out: z.string().min(1) }),
   result: z.strictObject({
     out: z.string().min(1),
@@ -743,6 +778,7 @@ export const itemsReview = method({
     "Returns an item with its evidence and the review queue's options: Confirm, Attest, Reject.",
   scope: 'read',
   humanOnly: false,
+  ui: true,
   params: z.strictObject({ ref: ItemRef }),
   result: z.strictObject({ item: ActionItem, evidence: z.array(Evidence), review: ReviewOptions }),
 });
@@ -753,6 +789,7 @@ export const itemsAccept = method({
   description:
     'Accepts a draft item (draft → open), also on behalf of an absent owner with a note.',
   humanOnly: true,
+  ui: true,
   params: z.strictObject({ ref: ItemRef, note: z.string().min(1).optional() }),
   result: z.strictObject({ status: MutationStatus, item: ActionItem }),
 });
@@ -762,6 +799,7 @@ export const itemsConfirm = method({
   spec: '04 §4.3, 03 §9.2, owner decision Q5',
   description: 'Confirms a claim; refused while a required requirement has no checkable evidence.',
   humanOnly: true,
+  ui: true,
   params: z.strictObject({ ref: ItemRef }),
   result: z.strictObject({ status: MutationStatus, item: ActionItem }),
 });
@@ -771,6 +809,7 @@ export const itemsAttest = method({
   spec: '04 §4.3, 03 §9.2, §9.3, owner decision Q5',
   description: 'Attests a claim with a note: verified_done with method attested, counted apart.',
   humanOnly: true,
+  ui: true,
   params: z.strictObject({ ref: ItemRef, note: z.string().min(1) }),
   result: z.strictObject({ status: MutationStatus, item: ActionItem }),
 });
@@ -780,6 +819,7 @@ export const itemsReject = method({
   spec: '04 §4.3, 03 §7, §9.2 step 5',
   description: 'Rejects a claim with a reason: back to in_progress, health at_risk.',
   humanOnly: true,
+  ui: true,
   params: z.strictObject({ ref: ItemRef, reason: z.string().min(1) }),
   result: z.strictObject({ status: MutationStatus, item: ActionItem }),
 });
@@ -791,6 +831,7 @@ export const decisionsOpen = method({
   spec: '04 §4.3, 03 §10 rule 2, INV-03-02',
   description: 'Opens a proposed decision onto the agenda with its decider, a person.',
   humanOnly: true,
+  ui: true,
   params: z.strictObject({
     ref: DecisionRef,
     /** The decider; default the one it was proposed with. */
@@ -804,6 +845,7 @@ export const decisionsDecide = method({
   spec: '04 §4.3, 03 §10, INV-03-02',
   description: 'Decides an open decision with the outcome and why.',
   humanOnly: true,
+  ui: true,
   params: z.strictObject({
     ref: DecisionRef,
     /** One of the decision's options, when the outcome is one of them. */
@@ -823,6 +865,7 @@ export const goalsUpdate = method({
   spec: '03 §5.3, owner decision Q2, AC-03-10',
   description: 'Changes a goal outside any meeting; one goal.updated event with before and after.',
   humanOnly: true,
+  ui: true,
   params: z.strictObject({
     ref: GoalRef,
     title: z.string().min(1).optional(),
@@ -841,6 +884,7 @@ export const goalsHistory = method({
   description: "Lists a goal's domain events with their actors, oldest first.",
   scope: 'read',
   humanOnly: false,
+  ui: true,
   params: z.strictObject({ ref: GoalRef, limit: Limit.optional() }),
   result: z.strictObject({ events: z.array(DomainEvent), total: z.int().min(0) }),
 });
@@ -855,6 +899,7 @@ export const risksList = method({
   description: 'Lists risks, filtered by workstream or status.',
   scope: 'read',
   humanOnly: false,
+  ui: true,
   params: z.strictObject({
     workstream: WorkstreamRef.optional(),
     status: Risk.shape.status.optional(),
@@ -880,6 +925,7 @@ export const risksRecord = method({
   description: 'Records a risk; workspace-wide ones go on the workspace pseudo-workstream.',
   scope: 'items:write',
   humanOnly: false,
+  ui: true,
   params: z.strictObject({
     workstream: WorkstreamRef,
     description: z.string().min(1),
@@ -895,6 +941,7 @@ export const risksGet = method({
   description: 'Returns one risk by ref or ID.',
   scope: 'read',
   humanOnly: false,
+  ui: true,
   params: z.strictObject({ ref: RiskRef }),
   result: z.strictObject({ risk: Risk }),
 });
@@ -922,6 +969,7 @@ export const meetingsList = method({
     'Lists meeting instances between two local dates (default: this week, Monday to Sunday).',
   scope: 'read',
   humanOnly: false,
+  ui: true,
   params: z.strictObject({
     from: LocalDate.optional(),
     /** Inclusive. */
@@ -976,6 +1024,7 @@ export const meetingsGet = method({
     'Returns a meeting with its agenda sections, timeboxes, input rows and read-back list.',
   scope: 'read',
   humanOnly: false,
+  ui: true,
   params: z.strictObject({ ref: MeetingRef }),
   result: z.strictObject({
     meeting: MeetingInstance,
@@ -997,6 +1046,7 @@ export const meetingsStart = method({
   description: 'Starts a meeting; only the user starts one (02 §4.2), so agents are refused.',
   scope: 'meetings:capture',
   humanOnly: false,
+  ui: true,
   params: z.strictObject({ ref: MeetingRef }),
   result: z.strictObject({ meeting: MeetingInstance }),
 });
@@ -1014,6 +1064,7 @@ export const meetingsCapture = method({
   description: 'Captures a draft action item or a note into a section of a meeting in progress.',
   scope: 'meetings:capture',
   humanOnly: false,
+  ui: true,
   params: z.strictObject({
     ref: MeetingRef,
     section: SectionKeyParams,
@@ -1037,6 +1088,7 @@ export const meetingsConfirm = method({
   spec: '04 §4.3, 02 §6.4 rule 1',
   description: 'Confirms the read-back: accepts the drafts of present owners.',
   humanOnly: true,
+  ui: true,
   params: z.strictObject({
     ref: MeetingRef,
     /** Drafts of absent owners accepted on their behalf, each with a note. */
@@ -1058,6 +1110,7 @@ export const meetingsClose = method({
   description: 'Closes a meeting after its read-back: carries items and runs the escalation job.',
   scope: 'meetings:capture',
   humanOnly: false,
+  ui: true,
   params: z.strictObject({ ref: MeetingRef }),
   result: z.strictObject({
     status: MutationStatus,
@@ -1073,6 +1126,7 @@ export const meetingsDismiss = method({
     "Dismisses a daily-start attention entry: snoozed to tomorrow's daily start, not resolved.",
   scope: 'meetings:capture',
   humanOnly: false,
+  ui: true,
   params: z.strictObject({ ref: MeetingRef, entry: z.string().min(1) }),
   result: z.strictObject({ status: MutationStatus, until: LocalDate }),
 });
@@ -1096,6 +1150,7 @@ export const principalsList = method({
   description: 'Lists the agent principals with their scopes; never their tokens.',
   scope: 'read',
   humanOnly: false,
+  ui: true,
   params: z.strictObject({}),
   result: z.strictObject({ principals: z.array(PrincipalSummary), total: z.int().min(0) }),
 });
@@ -1105,6 +1160,7 @@ export const principalsCreate = method({
   spec: '04 §4.3, 07 §5 rule 1, 04 §4.2',
   description: 'Creates an agent principal and writes its token file.',
   humanOnly: true,
+  ui: true,
   params: z.strictObject({
     name: PrincipalName,
     kind: AgentPrincipal.shape.kind,
@@ -1120,6 +1176,7 @@ export const principalsUpdate = method({
   spec: '04 §4.3, 07 §5 rules 1 and 3',
   description: "Grants or revokes a principal's scopes, or changes its workstreams.",
   humanOnly: true,
+  ui: true,
   params: z.strictObject({
     name: PrincipalName,
     scopes: z.array(Scope).optional(),
@@ -1134,6 +1191,7 @@ export const principalsRevoke = method({
   spec: '04 §4.3, 04 §4.2 rule 2',
   description: 'Revokes a principal and deletes its token file.',
   humanOnly: true,
+  ui: true,
   params: z.strictObject({ name: PrincipalName }),
   result: z.strictObject({ principal: PrincipalSummary }),
 });
@@ -1287,6 +1345,7 @@ export const onboardingStatus = method({
     'Where onboarding stands: not started, in progress (steps answered) or committed; the app also gets the answers.',
   scope: 'read',
   humanOnly: false,
+  ui: true,
   params: z.strictObject({}),
   result: z.strictObject({
     state: z.enum(['not_started', 'in_progress', 'committed']),
@@ -1309,6 +1368,7 @@ export const onboardingSave = method({
     'Saves the onboarding answers so far, marking a step answered; writes no other record (C-01-01).',
   scope: 'onboarding:apply',
   humanOnly: false,
+  ui: true,
   params: z.strictObject({
     profile: OnboardingProfile,
     calendarMapping: CalendarMapping.optional(),
@@ -1329,6 +1389,7 @@ export const onboardingRecommend = method({
     'Runs the recommender on a profile (or the saved answers): one framework recommendation per workstream.',
   scope: 'read',
   humanOnly: false,
+  ui: true,
   params: z.strictObject({ profile: OnboardingProfile.optional() }),
   result: z.strictObject({
     recommendations: z.array(FrameworkRecommendation),
@@ -1345,6 +1406,7 @@ export const onboardingPreview = method({
     'Previews every record and outward action an onboarding commit would make, and writes nothing.',
   scope: 'read',
   humanOnly: false,
+  ui: true,
   params: z.strictObject({
     profile: OnboardingProfile.optional(),
     calendarMapping: CalendarMapping.optional(),
@@ -1359,6 +1421,7 @@ export const onboardingApply = method({
     'Commits onboarding: writes every record in one transaction; outward actions wait for their own confirmations.',
   scope: 'onboarding:apply',
   humanOnly: false,
+  ui: true,
   params: z.strictObject({
     profile: OnboardingProfile.optional(),
     calendarMapping: CalendarMapping.optional(),
@@ -1377,6 +1440,7 @@ export const onboardingExport = method({
     'The answers as a profile.json to commit: no records, no secrets, no person names, workstreams by key.',
   scope: 'read',
   humanOnly: false,
+  ui: true,
   params: z.strictObject({}),
   result: z.strictObject({ profile: OnboardingProfile }),
 });
@@ -1396,6 +1460,7 @@ export const connectorsActions = method({
   description: 'Lists the actions of the installed connector bindings, or of one binding.',
   scope: 'connectors:read',
   humanOnly: false,
+  ui: true,
   params: z.strictObject({
     /** A binding label or bnd_ ID; every binding when absent. */
     binding: z.string().min(1).optional(),
@@ -1413,6 +1478,7 @@ export const connectorsInvoke = method({
     'Invokes a connector action through the Policy Engine; a non-read action also needs connectors:invoke.',
   scope: 'connectors:read',
   humanOnly: false,
+  ui: false,
   params: z.strictObject({
     binding: z.string().min(1),
     action: z.string().min(1),
@@ -1439,6 +1505,7 @@ export const confirmationsGet = method({
   description: 'Returns a confirmation request and its status.',
   scope: 'read',
   humanOnly: false,
+  ui: true,
   params: z.strictObject({ id: ConfirmationId }),
   result: z.strictObject({ confirmation: ConfirmationRequest }),
 });
@@ -1449,6 +1516,7 @@ export const confirmationsWait = method({
   description: 'Waits until a confirmation request is decided or expires, or the timeout passes.',
   scope: 'read',
   humanOnly: false,
+  ui: false,
   params: z.strictObject({
     id: ConfirmationId,
     timeoutSeconds: z.int().min(1).max(600),
@@ -1463,6 +1531,7 @@ export const backupsDestination = method({
   spec: '04 §4.3, 04 §9.1 rule 5, 01 §3.1 row 10',
   description: 'Sets or clears the off-machine backup destination.',
   humanOnly: true,
+  ui: true,
   params: z.strictObject({ destination: BackupDestination.nullable() }),
   result: z.strictObject({ status: MutationStatus }),
 });
@@ -1473,6 +1542,7 @@ export const backupsPassphrase = method({
   description:
     'Records that the backup passphrase is set; the app keeps it in the secret store, never here.',
   humanOnly: true,
+  ui: true,
   params: z.strictObject({}),
   result: z.strictObject({ status: MutationStatus, passphraseSet: z.boolean() }),
 });
@@ -1483,6 +1553,7 @@ export const backupsStatus = method({
   description: 'The backup state, the last good backup and the last restore test.',
   scope: 'read',
   humanOnly: false,
+  ui: true,
   params: z.strictObject({}),
   result: BackupStatus,
 });
@@ -1493,6 +1564,7 @@ export const backupsList = method({
   description: 'The backup history, newest first: each archive, where it was written and kept.',
   scope: 'read',
   humanOnly: false,
+  ui: true,
   params: z.strictObject({ limit: Limit.optional() }),
   result: z.strictObject({ backups: z.array(BackupRecord), total: z.int().min(0) }),
 });
@@ -1503,6 +1575,7 @@ export const backupsRun = method({
   description:
     'Takes a backup now: the local set, then the off-machine destination when one is set.',
   humanOnly: true,
+  ui: true,
   params: z.strictObject({ trigger: z.enum(['manual', 'pre_update']).optional() }),
   result: z.strictObject({ backup: BackupRecord, status: BackupStatus }),
 });
@@ -1513,6 +1586,7 @@ export const backupsTest = method({
   description:
     'Runs the restore test now on the newest off-machine archive, or the newest local one.',
   humanOnly: true,
+  ui: true,
   params: z.strictObject({}),
   result: z.strictObject({ test: BackupRestoreTest, status: BackupStatus }),
 });
@@ -1523,6 +1597,7 @@ export const backupsRestore = method({
   description:
     'Backs up the current store, then restores the chosen archive; the core restarts on it.',
   humanOnly: true,
+  ui: true,
   params: z.strictObject({ id: BackupId }),
   result: z.strictObject({
     status: z.literal('ok'),
