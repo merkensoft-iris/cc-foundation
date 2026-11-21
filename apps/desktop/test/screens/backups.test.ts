@@ -8,7 +8,7 @@ import { describe, expect, it } from 'vitest';
 
 import type { BackupRecord, BackupStatus } from '../../src/renderer/app/api.js';
 import { byTest, queryByTest, textOf } from '../../src/renderer/ui/vnode.js';
-import { click, startApp, type } from './harness.js';
+import { apiError, click, startApp, type } from './harness.js';
 
 const PREVIOUS = 'bkp_01KA0000000000000000000001';
 const NEWEST = 'bkp_01KA0000000000000000000002';
@@ -127,21 +127,49 @@ describe('Settings → Backups (04 §9.1)', () => {
     expect(queryByTest(app.tree(), `restore-${PREVIOUS}`)).toBeDefined();
   });
 
-  it('AC-04-11 C-04-10 restoring the previous archive in the UI takes a second click, then calls the human-only backups.restore', async () => {
+  it('AC-04-11 C-04-10 C-04-12 restoring the previous archive is explained first, then calls backups.restore and says "Confirm in the window" while the shell asks', async () => {
     const app = await startApp(backupApi(), { screen: 'settings', tab: 'backups' });
     await click(app, byTest(app.tree(), 'backups-advanced-toggle'));
     await click(app, byTest(app.tree(), `restore-${PREVIOUS}`));
     expect(app.callsOf('backups.restore')).toEqual([]);
     expect(textOf(byTest(app.tree(), `restore-confirm-${PREVIOUS}`))).toMatch(
-      /backs up the current data first, then restores this backup and restarts/,
+      /backs up the current data first, then restores this backup and restarts\. You confirm it in Command Center’s own window next/,
     );
     await click(app, byTest(app.tree(), `restore-cancel-${PREVIOUS}`));
     expect(queryByTest(app.tree(), `restore-confirm-${PREVIOUS}`)).toBeUndefined();
 
+    // The call waits while main's confirm window is open (C-04-12).
+    let answer: (value: unknown) => void = () => undefined;
+    app.answers['backups.restore'] = () => new Promise((resolve) => (answer = resolve));
     await click(app, byTest(app.tree(), `restore-${PREVIOUS}`));
     await click(app, byTest(app.tree(), `restore-now-${PREVIOUS}`));
     expect(app.callsOf('backups.restore')).toEqual([{ id: PREVIOUS }]);
+    expect(textOf(byTest(app.tree(), `restore-in-window-${PREVIOUS}`))).toBe(
+      'Confirm in the window',
+    );
+    expect(queryByTest(app.tree(), `restore-confirm-${PREVIOUS}`)).toBeUndefined();
+    answer({ status: 'ok', preRestoreBackupId: 'bkp_01KA0000000000000000000003' });
+    await app.settle();
+    expect(queryByTest(app.tree(), `restore-in-window-${PREVIOUS}`)).toBeUndefined();
     expect(app.text()).toMatch(/the current data was backed up first/);
+  });
+
+  it('C-04-12 Cancel in the confirm window leaves the screen as it was, with the reason', async () => {
+    const app = await startApp(
+      {
+        ...backupApi(),
+        'backups.restore': () =>
+          Promise.reject(
+            apiError('E_HUMAN_REQUIRED', 'backups.restore was not confirmed, so nothing changed'),
+          ),
+      },
+      { screen: 'settings', tab: 'backups' },
+    );
+    await click(app, byTest(app.tree(), 'backups-advanced-toggle'));
+    await click(app, byTest(app.tree(), `restore-${PREVIOUS}`));
+    await click(app, byTest(app.tree(), `restore-now-${PREVIOUS}`));
+    expect(app.text()).toMatch(/was not confirmed, so nothing changed/);
+    expect(queryByTest(app.tree(), `restore-in-window-${PREVIOUS}`)).toBeUndefined();
   });
 
   it('04 §9.1 rules 1 and 7: Back up now and Check now call the human-only methods', async () => {
@@ -154,30 +182,35 @@ describe('Settings → Backups (04 §9.1)', () => {
     expect(app.text()).toMatch(/The restore check failed: the backup archive is damaged/);
   });
 
-  it('04 §9.1 rules 3 and 5: sets the passphrase (only when both match) and the folder destination', async () => {
+  it("04 §9.1 rules 3 and 5: the password is asked for in main's window and the folder in its picker; the screen sends neither", async () => {
     const app = await startApp(backupApi(), { screen: 'settings', tab: 'backups' });
-    // Both are set, so their forms open from Change….
     expect(textOf(byTest(app.tree(), 'backup-passphrase-state'))).toBe('Set');
+    // No password field on the screen: main's secret prompt asks for it.
     expect(queryByTest(app.tree(), 'settings-backup-passphrase')).toBeUndefined();
-    await click(app, byTest(app.tree(), 'settings-backup-passphrase-change'));
-    type(byTest(app.tree(), 'settings-backup-passphrase'), 'lantern over quillmarsh');
-    type(byTest(app.tree(), 'settings-backup-passphrase-confirm'), 'lantern over quillmarsh!');
+    let typed: (value: unknown) => void = () => undefined;
+    app.answers['backups.passphrase'] = () => new Promise((resolve) => (typed = resolve));
     await click(app, byTest(app.tree(), 'settings-backup-passphrase-set'));
-    expect(app.callsOf('backups.passphrase')).toEqual([]);
-    expect(app.text()).toMatch(/The two passwords differ/);
-
-    type(byTest(app.tree(), 'settings-backup-passphrase-confirm'), 'lantern over quillmarsh');
-    await click(app, byTest(app.tree(), 'settings-backup-passphrase-set'));
-    expect(app.callsOf('backups.passphrase')).toEqual([{ passphrase: 'lantern over quillmarsh' }]);
-    expect(queryByTest(app.tree(), 'settings-backup-passphrase')).toBeUndefined();
+    expect(app.callsOf('backups.passphrase')).toEqual([{}]);
+    expect(textOf(byTest(app.tree(), 'backup-passphrase-in-window'))).toBe(
+      'Type the password in the window',
+    );
+    expect(queryByTest(app.tree(), 'settings-backup-passphrase-set')).toBeUndefined();
+    typed({ status: 'ok', passphraseSet: true });
+    await app.settle();
+    expect(app.text()).toMatch(/Backup password set/);
+    expect(queryByTest(app.tree(), 'backup-passphrase-in-window')).toBeUndefined();
 
     expect(textOf(byTest(app.tree(), 'backup-destination'))).toBe('Synced folder');
     await click(app, byTest(app.tree(), 'settings-backup-destination-change'));
+    // No folder field either: the system folder picker asks for it.
+    expect(queryByTest(app.tree(), 'settings-backup-path')).toBeUndefined();
+    await click(app, byTest(app.tree(), 'settings-backup-destination-set'));
+    expect(app.callsOf('backups.destination')).toEqual([]);
+    expect(app.text()).toMatch(/Name the second copy first/);
     type(byTest(app.tree(), 'settings-backup-label'), 'NAS');
-    type(byTest(app.tree(), 'settings-backup-path'), '/Volumes/nas/command-center');
     await click(app, byTest(app.tree(), 'settings-backup-destination-set'));
     expect(app.callsOf('backups.destination')).toEqual([
-      { destination: { kind: 'folder', label: 'NAS', path: '/Volumes/nas/command-center' } },
+      { destination: { kind: 'folder', label: 'NAS' } },
     ]);
     // Stopping the second copy is in the Change… form.
     expect(queryByTest(app.tree(), 'settings-backup-destination-clear')).toBeUndefined();
@@ -188,7 +221,7 @@ describe('Settings → Backups (04 §9.1)', () => {
 });
 
 describe('Settings → Backups for a first-time user', () => {
-  it('04 §9.1 rule 3: until a password and a second copy are set, their forms are open and the state reads "Only on this computer"', async () => {
+  it('04 §9.1 rule 3: until a password and a second copy are set, Set password… and the second-copy form are offered and the state reads "Only on this computer"', async () => {
     const fresh: BackupStatus = { state: 'not_configured', passphraseSet: false, reasons: [] };
     const app = await startApp(
       { ...backupApi(fresh), 'backups.list': () => ({ backups: [], total: 0 }) },
@@ -196,7 +229,8 @@ describe('Settings → Backups for a first-time user', () => {
     );
     expect(textOf(byTest(app.tree(), 'backup-state'))).toBe('Only on this computer');
     expect(textOf(byTest(app.tree(), 'backup-last-good'))).toBe('No backup yet');
-    expect(queryByTest(app.tree(), 'settings-backup-passphrase')).toBeDefined();
+    expect(textOf(byTest(app.tree(), 'backup-passphrase-state'))).toMatch(/Not set/);
+    expect(textOf(byTest(app.tree(), 'settings-backup-passphrase-set'))).toBe('Set password…');
     expect(queryByTest(app.tree(), 'settings-backup-label')).toBeDefined();
     expect(queryByTest(app.tree(), 'settings-backup-destination-clear')).toBeUndefined();
     await click(app, byTest(app.tree(), 'backups-advanced-toggle'));

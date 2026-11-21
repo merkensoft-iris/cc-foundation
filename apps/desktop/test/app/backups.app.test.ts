@@ -5,10 +5,12 @@
  * this run does them by clicking the screens.
  *
  * The profile is the reference scenario with a folder destination, set through the core as the
- * user before the app opens it. In the app the user sets a passphrase (main derives the key and
- * keeps it with `safeStorage`) and backs up; that archive is then corrupted in the folder, the
- * restore test fails, and a second backup is restored from the history. Restoring is a Tier H
- * operation (C-04-12): the user confirms it in the prompt main draws, outside the app page.
+ * user before the app opens it (the folder picker is the system's, which no test can drive). In
+ * the app the user sets a passphrase, typed in main's secret prompt (main derives the key and
+ * keeps it with `safeStorage`; the screen never sees it), and backs up; that archive is then
+ * corrupted in the folder, the restore test fails, and a second backup is restored from the
+ * history. Restoring is a Tier H operation (C-04-12): the user confirms it in main's confirm
+ * window, outside the app page.
  */
 import fs from 'node:fs';
 import path from 'node:path';
@@ -18,7 +20,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { startHeadless } from '@cc/core/headless';
 import { createProfileDir, FakeTimerClock, seedScenario, type ProfileDir } from '@cc/test-kit';
 
-import { launchApp, type RunningApp } from './electron.ts';
+import { clickClosing, launchApp, windowOpenedBy, type RunningApp } from './electron.ts';
 
 const ARCHIVE = /^cc-backup-\d{8}T\d{6}Z-(bkp_[0-9A-Z]{26})\.ccb$/;
 
@@ -89,13 +91,29 @@ afterAll(async () => {
 });
 
 describe('P1-17 backups in the app', { timeout: 120_000 }, () => {
-  it('04 §9.1 rules 3 and 5: the passphrase is set in Settings → Backups, and a backup reaches the folder as one encrypted archive', async () => {
+  it("04 §9.1 rules 3 and 5: the passphrase is typed in main's secret prompt from Settings → Backups, and a backup reaches the folder as one encrypted archive", async () => {
     await openBackups();
     const passphrase = 'lantern over quillmarsh harbour';
-    await app().byTest('settings-backup-passphrase').fill(passphrase);
-    await app().byTest('settings-backup-passphrase-confirm').fill(passphrase);
-    await app().byTest('settings-backup-passphrase-set').click();
+    const prompt = await windowOpenedBy(app(), () =>
+      app().byTest('settings-backup-passphrase-set').click(),
+    );
+    // The screen says where the password is asked for, and has no field for it.
+    await app().byTest('backup-passphrase-in-window').waitFor();
+    await expect(app().page.locator('input[type="password"]').count()).resolves.toBe(0);
+    await expect(prompt.locator('[data-test="secret-title"]').textContent()).resolves.toBe(
+      'Backup password',
+    );
+    await prompt.locator('[data-test="secret-value"]').fill(passphrase);
+    await prompt.locator('[data-test="secret-again"]').fill(`${passphrase}!`);
+    await prompt.locator('[data-test="secret-submit"]').click();
+    await prompt
+      .locator('[data-test="secret-error"]')
+      .filter({ hasText: /differ/ })
+      .waitFor();
+    await prompt.locator('[data-test="secret-again"]').fill(passphrase);
+    await clickClosing(prompt, 'secret-submit');
     await flashSays('Backup password set.');
+    await expect(app().byTest('backup-passphrase-state').textContent()).resolves.toBe('Set');
 
     await app().byTest('backup-run').click();
     await flashSays('Backup written.');
@@ -143,22 +161,17 @@ describe('P1-17 backups in the app', { timeout: 120_000 }, () => {
     ids.good = archives(folder.path).find((id) => id !== ids.corrupted) ?? '';
     await openAdvanced();
     await app().byTest(`restore-${ids.good}`).click();
-    const opened = app().app.waitForEvent('window');
-    await app().byTest(`restore-now-${ids.good}`).click();
-    // C-04-12: main's prompt shows the core's preview; the user confirms there.
-    const prompt = await opened;
+    // C-04-12: main's confirm window shows the core's preview; the user confirms there, and
+    // the screen says so meanwhile.
+    const prompt = await windowOpenedBy(app(), () =>
+      app().byTest(`restore-now-${ids.good}`).click(),
+    );
+    await app().byTest(`restore-in-window-${ids.good}`).waitFor();
     const preview = prompt.locator('[data-test="confirm-preview"]');
     await preview.waitFor();
     await expect(preview.textContent()).resolves.toContain(ids.good);
-    // Choosing closes the prompt window, which may end the click's own wait.
-    const closed = prompt.waitForEvent('close');
-    await prompt
-      .locator('[data-test="confirm-approve"]')
-      .click()
-      .catch((error: unknown) => {
-        if (!prompt.isClosed()) throw error;
-      });
-    await closed;
+    expect(prompt.url()).toMatch(/^cc-confirm:\/\/shell\/p\/[0-9a-f]{32}$/);
+    await clickClosing(prompt, 'confirm-approve');
     await flashSays(/the current data was backed up first/);
     // The restart applies the staged restore before the store opens (04 §9.1 rule 9).
     await expect

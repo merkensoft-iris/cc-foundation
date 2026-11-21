@@ -9,7 +9,8 @@
  *
  * Every section page has its basics on top and an Advanced panel at the bottom, on one fixed
  * row grid (label | value | action). Human-only actions (04 §4.3) are done here as the user;
- * the hard-to-undo and high-risk ones take an inline confirmation.
+ * the hard-to-undo and high-risk ones are explained inline first, and the Tier H ones among
+ * them are then confirmed in the app shell's confirm window (C-04-12).
  */
 import type { BackupStatus, PrincipalRow } from '../app/api.js';
 import type { AppRoute, SettingsSection } from '../app/routes.js';

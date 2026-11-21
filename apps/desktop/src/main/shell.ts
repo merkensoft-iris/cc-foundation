@@ -20,8 +20,11 @@
  * help and exits (AC-04-12).
  *
  * Tier H operations (04 §4.3 rule 4, C-04-12): the core answers a safety-critical UI call with
- * a confirmation intent; main asks the user in a prompt it draws (`ShellPlatform.confirm`, one
- * at a time) and approves the intent over the core-host channel (`ipc.ts`).
+ * a confirmation intent; main asks the user in its confirm window (`shell-prompts.ts`, one at a
+ * time) and approves the intent over the core-host channel (`ipc.ts`). A
+ * `commandcenter://confirmations/<id>` link for that intent brings the confirm window to the
+ * front. The backup passphrase is typed in main's secret prompt and a backup folder is chosen
+ * in the system's folder picker, so neither passes through the app page.
  */
 import type { BackupKey } from '@cc/core/backup-keys';
 
@@ -35,7 +38,6 @@ import {
   type SupervisorTiming,
 } from './core-supervisor.js';
 import { BackupKeyring, type SecretStore } from './backup-keys.js';
-import { confirmPromptOf, type ConfirmPrompt } from './confirm-prompt.js';
 import { deepLinkInArgv, parseDeepLink, type Route } from './deep-links.js';
 import {
   NAVIGATE_CHANNEL,
@@ -44,6 +46,14 @@ import {
   type IpcMainLike,
   type ShellInfo,
 } from './ipc.js';
+import {
+  BACKUP_PASSPHRASE_PROMPT,
+  CONFIRM_ANSWER_CHANNEL,
+  SECRET_ANSWER_CHANNEL,
+  ShellPrompts,
+  type PromptWindow,
+  type PromptWindowSpec,
+} from './shell-prompts.js';
 import { NotificationCenter, type ShownNotification } from './notifications/center.js';
 import { unsupportedBlocks } from './notifications/quiet-hours.js';
 import { RebuildOffer, type RebuildOutcome } from './rebuild-offer.js';
@@ -135,11 +145,13 @@ export interface ShellPlatform {
   registerProtocolClient(): void;
   createWindow(title: string): ShellWindow;
   /**
-   * Asks the user to confirm a Tier H operation in a prompt main draws, outside the app page
-   * (C-04-12); true when they confirmed. It closes unconfirmed at `prompt.expiresAt`.
-   * TEMPORARY: the minimal prompt of `confirm-prompt.ts`, until the confirm window replaces it.
+   * Opens one of main's prompt windows (the confirm window or the secret prompt, C-04-12,
+   * 04 §9.1 rule 3): its own origin and session, the foundation's page served while it is open,
+   * and the two-function preload of its kind (`shell-prompts.ts`).
    */
-  confirm(prompt: ConfirmPrompt): Promise<boolean>;
+  openPrompt(spec: PromptWindowSpec): PromptWindow;
+  /** The system's folder picker; the chosen folder, or `undefined` when cancelled. */
+  chooseFolder(title: string): Promise<string | undefined>;
   createTray(): ShellTray;
   showNotification(notification: ShownNotification, onClick: () => void): void;
   quit(): void;
@@ -266,6 +278,12 @@ export async function startShell(
     return window;
   };
 
+  const prompts = new ShellPrompts({
+    open: (spec) => platform.openPrompt(spec),
+    clock: platform.clock,
+    log: (event, fields) => platform.log(event, fields),
+  });
+
   const openLink = async (link: string): Promise<Route | undefined> => {
     const route = parseDeepLink(link);
     if (route === undefined) {
@@ -276,6 +294,8 @@ export async function startShell(
       earlyLinks.push(link);
       return route;
     }
+    // A Tier H intent's link opens its confirm window, whatever the app page draws (C-04-12).
+    if (route.kind === 'confirmations' && prompts.show(route.target)) return route;
     const target = showWindow();
     await target.loaded;
     if (!target.isDestroyed()) target.send(NAVIGATE_CHANNEL, route);
@@ -300,6 +320,7 @@ export async function startShell(
     if (quitting) return;
     event.preventDefault();
     quitting = true;
+    prompts.closeAll();
     notifications.dispose();
     rebuild.dispose();
     core.stop().then(
@@ -348,20 +369,18 @@ export async function startShell(
     log: (event, fields) => platform.log(event, fields),
   });
 
-  // One prompt at a time: a second Tier H call while one is open is not confirmed.
-  let confirming = false;
+  // Answers from main's own prompt windows; `ShellPrompts` checks they come from that window.
+  platform.ipc.handle(CONFIRM_ANSWER_CHANNEL, (event, token, choice) =>
+    prompts.answerConfirm(event, token, choice),
+  );
+  platform.ipc.handle(SECRET_ANSWER_CHANNEL, (event, token, value) =>
+    prompts.answerSecret(event, token, value),
+  );
   registerBridge(platform.ipc, {
     call: (method, params) => core.call(method, params),
     intents: {
-      confirm: async (intent) => {
-        if (confirming) return false;
-        confirming = true;
-        try {
-          return await platform.confirm(confirmPromptOf(intent));
-        } finally {
-          confirming = false;
-        }
-      },
+      // One confirm window at a time: a second Tier H call while one is open is not confirmed.
+      confirm: (intent) => prompts.confirm(intent),
       approve: (intentId, payloadHash) => core.approveIntent(intentId, payloadHash),
       deny: (intentId) => core.denyIntent(intentId),
     },
@@ -384,7 +403,9 @@ export async function startShell(
             await keysLoaded;
             core.sendBackupKeys(await keyring.setPassphrase(passphrase));
           },
+          askPassphrase: () => prompts.secret(BACKUP_PASSPHRASE_PROMPT),
         }),
+    chooseFolder: (title) => platform.chooseFolder(title),
     log: (event, fields) => platform.log(event, fields),
   });
 

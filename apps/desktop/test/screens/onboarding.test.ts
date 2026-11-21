@@ -46,6 +46,10 @@ afterEach(async () => {
 });
 
 /** The app over a real core: every method goes to the core as the user. */
+/** What the user types in main's secret prompt, and picks in the folder picker. */
+const TYPED_IN_MAIN = 'correct horse battery staple';
+const PICKED_FOLDER = '/tmp/cc-sync';
+
 async function live(setup?: (core: CoreService) => Promise<void>): Promise<Live> {
   const profile = createProfileDir();
   const core = await startCore({
@@ -62,9 +66,17 @@ async function live(setup?: (core: CoreService) => Promise<void>): Promise<Live>
       (_target, method: string): Answer =>
       async (params) => {
         if (method === 'backups.passphrase') {
-          // main keeps the passphrase and tells the core only that it is set
-          secrets.push(String(params['passphrase']));
+          // The screen sends no passphrase: main asks for it in its own window, keeps its key
+          // and tells the core only that it is set (04 §9.1 rule 3).
+          expect(params).toEqual({});
+          secrets.push(TYPED_IN_MAIN);
           return core.callAsUser(method, {});
+        }
+        const destination = params['destination'] as Record<string, unknown> | null | undefined;
+        if (method === 'backups.destination' && destination?.['kind'] === 'folder') {
+          // The screen sends no path: main asks in the system folder picker (04 §9.1 rule 5).
+          expect(destination['path']).toBeUndefined();
+          return core.callAsUser(method, { destination: { ...destination, path: PICKED_FOLDER } });
         }
         return core.callAsUser(method, params);
       },
@@ -301,27 +313,20 @@ describe('S1 to S9 (01 §3)', { timeout: SLOW_MS }, () => {
 });
 
 describe('S1 backups (01 §3.1 rows 9 and 10, 04 §9.1)', { timeout: SLOW_MS }, () => {
-  it('the passphrase goes to the secret store and the destination is recorded; both stay out of a profile.json', async () => {
+  it("the passphrase is typed in main's window and the folder chosen in its picker; both are recorded and stay out of a profile.json", async () => {
     const { app, core, secrets } = await live();
     await app.app.start();
     await settle(app);
-    let tree = app.tree();
-    type(byTest(tree, 'backup-passphrase'), 'correct horse battery staple');
-    type(byTest(tree, 'backup-passphrase-confirm'), 'correct horse battery stapler');
+    // The screen has no passphrase or folder field: main's windows ask for them.
+    expect(queryByTest(app.tree(), 'backup-passphrase')).toBeUndefined();
+    expect(queryByTest(app.tree(), 'backup-path')).toBeUndefined();
     await press(app, 'backup-passphrase-set');
-    expect(textOf(app.tree())).toMatch(/The two passphrases differ/);
-    expect(secrets).toEqual([]);
-
-    tree = app.tree();
-    type(byTest(tree, 'backup-passphrase'), 'correct horse battery staple');
-    type(byTest(tree, 'backup-passphrase-confirm'), 'correct horse battery staple');
-    await press(app, 'backup-passphrase-set');
-    expect(secrets).toEqual(['correct horse battery staple']);
+    expect(secrets).toEqual([TYPED_IN_MAIN]);
     expect(textOf(app.tree())).toMatch(/passphrase set/);
 
-    tree = app.tree();
-    type(byTest(tree, 'backup-label'), 'Synced folder');
-    type(byTest(tree, 'backup-path'), '/tmp/cc-sync');
+    await press(app, 'backup-destination-set');
+    expect(textOf(app.tree())).toMatch(/A destination needs a label/);
+    type(byTest(app.tree(), 'backup-label'), 'Synced folder');
     await press(app, 'backup-destination-set');
     const status = (await core.callAsUser('onboarding.status', {})) as {
       appOnly: { row: number; answered: boolean }[];

@@ -48,9 +48,16 @@ export const CONTENT_SECURITY_POLICY = [
   "frame-ancestors 'none'",
 ].join('; ');
 
-/** URLs the app's sessions may load: the app's own pages, and DevTools in development. */
-export function isAllowedRequestUrl(url: string, allowDevTools: boolean): boolean {
-  if (url.startsWith(`${APP_ORIGIN}/`)) return true;
+/**
+ * URLs a session may load: its own origin's pages (the app's, or for the prompt session main's
+ * prompt origin), and DevTools in development.
+ */
+export function isAllowedRequestUrl(
+  url: string,
+  allowDevTools: boolean,
+  origin: string = APP_ORIGIN,
+): boolean {
+  if (url.startsWith(`${origin}/`)) return true;
   return allowDevTools && url.startsWith('devtools://');
 }
 
@@ -78,16 +85,23 @@ export interface HardenableSession {
   };
 }
 
-/** Denies every permission and cancels every request that is not for the app's origin. */
+/**
+ * Denies every permission and cancels every request that is not for the session's origin
+ * (`origin`, the app's by default).
+ */
 export function hardenSession(
   session: HardenableSession,
-  options: { readonly allowDevTools: boolean; readonly onBlocked?: (url: string) => void },
+  options: {
+    readonly allowDevTools: boolean;
+    readonly origin?: string;
+    readonly onBlocked?: (url: string) => void;
+  },
 ): void {
   session.setPermissionRequestHandler((_webContents, _permission, callback) => callback(false));
   session.setPermissionCheckHandler(() => false);
   session.setDevicePermissionHandler(() => false);
   session.webRequest.onBeforeRequest((details, callback) => {
-    const allowed = isAllowedRequestUrl(details.url, options.allowDevTools);
+    const allowed = isAllowedRequestUrl(details.url, options.allowDevTools, options.origin);
     if (!allowed) options.onBlocked?.(details.url);
     callback({ cancel: !allowed });
   });

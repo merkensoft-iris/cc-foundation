@@ -1,8 +1,9 @@
 /**
  * Tier H confirmations in the shell (04 §4.3 rule 4, C-04-12, AC-04-15): main approves a
  * core intent with `approve-intent` on the core-host channel, never on the UI port; the core
- * host runs it on the real core; and main's temporary prompt page (`confirm-prompt.ts`) shows
- * the core's preview and answers only in its own window.
+ * host runs it on the real core; and main's confirm window and secret prompt
+ * (`shell-prompts.ts`) are the foundation's pages on their own origin, showing the core's
+ * preview, styled by the theme tokens only.
  */
 import { EventEmitter } from 'node:events';
 import fs from 'node:fs';
@@ -21,11 +22,15 @@ import {
 import { realCore } from '../src/core-host/real-core.js';
 import { resolveAppRequest } from '../src/main/app-protocol.js';
 import {
-  confirmChoice,
+  BACKUP_PASSPHRASE_PROMPT,
   confirmPage,
   confirmPromptOf,
-  CONFIRM_PATH,
-} from '../src/main/confirm-prompt.js';
+  PROMPT_CSS,
+  PROMPT_ORIGIN,
+  promptUrl,
+  resolvePromptRequest,
+  secretPage,
+} from '../src/main/shell-prompts.js';
 import {
   CoreSupervisor,
   UiCallError,
@@ -40,6 +45,7 @@ import {
   type MainToHost,
   type NeedsConfirmation,
 } from '../src/shared/protocol.js';
+import { secretProblem } from '../src/prompt-page/index.js';
 import { fakeChannel, settle, timerClock, type FakePort } from './fakes.js';
 
 const INTENT = {
@@ -286,47 +292,82 @@ describe('the core host runs approved intents (C-04-12)', () => {
   });
 });
 
-describe("main's temporary confirmation prompt (C-04-12)", () => {
+describe("main's confirm window and secret prompt (C-04-12, 04 §9.1 rule 3)", () => {
   const token = 'f'.repeat(32);
   const prompt = confirmPromptOf({
     ...INTENT,
     preview: 'Remove access for "<b>x</b>" & more',
     method: 'principals.revoke',
   });
+  const scriptFile = path.resolve('/opt/cc/dist/prompt-page/index.js');
+  const pages = new Map<string, string>();
+  const resolve = (url: string, themeFile?: string) =>
+    resolvePromptRequest(url, { page: (t) => pages.get(t), scriptFile, themeFile });
 
-  it('shows the core preview escaped, with no script, and only while it is open', () => {
+  it('C-04-12 the confirm window shows the core preview escaped, with the foundation script and no inline script', () => {
     const page = confirmPage(prompt, token);
     expect(prompt.title).toBe('Remove access');
     expect(page).toContain('Remove access for &quot;&lt;b&gt;x&lt;/b&gt;&quot; &amp; more');
-    expect(page).not.toMatch(/<script/i);
-    expect(page).toContain(`href="${CONFIRM_PATH}${token}/confirm"`);
-    const root = path.resolve('/opt/cc/dist/renderer');
-    const pages = new Map([[token, page]]);
-    expect(
-      resolveAppRequest(`cc-app://app/confirm/${token}`, root, undefined, (t) => pages.get(t)),
-    ).toEqual({ kind: 'inline', body: page, contentType: 'text/html; charset=utf-8' });
-    expect(
-      resolveAppRequest(`cc-app://app/confirm/${'0'.repeat(32)}`, root, undefined, (t) =>
-        pages.get(t),
-      ),
-    ).toEqual({ kind: 'not-found' });
-    expect(resolveAppRequest(`cc-app://app/confirm/${token}`, root)).toEqual({
-      kind: 'not-found',
-    });
-    expect(resolveAppRequest('cc-app://app/confirm.css', root)).toMatchObject({ kind: 'inline' });
+    expect(page).toContain(`data-kind="confirm" data-prompt="${token}"`);
+    expect(page).toContain('<script type="module" src="/prompt.js"></script>');
+    // The only script is the foundation's file; nothing inline, no event attributes.
+    expect(page.match(/<script/g)).toHaveLength(1);
+    expect(page).not.toMatch(/\son[a-z]+=/i);
+    expect(page).toContain('closes unconfirmed at 05:35 UTC');
+    expect(page).toContain('data-test="confirm-approve"');
+    expect(page).toContain('data-test="confirm-cancel"');
   });
 
-  it('reads a choice only from the two links of its own token', () => {
-    expect(confirmChoice(`cc-app://app/confirm/${token}/confirm`, token)).toBe('confirm');
-    expect(confirmChoice(`cc-app://app/confirm/${token}/cancel`, token)).toBe('cancel');
-    for (const url of [
-      `cc-app://app/confirm/${'0'.repeat(32)}/confirm`,
-      `cc-app://app/confirm/${token}/confirm?x=1`,
-      `cc-app://app/confirm/${token}/confirm#x`,
-      `cc-app://app/confirm/${token}`,
-      'not a url',
-    ]) {
-      expect(confirmChoice(url, token), url).toBeUndefined();
+  it('04 §9.1 rule 3 the secret prompt asks twice, with the minimum length, and carries no value', () => {
+    const page = secretPage(BACKUP_PASSPHRASE_PROMPT, token);
+    expect(page).toContain(`data-kind="secret" data-prompt="${token}" data-min="12"`);
+    expect(page).toContain('type="password"');
+    expect(page).toContain('data-test="secret-again"');
+    expect(page).not.toMatch(/value=/);
+    expect(secretProblem('short', 'short', 12)).toMatch(/at least 12/);
+    expect(secretProblem('lantern over quillmarsh', 'lantern over quillmarsh!', 12)).toMatch(
+      /differ/,
+    );
+    expect(secretProblem('lantern over quillmarsh', 'lantern over quillmarsh', 12)).toBeUndefined();
+  });
+
+  it('Q9 the prompts are styled by the theme tokens only', () => {
+    const colours = PROMPT_CSS.match(/#[0-9a-f]{3,8}\b/gi) ?? [];
+    // Every literal colour is a fallback inside var(--cc-*), never a style of its own.
+    for (const colour of colours) {
+      expect(PROMPT_CSS).toMatch(new RegExp(`var\\(--cc-[a-z-]+, ${colour}\\)`));
     }
+    expect(PROMPT_CSS).not.toMatch(/url\(|@import/);
+  });
+
+  it("C-04-12 the prompt origin serves only an open prompt's page, the foundation script, its stylesheet and the theme; the app origin serves none of them", () => {
+    const page = confirmPage(prompt, token);
+    pages.set(token, page);
+    expect(promptUrl(token)).toBe(`${PROMPT_ORIGIN}/p/${token}`);
+    expect(resolve(promptUrl(token))).toEqual({
+      kind: 'inline',
+      body: page,
+      contentType: 'text/html; charset=utf-8',
+    });
+    expect(resolve(promptUrl('0'.repeat(32)))).toEqual({ kind: 'not-found' });
+    expect(resolve(`${PROMPT_ORIGIN}/p/../../etc/passwd`)).toEqual({ kind: 'not-found' });
+    expect(resolve(`${PROMPT_ORIGIN}/prompt.js`)).toEqual({
+      kind: 'file',
+      path: scriptFile,
+      contentType: 'text/javascript; charset=utf-8',
+    });
+    expect(resolve(`${PROMPT_ORIGIN}/prompt.css`)).toMatchObject({ kind: 'inline' });
+    expect(resolve(`${PROMPT_ORIGIN}/theme.css`, '/opt/cc/cc-theme.css')).toMatchObject({
+      kind: 'file',
+      path: '/opt/cc/cc-theme.css',
+    });
+    expect(resolve(`cc-app://app/p/${token}`)).toEqual({ kind: 'not-found' });
+    expect(resolve(`cc-confirm://other/p/${token}`)).toEqual({ kind: 'not-found' });
+    expect(resolve('not a url')).toEqual({ kind: 'not-found' });
+    const root = path.resolve('/opt/cc/dist/renderer');
+    expect(resolveAppRequest(`cc-app://app/p/${token}`, root)).toEqual({ kind: 'not-found' });
+    expect(resolveAppRequest('cc-app://app/prompt.js', root)).toEqual({ kind: 'not-found' });
+    pages.delete(token);
+    expect(resolve(promptUrl(token))).toEqual({ kind: 'not-found' });
   });
 });

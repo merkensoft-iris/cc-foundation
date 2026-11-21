@@ -217,6 +217,45 @@ describe('Settings → Agent access (07 §5)', () => {
     expect(textOf(byTest(app.tree(), 'flash'))).toMatch(/cli-default can no longer reach/);
   });
 
+  it('C-04-12 Remove access and a high-risk grant are explained here and confirmed in the shell\'s window: the screen says "Confirm in the window" while it waits', async () => {
+    const app = await startApp(api(), { screen: 'settings', tab: 'agents' });
+    let answer: (value: unknown) => void = () => undefined;
+    app.answers['principals.revoke'] = () => new Promise((resolve) => (answer = resolve));
+    await click(app, byTest(app.tree(), 'revoke-cli-default'));
+    expect(textOf(byTest(app.tree(), 'revoke-confirm-cli-default'))).toMatch(
+      /You confirm it in Command Center’s own window next\./,
+    );
+    await click(app, byTest(app.tree(), 'revoke-now-cli-default'));
+    expect(textOf(byTest(app.tree(), 'revoke-in-window-cli-default'))).toBe(
+      'Confirm in the window',
+    );
+    answer({ principal: principals[0] });
+    await app.settle();
+    expect(queryByTest(app.tree(), 'revoke-in-window-cli-default')).toBeUndefined();
+
+    app.answers['principals.update'] = () => new Promise((resolve) => (answer = resolve));
+    await click(app, byTest(app.tree(), 'agents-advanced-toggle'));
+    byTest(app.tree(), 'scope-cli-default-onboarding:apply').props.onCheck?.(true);
+    await app.settle();
+    await click(app, byTest(app.tree(), 'grant-now-cli-default-onboarding:apply'));
+    expect(textOf(byTest(app.tree(), 'grant-in-window-cli-default'))).toBe('Confirm in the window');
+    answer({ principal: principals[0] });
+    await app.settle();
+    expect(queryByTest(app.tree(), 'grant-in-window-cli-default')).toBeUndefined();
+
+    app.answers['principals.create'] = () => new Promise((resolve) => (answer = resolve));
+    const form = () => byTest(app.tree(), 'add-principal');
+    type(byTest(form(), 'principal-name'), 'night-drafter');
+    byTest(form(), 'add-scope-discovery:request').props.onCheck?.(true);
+    await app.settle();
+    await click(app, byTest(form(), 'add-principal-submit'));
+    await click(app, byTest(app.tree(), 'add-principal-now'));
+    expect(textOf(byTest(app.tree(), 'add-principal-in-window'))).toBe('Confirm in the window');
+    answer({ principal: principals[0], tokenPath: '/tmp/cc-test/new.token' });
+    await app.settle();
+    expect(queryByTest(app.tree(), 'add-principal-in-window')).toBeUndefined();
+  });
+
   it('Advanced: exact permissions apply at once, but a high-risk grant (07 §5 rule 3) takes a confirmation', async () => {
     const app = await startApp(api(), { screen: 'settings', tab: 'agents' });
     await click(app, byTest(app.tree(), 'agents-advanced-toggle'));

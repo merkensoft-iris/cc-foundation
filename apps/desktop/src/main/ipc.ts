@@ -12,18 +12,23 @@
  * not a core method, so no local API client (CLI, MCP) can reach it (OQ-04-11).
  *
  * `backups.passphrase` (onboarding S1 and Settings → Backups, 01 §3.1 row 9; 04 §9.1 rule 3) is
- * answered here first: main derives the backup key from the passphrase (ADR 0007), keeps the
- * key in the OS secret store (`safeStorage`, `<userData>/secrets/`) and hands it to the core,
- * and the core is told only that a passphrase is set. The passphrase never reaches the core,
- * the store or a log, and is not stored anywhere.
+ * answered here: the page sends no passphrase, it only asks. Main opens its own secret prompt
+ * (`shell-prompts.ts`), where the user types the passphrase; main derives the backup key from
+ * it (ADR 0007), keeps the key in the OS secret store (`safeStorage`, `<userData>/secrets/`)
+ * and hands it to the core, and the core is told only that a passphrase is set. The passphrase
+ * never passes through the app page, and never reaches the core, the store or a log. A call
+ * that carries a passphrase is refused.
+ *
+ * `backups.destination` with a folder (01 §3.1 row 10; 04 §9.1 rule 5): the page names the
+ * copy, and main asks for the folder in the system's folder picker (`dialog.showOpenDialog`).
+ * A call that carries a folder path is refused: paths do not pass through the app page either.
  *
  * Tier H operations (04 §4.3 rule 4, C-04-12) answer `needs_confirmation` with an intent
- * instead of running. Main shows the intent's preview, which the core wrote, in a prompt only
- * main draws (`ShellPlatform.confirm`); on Confirm it sends `approve-intent` with the intent's
- * payload hash over the core-host channel and returns the operation's result, on Cancel it
- * drops the intent. The renderer cannot answer the prompt: it only learns the outcome.
- * TEMPORARY: the prompt is the minimal one of `confirm-prompt.ts`, until the foundation-owned
- * confirm window replaces it (the next step of the UI-to-engine plan, F2).
+ * instead of running. Main shows the intent's preview, which the core wrote, in its confirm
+ * window (`shell-prompts.ts`); on Confirm it sends `approve-intent` with the intent's payload
+ * hash over the core-host channel and returns the operation's result, on Cancel it drops the
+ * intent. The renderer cannot answer the confirm window: it only learns the outcome, and its
+ * screens say "Confirm in the window" while they wait.
  */
 import type { ApiErrorData } from '@cc/schemas';
 
@@ -45,8 +50,10 @@ export const REBUILD_STATE_CHANNEL = 'cc:rebuild-state';
 
 export type RebuildAction = 'state' | 'now' | 'later';
 
-/** The human-only method whose secret main keeps (04 §9.1 rule 3). */
+/** The human-only method whose secret main asks for and keeps (04 §9.1 rule 3). */
 export const BACKUP_PASSPHRASE_METHOD = 'backups.passphrase';
+/** The human-only method whose folder main asks for (04 §9.1 rule 5). */
+export const BACKUP_DESTINATION_METHOD = 'backups.destination';
 /** The shortest backup passphrase accepted; CC cannot recover a lost one (04 §9.1 rule 3). */
 export const MIN_PASSPHRASE_LENGTH = 12;
 
@@ -63,6 +70,8 @@ export interface ShellInfo {
 /** The `IpcMainInvokeEvent` parts the bridge reads. */
 export interface InvokeEvent {
   readonly senderFrame: { readonly url: string; readonly parent: unknown } | null;
+  /** The sending web contents; main's prompt windows answer only from their own. */
+  readonly sender?: { readonly id: number };
 }
 
 export interface IpcMainLike {
@@ -82,12 +91,16 @@ export interface BridgeOptions {
   readonly intents?: ShellIntents;
   /** Derives and keeps the backup key from a passphrase; absent where there is no secret store. */
   readonly setBackupPassphrase?: (passphrase: string) => Promise<void>;
+  /** Asks for the backup passphrase in main's secret prompt; `undefined` when cancelled. */
+  readonly askPassphrase?: () => Promise<string | undefined>;
+  /** Asks for a folder in the system's folder picker; `undefined` when cancelled. */
+  readonly chooseFolder?: (title: string) => Promise<string | undefined>;
   readonly log?: (event: string, fields?: Record<string, unknown>) => void;
 }
 
 /** How main confirms a Tier H intent (C-04-12). */
 export interface ShellIntents {
-  /** Shows the core's preview in a prompt main draws; true when the user confirmed. */
+  /** Shows the core's preview in main's confirm window; true when the user confirmed. */
   readonly confirm: (intent: ConfirmationIntent) => Promise<boolean>;
   /** `approve-intent` over the core-host channel; the operation's result. */
   readonly approve: (intentId: string, payloadHash: string) => Promise<unknown>;
@@ -112,23 +125,57 @@ function failed(code: string, message: string, help: string[] = []): InvokeAnswe
   return { ok: false, error: { code, message, help } };
 }
 
-/** The passphrase: its key into the secret store and the core, then the core records it is set. */
+function record(value: unknown): Record<string, unknown> | undefined {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : undefined;
+}
+
+async function callCore(
+  options: BridgeOptions,
+  method: string,
+  params: unknown,
+): Promise<InvokeAnswer> {
+  try {
+    return { ok: true, result: await options.call(method, params) };
+  } catch (error) {
+    if (error instanceof UiCallError) return { ok: false, error: error.data };
+    return failed('E_CRASH', `${method} failed in the app`);
+  }
+}
+
+/**
+ * The passphrase: main asks for it in its own secret prompt, puts its key into the secret store
+ * and the core, then the core records that it is set.
+ */
 async function setBackupPassphrase(options: BridgeOptions, params: unknown): Promise<InvokeAnswer> {
-  const passphrase =
-    typeof params === 'object' && params !== null
-      ? (params as Record<string, unknown>)['passphrase']
-      : undefined;
-  if (typeof passphrase !== 'string' || passphrase.length < MIN_PASSPHRASE_LENGTH) {
+  if (record(params)?.['passphrase'] !== undefined) {
+    return failed('E_USAGE', 'the app page does not pass a backup passphrase', [
+      'Call backups.passphrase with no params: the passphrase is typed in Command Center’s own window',
+    ]);
+  }
+  if (options.setBackupPassphrase === undefined || options.askPassphrase === undefined) {
+    return failed('E_FORBIDDEN', 'this app has no secret store to keep the passphrase in', [
+      'Set the passphrase in the installed app',
+    ]);
+  }
+  let passphrase: string | undefined;
+  try {
+    passphrase = await options.askPassphrase();
+  } catch {
+    options.log?.('ipc.prompt_failed', { method: BACKUP_PASSPHRASE_METHOD });
+  }
+  if (passphrase === undefined) {
+    return failed('E_HUMAN_REQUIRED', 'no backup password was set, so nothing changed', [
+      'Choose Set password again, and type it in the window that opens',
+    ]);
+  }
+  if (passphrase.length < MIN_PASSPHRASE_LENGTH) {
     return failed(
       'E_USAGE',
       `a backup passphrase has at least ${String(MIN_PASSPHRASE_LENGTH)} characters`,
       ['Command Center cannot recover a lost passphrase: keep it somewhere safe (04 §9.1)'],
     );
-  }
-  if (options.setBackupPassphrase === undefined) {
-    return failed('E_FORBIDDEN', 'this app has no secret store to keep the passphrase in', [
-      'Set the passphrase in the installed app',
-    ]);
   }
   try {
     await options.setBackupPassphrase(passphrase);
@@ -138,15 +185,52 @@ async function setBackupPassphrase(options: BridgeOptions, params: unknown): Pro
       'Check that the system keychain is unlocked, then try again',
     ]);
   }
-  try {
-    return { ok: true, result: await options.call(BACKUP_PASSPHRASE_METHOD, {}) };
-  } catch (error) {
-    if (error instanceof UiCallError) return { ok: false, error: error.data };
-    return failed('E_CRASH', `${BACKUP_PASSPHRASE_METHOD} failed in the app`);
-  }
+  return callCore(options, BACKUP_PASSPHRASE_METHOD, {});
 }
 
-/** A Tier H call: the user confirms in main's prompt, then main approves the intent. */
+/**
+ * A folder destination: the page names it, and main asks for the folder in the system's folder
+ * picker. Clearing the destination, and kinds other than a folder, go to the core as they are.
+ */
+async function setBackupDestination(
+  options: BridgeOptions,
+  params: unknown,
+): Promise<InvokeAnswer> {
+  const destination = record(record(params)?.['destination']);
+  if (destination?.['kind'] !== 'folder') {
+    return callCore(options, BACKUP_DESTINATION_METHOD, params);
+  }
+  if (destination['path'] !== undefined) {
+    return failed('E_USAGE', 'the app page does not pass a folder path', [
+      'Send the destination’s kind and label only: the folder is chosen in the system’s folder picker',
+    ]);
+  }
+  const label = destination['label'];
+  if (typeof label !== 'string' || label.trim() === '') {
+    return failed('E_USAGE', 'a second copy needs a name', ['Name it, such as Synced folder']);
+  }
+  if (options.chooseFolder === undefined) {
+    return failed('E_FORBIDDEN', 'this app cannot show a folder picker', [
+      'Choose the folder in the installed app',
+    ]);
+  }
+  let path: string | undefined;
+  try {
+    path = await options.chooseFolder(`Choose the folder for ${label.trim()}`);
+  } catch {
+    options.log?.('ipc.folder_picker_failed', { method: BACKUP_DESTINATION_METHOD });
+  }
+  if (path === undefined) {
+    return failed('E_HUMAN_REQUIRED', 'no folder was chosen, so nothing changed', [
+      'Choose a folder in the window that opens',
+    ]);
+  }
+  return callCore(options, BACKUP_DESTINATION_METHOD, {
+    destination: { kind: 'folder', label: label.trim(), path },
+  });
+}
+
+/** A Tier H call: the user confirms in main's confirm window, then main approves the intent. */
 async function confirmInShell(
   options: BridgeOptions,
   intent: ConfirmationIntent,
@@ -193,6 +277,7 @@ export async function handleInvoke(
     };
   }
   if (method === BACKUP_PASSPHRASE_METHOD) return setBackupPassphrase(options, params);
+  if (method === BACKUP_DESTINATION_METHOD) return setBackupDestination(options, params);
   let result: unknown;
   try {
     result = await options.call(method, params);

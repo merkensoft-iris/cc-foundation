@@ -9,12 +9,24 @@
  *
  * Advanced: the exact permissions of one agent as a checkbox grid (plain label and scope ID),
  * the permission sets, workstreams and sensitive access, adding an agent of any kind, and the
- * removed agents. Granting one of the four high-risk scopes of 07 §5 rule 3 takes an inline
- * confirmation, in the grid and when adding an agent.
+ * removed agents.
+ *
+ * Remove access and granting one of the four high-risk scopes of 07 §5 rule 3 (in the grid and
+ * when adding an agent) are Tier H operations (04 §4.3 rule 4, C-04-12): this screen explains
+ * them inline, and the user confirms them in the app shell's confirm window, with text the
+ * core wrote. While that window is open the screen says "Confirm in the window".
  */
 import { SCOPES, type PrincipalRow } from '../app/api.js';
-import { act, errorText, type Ui } from '../app/screen.js';
-import { button } from '../ui/parts.js';
+import {
+  act,
+  actInWindow,
+  errorText,
+  IN_WINDOW,
+  inWindow,
+  waitingInWindow,
+  type Ui,
+} from '../app/screen.js';
+import { button, inWindowNote } from '../ui/parts.js';
 import { h, type VNode } from '../ui/vnode.js';
 import {
   advanced,
@@ -62,7 +74,10 @@ export type PresetId = (typeof PRESETS)[number]['id'] | 'custom';
 /** The scopes an MCP client gets when connected here: the Helper set (07 §5 `claude-code`). */
 export const MCP_CLIENT_SCOPES = PRESETS[0].scopes;
 
-/** The four scopes no agent has by default (07 §5 rule 3); granting one takes a confirmation. */
+/**
+ * The four scopes no agent has by default (07 §5 rule 3); granting one is confirmed in the app
+ * shell's confirm window (C-04-12).
+ */
 export const HIGH_RISK: ReadonlySet<string> = new Set<Scope>([
   'connectors:invoke',
   'discovery:request',
@@ -207,21 +222,23 @@ function agentRow(principal: PrincipalRow, form: AgentsForm, ui: Ui): VNode {
       },
       'Remove access…',
     ),
-    below:
-      form.removing === principal.name
+    below: waitingInWindow(ui, `revoke-${principal.name}`)
+      ? inWindowNote(IN_WINDOW.confirm, `revoke-in-window-${principal.name}`)
+      : form.removing === principal.name
         ? confirmPanel({
             test: `revoke-confirm-${principal.name}`,
             question: `Remove access for ${principal.name}?`,
             detail:
-              'It stops working with Command Center straight away and its key is deleted. You can connect it again later.',
-            confirm: 'Remove access',
+              'It stops working with Command Center straight away and its key is deleted. You can connect it again later. You confirm it in Command Center’s own window next.',
+            confirm: 'Remove access…',
             danger: true,
             confirmTest: `revoke-now-${principal.name}`,
             cancelTest: `revoke-cancel-${principal.name}`,
             onConfirm: () => {
               form.removing = undefined;
-              void act(
+              void actInWindow(
                 ui,
+                `revoke-${principal.name}`,
                 () => ui.call('principals.revoke', { name: principal.name }),
                 `${principal.name} can no longer reach Command Center; its key is deleted.`,
               );
@@ -377,16 +394,20 @@ function grantConfirm(principal: PrincipalRow, scope: string, form: AgentsForm, 
   return confirmPanel({
     test: `grant-confirm-${principal.name}-${scope}`,
     question: `Let ${principal.name} ${label.toLowerCase()} (${scope})?`,
-    detail: HIGH_RISK_DETAIL[scope] ?? '',
-    confirm: 'Allow',
+    detail: `${HIGH_RISK_DETAIL[scope] ?? ''} You confirm it in Command Center’s own window next.`,
+    confirm: 'Allow…',
     confirmTest: `grant-now-${principal.name}-${scope}`,
     cancelTest: `grant-cancel-${principal.name}-${scope}`,
     onConfirm: () => {
       form.granting = undefined;
-      update(
+      void actInWindow(
         ui,
-        principal,
-        [...principal.scopes, scope],
+        `grant-${principal.name}`,
+        () =>
+          ui.call('principals.update', {
+            name: principal.name,
+            scopes: [...principal.scopes, scope],
+          }),
         `${principal.name} can now ${SCOPE_LABELS[scope as Scope].verb}.`,
       );
     },
@@ -443,9 +464,11 @@ function permissionsView(active: readonly PrincipalRow[], form: AgentsForm, ui: 
       ),
     }),
     permissionGrid(principal, form, ui),
-    form.granting?.name === principal.name
-      ? grantConfirm(principal, form.granting.scope, form, ui)
-      : null,
+    waitingInWindow(ui, `grant-${principal.name}`)
+      ? inWindowNote(IN_WINDOW.confirm, `grant-in-window-${principal.name}`)
+      : form.granting?.name === principal.name
+        ? grantConfirm(principal, form.granting.scope, form, ui)
+        : null,
     row({
       test: `workstreams-${principal.name}`,
       label: 'Workstreams',
@@ -478,9 +501,11 @@ function addAgentView(form: AgentsForm, ui: Ui): VNode {
     const name = add.name.trim();
     const params = { name, kind: add.kind, scopes: [...add.scopes] };
     add.confirming = false;
+    // With a high-risk scope the core asks the app shell to confirm it (C-04-12).
+    const create = () => ui.call<{ tokenPath: string }>('principals.create', params);
     void (async () => {
       try {
-        const created = await ui.call<{ tokenPath: string }>('principals.create', params);
+        const created = await (risky.length > 0 ? inWindow(ui, 'add-principal', create) : create());
         add.name = '';
         ui.flash(`${name} added. Its key is in ${created.tokenPath}.`, 'ok');
       } catch (error) {
@@ -528,26 +553,29 @@ function addAgentView(form: AgentsForm, ui: Ui): VNode {
         },
         { test: 'add-principal-submit' },
       ),
-      below: add.confirming
-        ? confirmPanel({
-            test: 'add-principal-confirm',
-            question: `Add ${add.name.trim()} with ${risky.length === 1 ? 'a permission' : 'permissions'} that ${risky.length === 1 ? 'needs' : 'need'} care?`,
-            detail: risky
-              .map(
-                (scope) =>
-                  `${SCOPE_LABELS[scope as Scope].label}: ${HIGH_RISK_DETAIL[scope] ?? ''}`,
-              )
-              .join(' '),
-            confirm: 'Add agent',
-            confirmTest: 'add-principal-now',
-            cancelTest: 'add-principal-cancel',
-            onConfirm: submit,
-            onCancel: () => {
-              add.confirming = false;
-              ui.render();
-            },
-          })
-        : null,
+      below: waitingInWindow(ui, 'add-principal')
+        ? inWindowNote(IN_WINDOW.confirm, 'add-principal-in-window')
+        : add.confirming
+          ? confirmPanel({
+              test: 'add-principal-confirm',
+              question: `Add ${add.name.trim()} with ${risky.length === 1 ? 'a permission' : 'permissions'} that ${risky.length === 1 ? 'needs' : 'need'} care?`,
+              detail: [
+                ...risky.map(
+                  (scope) =>
+                    `${SCOPE_LABELS[scope as Scope].label}: ${HIGH_RISK_DETAIL[scope] ?? ''}`,
+                ),
+                'You confirm it in Command Center’s own window next.',
+              ].join(' '),
+              confirm: 'Add agent…',
+              confirmTest: 'add-principal-now',
+              cancelTest: 'add-principal-cancel',
+              onConfirm: submit,
+              onCancel: () => {
+                add.confirming = false;
+                ui.render();
+              },
+            })
+          : null,
     }),
     h(
       'div',
