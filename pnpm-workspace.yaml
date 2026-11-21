@@ -4,5 +4,8 @@ packages:
 
 # Dependency install scripts run only when listed here (pnpm 12). electron-winstaller comes
 # with electron-builder (@cc/build) for Squirrel.Windows, which CC does not use (NSIS).
+# esbuild (@cc/build, the engine UI bundle) only checks its binary in its install script; it
+# finds the binary of its platform package without it.
 allowBuilds:
   electron-winstaller: false
+  esbuild: false

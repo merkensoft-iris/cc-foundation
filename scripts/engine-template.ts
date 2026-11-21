@@ -41,6 +41,8 @@ export const ENGINE_PINS = {
  * Install scripts of the foundation's dependencies, as an engine must list them in its
  * `pnpm-workspace.yaml` `allowBuilds` (the same choice as the foundation's own):
  * electron-winstaller comes with electron-builder for Squirrel.Windows, which CC does not use.
+ * esbuild (which `@cc/build` uses to bundle the engine's UI) is already listed by the template
+ * itself, which bundles with it too, so the pin keeps the template's choice.
  */
 export const ENGINE_ALLOW_BUILDS: Readonly<Record<string, boolean>> = {
   'electron-winstaller': false,

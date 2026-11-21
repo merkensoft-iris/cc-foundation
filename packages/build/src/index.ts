@@ -5,7 +5,8 @@
  *
  * The fuse list of 04 §10 rule 5 is from P1-10. P1-16 adds packaging, the build and install
  * stamps and the clean-tree start check (ADR 0004), Rebuild now and the idle restart
- * (04 §10 rule 2), and `cc:upgrade` with its codemod runner (ADR 0003 decision 6).
+ * (04 §10 rule 2), and `cc:upgrade` with its codemod runner (ADR 0003 decision 6). P1-25 adds
+ * the engine UI bundle under the D3 allowlist (ADR 0008 decision 1).
  */
 export const PACKAGE_NAME = '@cc/build';
 
@@ -76,4 +77,20 @@ export {
   type CompiledTheme,
   type TokenPath,
 } from './theme.js';
+export {
+  bundleEngineUi,
+  checkUiMetafile,
+  ENGINE_UI_DIR,
+  ENGINE_UI_SCRIPT,
+  ENGINE_UI_STYLES,
+  engineImportProblem,
+  UI_CONTRACT_PACKAGES,
+  UI_ENTRIES,
+  uiConfigProblems,
+  uiLibraries,
+  type BundleUiOptions,
+  type UiAllowlist,
+  type UiBundle,
+  type UiCheck,
+} from './ui.js';
 export { runUpgrade, type UpgradeOptions } from './upgrade.js';

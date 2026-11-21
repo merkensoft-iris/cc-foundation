@@ -10,11 +10,14 @@
  *
  * The full cc.config schema (modules, vocabulary, framework parameters, the calendar
  * mapping; ADR 0003 decision 3) is P1-18's extension API skeleton in `@cc/schemas`; until it
- * lands, `validateEngineConfig` checks only the shape and the version.
+ * lands, `validateEngineConfig` checks only the shape, the version and the `ui` setting (the
+ * UI libraries the engine's UI may import, `ui.ts`).
  */
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
+
+import { uiConfigProblems } from './ui.js';
 
 export const CONFIG_FILE = 'cc.config.ts';
 
@@ -69,6 +72,7 @@ export function validateEngineConfig(value: unknown, api: number): string[] {
   if (record.extensionApi !== api) {
     problems.push(`${CONFIG_FILE}: the exported extensionApi does not match its source`);
   }
+  problems.push(...uiConfigProblems(record));
   try {
     JSON.stringify(value);
   } catch (error) {

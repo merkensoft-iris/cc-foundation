@@ -3,7 +3,7 @@
  */
 import { describe, expect, it } from 'vitest';
 
-import { describeRebuild } from '../src/renderer/rebuild-view.js';
+import { describeRebuild } from '../src/page-shell/rebuild-view.js';
 import { stampCheck, UNPACKAGED_REASON, unpackagedCheck } from '../src/main/start-mode.js';
 
 describe('the Rebuild now strip', () => {

@@ -1,12 +1,15 @@
 /**
- * The page the renderer runs in, served as `cc-app://app/` (see `app-protocol.ts`). It loads
- * only the compiled renderer module and its stylesheet from the app's own origin; the CSP
- * header (`hardening.ts`) forbids anything else. The renderer draws the screens of 09 P1-11
- * into `#app`; the layout is the foundation's, and an engine changes only the theme tokens
- * (owner decision Q9).
+ * The page the app's UI runs in, served as `cc-app://app/` (see `app-protocol.ts`). The page
+ * shell is main's, whichever UI runs (ADR 0008 decision 1): this HTML, the CSP header
+ * (`hardening.ts`), no inline script, and the labels main owns in the page, the
+ * developer-mode banner and the Rebuild now strip, which the page shell's own script draws
+ * (`/shell/index.js`, from `src/page-shell`) with its own stylesheet (`/shell.css`).
  *
- * `/theme.css` is the engine's compiled theme tokens (`--cc-*` custom properties, from
- * `theme/tokens.json` by `cc-build`); `/app.css` uses them with the foundation's defaults.
+ * The UI is `/ui/index.js` and `/ui/app.css`: the engine's own UI when its build bundled one
+ * (`cc-ui/` in the packaged app, from its `ui/app.ts`), else the default UI (the renderer, with
+ * `APP_CSS` below). It draws into `#app`. `/theme.css` is the engine's compiled theme tokens
+ * (`--cc-*` custom properties, from `theme/tokens.json` by `cc-build`), which every
+ * stylesheet here reads with its own defaults.
  */
 export const APP_PAGE = `<!doctype html>
 <html lang="en">
@@ -15,8 +18,10 @@ export const APP_PAGE = `<!doctype html>
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Command Center</title>
     <link rel="stylesheet" href="/theme.css" />
-    <link rel="stylesheet" href="/app.css" />
-    <script type="module" src="/renderer/index.js"></script>
+    <link rel="stylesheet" href="/shell.css" />
+    <link rel="stylesheet" href="/ui/app.css" />
+    <script type="module" src="/shell/index.js"></script>
+    <script type="module" src="/ui/index.js"></script>
   </head>
   <body>
     <div id="mode-banner" class="mode-banner" role="status" hidden></div>
@@ -30,6 +35,45 @@ export const APP_PAGE = `<!doctype html>
 </html>
 `;
 
+/** The page shell's stylesheet: the developer-mode banner and the Rebuild now strip. */
+export const SHELL_CSS = `.mode-banner {
+  padding: 8px 24px;
+  background: var(--cc-color-warning, #8a5a00);
+  color: #fff;
+  font: 600 1rem var(--cc-font-body, system-ui, sans-serif);
+}
+.rebuild-offer {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  padding: 8px 24px;
+  border-bottom: 1px solid var(--cc-color-border, #8884);
+  background: var(--cc-color-surface, Canvas);
+  color: var(--cc-color-text, CanvasText);
+  font-family: var(--cc-font-body, system-ui, sans-serif);
+}
+.mode-banner[hidden],
+.rebuild-offer[hidden],
+.rebuild-offer button[hidden] {
+  display: none;
+}
+.rebuild-offer button {
+  font: inherit;
+  border-radius: var(--cc-radius-small, 4px);
+  border: 1px solid var(--cc-color-border, #8888);
+  padding: 4px 12px;
+  background: var(--cc-color-surface, Canvas);
+  color: inherit;
+  cursor: pointer;
+}
+.rebuild-offer #rebuild-now {
+  background: var(--cc-color-accent, #0b6e4f);
+  color: var(--cc-color-accent-text, #fff);
+  border-color: transparent;
+}
+`;
+
+/** The default UI's stylesheet, served as `/ui/app.css` when the engine has no UI. */
 export const APP_CSS = `:root {
   color-scheme: light dark;
   font-family: var(--cc-font-body, system-ui, sans-serif);
@@ -73,24 +117,6 @@ select,
 textarea {
   font: inherit;
 }
-.mode-banner {
-  padding: 8px 24px;
-  background: var(--cc-color-warning, #8a5a00);
-  color: #fff;
-  font-weight: 600;
-}
-.rebuild-offer {
-  display: flex;
-  gap: 12px;
-  align-items: center;
-  padding: 8px 24px;
-  border-bottom: 1px solid var(--cc-color-border, #8884);
-  background: var(--cc-color-surface, Canvas);
-}
-.rebuild-offer[hidden] {
-  display: none;
-}
-.rebuild-offer button,
 button.primary,
 button.secondary,
 .tab {
@@ -101,7 +127,6 @@ button.secondary,
   color: inherit;
   cursor: pointer;
 }
-#rebuild-now,
 button.primary {
   background: var(--cc-color-accent, #0b6e4f);
   color: var(--cc-color-accent-text, #fff);

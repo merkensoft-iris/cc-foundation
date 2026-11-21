@@ -16,11 +16,9 @@
  * the stamp names the user's checkout and commit, and the install is the copy's frozen one.
  *
  * The engine's `theme/tokens.json` is compiled to `cc-theme.css` in the app (`theme.ts`), which
- * the shell serves to the renderer.
- *
- * TODO(P1-25): bundle the engine's `ui/` (its composition root, `ui/app.ts`, on
- * `@cc/ui-sdk/v1`) with esbuild under the D3 metafile allowlist (ADR 0008 decision 1). Until
- * then the app runs the default UI, and a file in `ui/` is reported, not silently dropped.
+ * the shell serves to the renderer. After the type-check, the engine's UI, its composition
+ * root `ui/app.ts`, is bundled with esbuild under the D3 metafile allowlist into `cc-ui/` in
+ * the app (`ui.ts`, ADR 0008 decision 1); an engine without one runs the default UI.
  */
 import { existsSync, mkdirSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { isAbsolute, join, relative, resolve, sep } from 'node:path';
@@ -48,6 +46,13 @@ import {
 import { currentFoundation, judgeExtensionApi, type Foundation } from './foundation.js';
 import { THEME_CSS } from './theme.js';
 import { engineTypecheck, type Typecheck } from './typecheck.js';
+import {
+  bundleEngineUi,
+  ENGINE_UI_DIR,
+  ENGINE_UI_SCRIPT,
+  ENGINE_UI_STYLES,
+  uiLibraries,
+} from './ui.js';
 
 export interface CommandResult {
   readonly exitCode: 0 | 1 | 2;
@@ -87,15 +92,6 @@ export interface BuildOptions {
 
 /** The stage directory: generated files added at the app root. */
 export const STAGE_DIR = '.stage';
-
-/** Source files in the engine's `ui/` (its README aside). */
-function widgetFiles(root: string): string[] {
-  const dir = join(root, 'ui');
-  if (!existsSync(dir)) return [];
-  return walkFiles(dir, join(dir, 'node_modules'))
-    .filter((file) => /\.(?:[cm]?[jt]sx?)$/.test(file))
-    .map((file) => `ui/${file}`);
-}
 
 /** Every file under `root` except `.git`, `node_modules` and `skip`, as relative paths. */
 function walkFiles(root: string, skip: string): string[] {
@@ -141,19 +137,21 @@ export async function runBuild(options: BuildOptions): Promise<CommandResult> {
   if (theme !== null && !theme.ok) problems.push(...theme.problems);
   if (problems.length > 0)
     return { exitCode: 1, lines: [...lines, ...problems.map((p) => `cc-build: ${p}`)] };
-  const widgets = widgetFiles(root);
-  if (widgets.length > 0) {
-    lines.push(
-      `cc-build: ui/ has ${widgets.length} widget file(s) (${widgets[0] ?? ''}); the UI in ui/ is not built into the app until cc-build bundles it (P1-25)`,
-    );
-  }
 
-  // 2. Type-check (ADR 0003 decision 7).
+  // 2. Type-check (ADR 0003 decision 7), then the engine's UI under the D3 allowlist.
   const typecheck = await (options.typecheck ?? engineTypecheck)(root);
   if (!typecheck.ok)
     return { exitCode: 1, lines: [...lines, 'cc-build: type-check failed', typecheck.output] };
   lines.push(`cc-build: type-check passed (${typecheck.ms} ms)`);
+  const allowlist = { supported: foundation.supported, libraries: uiLibraries(config) };
+  const uiFailed = (problems: readonly string[]): CommandResult => ({
+    exitCode: 1,
+    lines: [...lines, ...problems.map((p) => `cc-build: ${p}`)],
+  });
   if (options.checkOnly === true) {
+    const ui = await bundleEngineUi(root, allowlist);
+    if (ui.kind === 'failed') return uiFailed(ui.problems);
+    lines.push(ui.line);
     lines.push(
       `cc-build: ok  ${CONFIG_FILE} valid, extension API ${declared.api}, foundation ${foundation.version}`,
     );
@@ -210,6 +208,9 @@ export async function runBuild(options: BuildOptions): Promise<CommandResult> {
     }
   }
   files = files.filter((file) => !insideOut(file));
+  const ui = await bundleEngineUi(root, { ...allowlist, packed: new Set(files) });
+  if (ui.kind === 'failed') return uiFailed(ui.problems);
+  lines.push(ui.line);
 
   const stamp: BuildStamp = {
     stampVersion: 1,
@@ -226,6 +227,11 @@ export async function runBuild(options: BuildOptions): Promise<CommandResult> {
   writeBuildStamp(stageDir, stamp);
   writeFileSync(join(stageDir, 'cc.config.json'), `${JSON.stringify(config, null, 2)}\n`);
   if (theme?.ok === true) writeFileSync(join(stageDir, THEME_CSS), theme.css);
+  if (ui.kind === 'engine') {
+    mkdirSync(join(stageDir, ENGINE_UI_DIR));
+    writeFileSync(join(stageDir, ENGINE_UI_DIR, ENGINE_UI_SCRIPT), ui.script);
+    writeFileSync(join(stageDir, ENGINE_UI_DIR, ENGINE_UI_STYLES), ui.styles);
+  }
   lines.push(
     `cc-build: stamp ${stamp.commit?.slice(0, 12) ?? 'no commit'}, ${stamp.clean ? 'clean' : 'not clean'}, ${files.length} engine files, foundation ${foundation.version}, extension API ${declared.api}`,
   );

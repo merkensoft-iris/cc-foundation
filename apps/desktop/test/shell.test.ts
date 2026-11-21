@@ -1129,6 +1129,8 @@ describe('--smoke (09 P1-16: the packaged start on CI)', () => {
         offerRebuild: false,
         packaged: true,
         version: '0.0.0-test',
+        // A build with an empty ui/ runs the default UI (AC-08-11, ADR 0008 decision 1).
+        ui: 'default',
         uiCall: 'home.get: ok',
         // A new profile: the window opens on onboarding (AC-08-11).
         firstScreen: 'onboarding',
@@ -1136,6 +1138,18 @@ describe('--smoke (09 P1-16: the packaged start on CI)', () => {
       },
     ]);
     expect(fake.cores[0]?.received.map((message) => message.type)).toEqual(['init', 'stop']);
+  });
+
+  it("AC-08-11 says when the window runs the engine's own UI", async () => {
+    const fake = fakePlatform({
+      packaged: true,
+      smoke: true,
+      ui: 'engine',
+      startCheck: () => Promise.resolve({ mode: { kind: 'normal' }, offerRebuild: false }),
+    });
+    await started(fake);
+    await settle(20);
+    expect(fake.smokes).toMatchObject([{ ok: true, ui: 'engine', firstScreen: 'onboarding' }]);
   });
 
   it('never rebuilds, and fails when the core does not come up in time', async () => {
