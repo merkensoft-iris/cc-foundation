@@ -14,7 +14,7 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import type { Metafile } from 'esbuild';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 
 import { runBuild, type Packager } from '../src/build.js';
 import {
@@ -206,6 +206,16 @@ describe('cc-build and the engine UI (09 P1-25, ADR 0008 decision 1)', () => {
   });
 
   describe('D3: an import outside the allowlist fails the build, before anything is packaged', () => {
+    // One engine for the refusals below, each run through `cc-build check` (the same bundle and
+    // check, writing nothing); one full build shows that a refusal stages and packages nothing.
+    const LIBRARIES_CONFIG =
+      'export default {\n  extensionApi: 1,\n  ui: { libraries: ["tiny-view", "evil-view"] },\n};\n';
+    let shared: EngineFixture;
+    beforeAll(() => {
+      shared = engineWith({ 'cc.config.ts': LIBRARIES_CONFIG, 'ui/app.ts': 'export {};\n' });
+    }, 60_000);
+    afterAll(() => shared.cleanup());
+
     it.each([
       [
         'a foundation runtime package',
@@ -238,10 +248,40 @@ describe('cc-build and the engine UI (09 P1-25, ADR 0008 decision 1)', () => {
         'cc-build: ui: node_modules/evil-view/index.js (in evil-view): @cc/core is a foundation runtime package (D3)',
       ],
     ])('%s', async (_name, source, expected) => {
+      write(shared.root, 'ui/app.ts', source);
+      const result = await runBuild({
+        root: shared.root,
+        typecheck: passingTypecheck,
+        checkOnly: true,
+      });
+      expect(result.exitCode).toBe(1);
+      if (expected === null) {
+        expect(result.lines.join('\n')).toMatch(/@cc\/ui-sdk\/v9/);
+      } else {
+        expect(result.lines).toContain(expected);
+      }
+      expect(existsSync(join(shared.root, 'dist'))).toBe(false);
+    });
+
+    it('a Node built-in does not bundle for the window', async () => {
+      write(
+        shared.root,
+        'ui/app.ts',
+        "import { readFileSync } from 'node:fs';\nreadFileSync('x');\n",
+      );
+      const result = await runBuild({
+        root: shared.root,
+        typecheck: passingTypecheck,
+        checkOnly: true,
+      });
+      expect(result.exitCode).toBe(1);
+      expect(result.lines.join('\n')).toMatch(/ui\/app\.ts did not bundle: .*node:fs/);
+    });
+
+    it('a refusal stops the full build before anything is staged or packaged', async () => {
       engine = engineWith({
-        'cc.config.ts':
-          'export default {\n  extensionApi: 1,\n  ui: { libraries: ["tiny-view", "evil-view"] },\n};\n',
-        'ui/app.ts': source,
+        'cc.config.ts': LIBRARIES_CONFIG,
+        'ui/app.ts': "import { h } from 'evil-view';\nconsole.log(h);\n",
       });
       const recorded = recordingPackager();
       const result = await runBuild({
@@ -250,26 +290,11 @@ describe('cc-build and the engine UI (09 P1-25, ADR 0008 decision 1)', () => {
         packager: recorded.packager,
       });
       expect(result.exitCode).toBe(1);
-      if (expected === null) {
-        expect(result.lines.join('\n')).toMatch(/@cc\/ui-sdk\/v9/);
-      } else {
-        expect(result.lines).toContain(expected);
-      }
+      expect(result.lines).toContain(
+        'cc-build: ui: node_modules/evil-view/index.js (in evil-view): @cc/core is a foundation runtime package (D3)',
+      );
       expect(recorded.runs).toBe(0);
       expect(existsSync(join(engine.root, 'dist', '.stage'))).toBe(false);
-    });
-
-    it('a Node built-in does not bundle for the window', async () => {
-      engine = engineWith({
-        'ui/app.ts': "import { readFileSync } from 'node:fs';\nreadFileSync('x');\n",
-      });
-      const result = await runBuild({
-        root: engine.root,
-        typecheck: passingTypecheck,
-        package: false,
-      });
-      expect(result.exitCode).toBe(1);
-      expect(result.lines.join('\n')).toMatch(/ui\/app\.ts did not bundle: .*node:fs/);
     });
 
     it('a file git ignores is never bundled into the app (ADR 0004 decision 4)', async () => {
