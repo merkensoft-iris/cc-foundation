@@ -105,7 +105,7 @@ function prompt(route: AppRoute): VNode | null {
 
 export const homeScreen: Screen<HomeState> = {
   async load(ui) {
-    return { home: await ui.call<HomeResult>('home.get', {}) };
+    return { home: await ui.call('home.get', {}) };
   },
   view({ home }, ui, route) {
     return page(

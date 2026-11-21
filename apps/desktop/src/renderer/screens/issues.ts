@@ -121,9 +121,9 @@ function issueForm(state: IssuesState, ui: Ui): VNode {
 export const issuesScreen: Screen<IssuesState> = {
   async load(ui) {
     const [issues, risks, workstreams] = await Promise.all([
-      ui.call<{ issues: IssueRow[] }>('issues.list', { status: 'open', limit: 200 }),
-      ui.call<{ risks: RiskRow[] }>('risks.list', { limit: 200 }),
-      ui.call<{ workstreams: WorkstreamRow[] }>('workstreams.list', { limit: 200 }),
+      ui.call('issues.list', { status: 'open', limit: 200 }),
+      ui.call('risks.list', { limit: 200 }),
+      ui.call('workstreams.list', { limit: 200 }),
     ]);
     const active = workstreams.workstreams.filter((w) => w.status !== 'archived');
     const workspace = active.find((w) => w.kind === 'workspace')?.slug ?? active[0]?.slug ?? '';

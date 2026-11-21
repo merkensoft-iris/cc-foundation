@@ -2,13 +2,16 @@
 /**
  * @cc/desktop renderer (04 §3): sandboxed, no Node, no network; it reaches the app only
  * through `window.cc` (rule D3). It shows the start mode, the Rebuild now strip, and the
- * screens of 09 P1-11 (`app/app.ts`), opening the screen a `commandcenter://` link names.
+ * screens of 09 P1-11 (`app/app.ts`), opening the screen a `commandcenter://` link names. It
+ * runs only on a shell that speaks its `window.cc` API version (`app/api-version.ts`).
  */
+import { apiVersionProblem } from './app/api-version.js';
 import { App } from './app/app.js';
 import { routeOfLink } from './app/routes.js';
 import type { CcBridge, RebuildState, StartMode } from './bridge.js';
 import { describeRebuild } from './rebuild-view.js';
 import { copyText, mount } from './ui/dom.js';
+import { h } from './ui/vnode.js';
 
 export const PROCESS = 'renderer';
 
@@ -61,9 +64,10 @@ async function start(): Promise<void> {
     copy: copyText,
   });
   let navigated = false;
+  let incompatible = false;
   window.cc.onNavigate((route) => {
     navigated = true;
-    void app.go(routeOfLink(route));
+    if (!incompatible) void app.go(routeOfLink(route));
   });
   window.cc.onRebuildState(showRebuild);
   document
@@ -80,6 +84,21 @@ async function start(): Promise<void> {
   const shell = await window.cc.shell();
   showMode(shell.mode);
   void window.cc.rebuild('state').then(showRebuild);
+  // A UI built for another window.cc API version makes no calls (08 §4.3).
+  const problem = apiVersionProblem(shell);
+  if (problem !== undefined) {
+    incompatible = true;
+    mount(
+      container,
+      h(
+        'div',
+        { class: 'failure', role: 'alert', test: 'api-version' },
+        h('h1', null, 'This app needs a rebuild'),
+        h('p', null, problem),
+      ),
+    );
+    return;
+  }
   // A deep link that opened the app may already have chosen the screen; otherwise the first
   // screen is onboarding until it is committed (01 §1 item 7), then Home.
   if (!navigated) await app.start();

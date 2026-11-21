@@ -4,6 +4,8 @@
  * as routes (`routes.ts`). Rendering goes to a callback, so tests run the whole app headless
  * against a fake `call` and read the view trees.
  */
+import type { Params, Result, UiMethod } from '@cc/ui-sdk/v1';
+
 import type { CcError } from '../bridge.js';
 import { decisionsScreen } from '../screens/decisions.js';
 import { homeScreen } from '../screens/home.js';
@@ -53,8 +55,9 @@ export class App {
   constructor(options: AppOptions) {
     this.#options = options;
     this.ui = {
-      call: <T>(method: string, params?: unknown) =>
-        options.call(method, params ?? {}) as Promise<T>,
+      // The typed client of @cc/ui-sdk/v1 over `window.cc.invoke` (or a test's fake of it).
+      call: <M extends UiMethod>(method: M, params: Params<M>) =>
+        options.call(method, params) as Promise<Result<M>>,
       go: (route) => {
         void this.go(route);
       },
@@ -95,7 +98,7 @@ export class App {
     const generation = this.#generation;
     let route: AppRoute = { screen: 'home' };
     try {
-      const status = await this.ui.call<{ state: string }>('onboarding.status', {});
+      const status = await this.ui.call('onboarding.status', {});
       if (status.state !== 'committed') route = { screen: 'onboarding' };
     } catch {
       // Home loads next and shows the failure.

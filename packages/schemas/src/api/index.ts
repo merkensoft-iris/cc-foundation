@@ -12,6 +12,7 @@ export {
   EvidenceInput,
   ItemSummary,
   methodJsonSchema,
+  uiMethodJsonSchemas,
   OnboardingNotice,
   OnboardingPreview,
   pendingNamespaces,

@@ -4,30 +4,11 @@
  * opens its inline prompt, on Home until the item, meeting or onboarding step that raised it
  * carries it.
  */
-import type { OnboardingStep } from '@cc/schemas';
+import type { AppRoute, Route, ScreenName } from '@cc/ui-sdk/v1';
 
-import type { Route } from '../bridge.js';
+export type { AppRoute, ItemsTab, ScreenName, SettingsSection } from '@cc/ui-sdk/v1';
 
-export type AppRoute =
-  | { readonly screen: 'home'; readonly confirmation?: string; readonly request?: string }
-  | { readonly screen: 'items'; readonly tab?: ItemsTab; readonly ref?: string }
-  | { readonly screen: 'decisions'; readonly ref?: string }
-  | { readonly screen: 'issues' }
-  | { readonly screen: 'meetings'; readonly ref?: string; readonly from?: string }
-  | { readonly screen: 'scorecard'; readonly tab?: 'measures' | 'goals'; readonly ref?: string }
-  | { readonly screen: 'settings'; readonly tab?: SettingsSection }
-  /** Onboarding (01 §3): not in the navigation; the app opens it until it is committed. */
-  | { readonly screen: 'onboarding'; readonly step?: OnboardingStep };
-
-export type ItemsTab = 'list' | 'review' | 'drafts';
-/**
- * The Settings pages (09 P1-11): the Overview, then one page per section. The section names
- * are the ones core error help sends the user to ("Settings → Agent access", "→ Backups").
- */
-export type SettingsSection = 'overview' | 'backups' | 'agents' | 'notifications' | 'ai';
-export type ScreenName = AppRoute['screen'];
-
-/** The navigation, in its fixed order (owner decision Q9: the layout is the foundation's). */
+/** The default UI's navigation, in its order. */
 export const NAV: readonly { readonly screen: ScreenName; readonly label: string }[] = [
   { screen: 'home', label: 'Home' },
   { screen: 'items', label: 'Items' },

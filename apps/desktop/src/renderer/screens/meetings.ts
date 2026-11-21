@@ -214,7 +214,7 @@ function captureForms(
                 return;
               }
               const output = {
-                kind: 'action_item',
+                kind: 'action_item' as const,
                 title: form.title.trim(),
                 due: form.due,
                 doneMeans: form.doneMeans.trim(),
@@ -430,13 +430,13 @@ export const meetingsScreen: Screen<MeetingsState> & { readonly ticks: true } = 
   async load(ui, route: AppRoute) {
     if (route.screen !== 'meetings') throw new Error('not the meetings screen');
     if (route.ref === undefined) {
-      const week = await ui.call<MeetingsListResult>('meetings.list', {
+      const week = await ui.call('meetings.list', {
         ...(route.from === undefined ? {} : { from: route.from, to: addDays(route.from, 6) }),
         limit: 200,
       });
       return { week };
     }
-    const view = await ui.call<MeetingView>('meetings.get', { ref: route.ref });
+    const view = await ui.call('meetings.get', { ref: route.ref });
     const kept = ui.keep(`meeting:${view.meeting.ref}`, () => ({
       clock: { current: 0, startedAt: ui.now() } as RunnerClock,
       forms: {} as Record<string, CaptureForm>,

@@ -59,8 +59,8 @@ export function when(instant: string): string {
 
 export async function loadBackups(ui: Ui): Promise<BackupsState> {
   const [status, list] = await Promise.all([
-    ui.call<BackupStatus>('backups.status', {}),
-    ui.call<{ backups: BackupRecord[]; total: number }>('backups.list', { limit: 30 }),
+    ui.call('backups.status', {}),
+    ui.call('backups.list', { limit: 30 }),
   ]);
   return { status, history: list.backups, total: list.total };
 }
@@ -400,10 +400,7 @@ function restoreCheckRow(status: BackupStatus, ui: Ui): VNode {
       () =>
         void (async () => {
           try {
-            const result = await ui.call<{ test: { ok: boolean; detail: string } }>(
-              'backups.test',
-              {},
-            );
+            const result = await ui.call('backups.test', {});
             ui.flash(
               result.test.ok
                 ? 'The restore check passed.'

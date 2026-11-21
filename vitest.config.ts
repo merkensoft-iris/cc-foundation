@@ -15,6 +15,8 @@ export default defineConfig({
     alias: [
       { find: /^@cc\/cli$/, replacement: `${root}apps/cli/src/index.ts` },
       { find: /^@cc\/core\/(client|headless)$/, replacement: `${root}packages/core/src/$1.ts` },
+      // Versioned entry points (ADR 0003 decision 2): @cc/ui-sdk/v1.
+      { find: /^@cc\/([a-z-]+)\/(v[0-9]+)$/, replacement: `${root}packages/$1/src/$2.ts` },
       { find: /^@cc\/([a-z-]+)$/, replacement: `${root}packages/$1/src/index.ts` },
     ],
   },

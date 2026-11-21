@@ -25,7 +25,6 @@ import {
   nextStep,
   saveStep,
   type RecommendResult,
-  type StatusResult,
   type WizardState,
   type Work,
   type Preview,
@@ -120,7 +119,7 @@ async function confirmCommit(ui: Ui, state: WizardState): Promise<void> {
 
 export const onboardingScreen: Screen<WizardState> = {
   async load(ui, route: AppRoute) {
-    const status = await ui.call<StatusResult>('onboarding.status', {});
+    const status = await ui.call('onboarding.status', {});
     const work = ui.keep('onboarding', newWork);
     if (!work.loaded) {
       if (status.profile !== undefined) {
@@ -138,7 +137,7 @@ export const onboardingScreen: Screen<WizardState> = {
     let problem: string | undefined;
     if (NEEDS_RECOMMENDATION.includes(step) && work.profile.workstreams.length > 0) {
       try {
-        recommend = await ui.call<RecommendResult>('onboarding.recommend', {
+        recommend = await ui.call('onboarding.recommend', {
           profile: work.profile,
         });
       } catch (error) {
@@ -147,7 +146,7 @@ export const onboardingScreen: Screen<WizardState> = {
     }
     if (NEEDS_PREVIEW.includes(step)) {
       try {
-        const result = await ui.call<{ preview: Preview }>('onboarding.preview', {
+        const result = await ui.call('onboarding.preview', {
           profile: work.profile,
           ...(work.calendarMapping.routes.length === 0
             ? {}
