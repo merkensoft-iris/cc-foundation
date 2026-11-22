@@ -183,11 +183,7 @@ describe('cc-build build', () => {
     });
     expect(result).toEqual({
       exitCode: 1,
-      lines: [
-        'cc-build: ui/ has 1 widget file(s) (ui/header.ts); the UI in ui/ is not built into the app until cc-build bundles it (P1-25)',
-        'cc-build: type-check failed',
-        'ui/header.ts(1,1): error TS2322',
-      ],
+      lines: ['cc-build: type-check failed', 'ui/header.ts(1,1): error TS2322'],
     });
     expect(packaged).toEqual([]);
     expect(existsSync(join(engine.root, 'dist'))).toBe(false);

@@ -23,6 +23,9 @@ export {
 export { restartWhenIdle, IDLE_POLL_MS, type IdleRestartOptions } from './idle-restart.js';
 export {
   APP_ID,
+  ENGINE_UI_DIR,
+  ENGINE_UI_SCRIPT,
+  ENGINE_UI_STYLES,
   EXECUTABLE_NAME,
   findPackagedApp,
   PRODUCT_NAME,

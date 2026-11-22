@@ -60,7 +60,9 @@ cc-foundation/
   .github/workflows/                # ci.yml, release.yml, nightly.yml (§9)
   apps/
     desktop/                        # @cc/desktop: Electron shell
-      src/main/                     # windows, tray, deep links, notifications, idle restart, process supervision
+      src/main/                     # windows, tray, deep links, notifications, idle restart, process supervision;
+                                    # the page shell, which serves /ui/* from the engine's bundle or the default UI
+      src/page-shell/               # the page shell's script: the developer-mode banner and the Rebuild now strip
       src/preload/                  # contextBridge: window.cc.invoke(method, params)
       src/main/confirm/             # the confirm window (cc-confirm://), the secure prompts and the folder picker (04 §4.3 rule 4)
       src/core-host/                # the core's utilityProcess entry: starts @cc/core, serves the UI port
@@ -174,7 +176,7 @@ The signed index lives in `cc-connectors` (it replaces a separate `command-cente
 |---|---|---|
 | D1 | **AI boundary, both sides.** In `cc-foundation`, no package imports an AI SDK (`@anthropic-ai/sdk`, `openai` and the §12 denylist of [05](05-connectors.md#12-no-ai-in-connectors-enforcement)) or starts an AI CLI (`claude`, `codex`); `packages/orchestrator` loads adapters through `AiProvider`. A test also searches the built output for spawns of `claude` or `codex`. In `cc-connectors` and user connectors repositories, only `adapters/ai/*` may do either | [04 §6.1](04-platform.md#61-boundary) |
 | D2 | `connectors/*` (in `cc-connectors` and user connectors repositories) may import only `@cc/connector-sdk` and an allowlist of pure libraries. They may not import Node built-ins for network, files or processes, any AI SDK, or anything under `adapters/`. Adapters may not import `@cc/connector-sdk` | [05 §12](05-connectors.md#12-no-ai-in-connectors-enforcement); the host supplies HTTP and the browser |
-| D3 | `packages/ui` (the whole renderer of the default UI) and the engine's `ui/` import only `@cc/ui-sdk`, `@cc/ui`, `packages/schemas` types and UI libraries. No Node built-ins, no network and no internal runtime packages. For the engine, the check is the esbuild-metafile import allowlist (ADR 0003 decision 8, extended by ADR 0008) | [04 §3](04-platform.md#3-process-architecture) rules 1 and 3 |
+| D3 | `packages/ui` (the whole renderer of the default UI) and the engine's `ui/` import only `@cc/ui-sdk`, `@cc/ui`, `packages/schemas` types and UI libraries. No Node built-ins, no network and no internal runtime packages. For the engine, the check is the esbuild-metafile import allowlist that `cc-build` runs on the bundle of `ui/app.ts` (ADR 0003 decision 8, extended by ADR 0008): files of `ui/` import `@cc/ui-sdk/v<N>`, `@cc/ui/v<N>` and the UI libraries the engine names in `cc.config.ts` `ui.libraries`; a library's own dependencies are allowed, foundation runtime packages never; the check fails closed when the bundle holds a file it did not reach | [04 §3](04-platform.md#3-process-architecture) rules 1 and 3 |
 | D4 | `domain`, `frameworks`, `rhythm` and `policy` are pure: no I/O, no clock and no randomness. The clock, ID generator and stores are passed in. `rhythm` reaches calendars only through the `calendar@1` contract | Deterministic tests; "the two never mix"; [02](02-rhythm-and-calendar.md) C-02-09 |
 | D5 | Only `packages/core` imports `packages/store`. | One writer, one transaction per command ([03 §12](03-decisions-and-action-items.md#12-persistence)) |
 | D6 | `packages/schemas` imports nothing internal. | No cycles; generation stays simple |
@@ -186,7 +188,7 @@ The engine customises CC only through these, each validated by the foundation (C
 
 1. **`cc.config.ts`**: a typed object checked against `@cc/schemas` at build and at start: modules on or off, vocabulary, default framework parameters, the calendar mapping ([02 §9.6](02-rhythm-and-calendar.md#96-calendar-mapping-the-engines-choice-no-provider-code)).
 2. **Theme tokens** in `theme/tokens.json`.
-3. **The app UI** in `ui/`: `ui/app.ts` is the composition root that decides what runs, with `@cc/ui` as it is, restyled, with screens replaced or ejected, or replaced altogether; built with `@cc/ui-sdk` (rule D3). The default UI may keep slots as a convenience ([ADR 0008](../adr/0008-engine-owned-ui.md), replacing the two declared slots of ADR 0003 decision 5).
+3. **The app UI** in `ui/`: `ui/app.ts` is the composition root that decides what runs, with `@cc/ui` as it is, restyled, with screens replaced or ejected, or replaced altogether; built with `@cc/ui-sdk` (rule D3). The default UI may keep slots as a convenience ([ADR 0008](../adr/0008-engine-owned-ui.md), replacing the two declared slots of ADR 0003 decision 5). `cc-build` bundles it into the app as one script and one stylesheet, which main serves as `/ui/index.js` and `/ui/app.css` in the page shell it keeps; an engine without `ui/app.ts` runs the default UI.
 4. **Framework and pack files** in `frameworks/` and `packs/`, validated by the foundation's validators ([01 §9](01-onboarding-and-frameworks.md#9-customisation-and-forking), C-01-03).
 5. **`connectors.lock`** ([05 §15.6](05-connectors.md#156-connectorslock-and-the-users-own-connectors)).
 

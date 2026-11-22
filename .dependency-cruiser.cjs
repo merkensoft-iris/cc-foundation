@@ -15,7 +15,8 @@ const {
   internalPackage,
 } = require('./scripts/boundaries.cjs');
 
-const RENDERER = '^apps/desktop/src/renderer/';
+// The renderer and the page shell's script, which runs in the same page (src/page-shell).
+const RENDERER = '^apps/desktop/src/(?:renderer|page-shell)/';
 const PURE = `^packages/(?:${PURE_PACKAGES.join('|')})/`;
 
 /** @type {import('dependency-cruiser').IConfiguration} */
@@ -61,7 +62,7 @@ module.exports = {
     {
       name: 'D3-renderer-no-node',
       comment:
-        'D3: apps/desktop/src/renderer imports no Node built-ins: no files, no network, no ' +
+        'D3: apps/desktop/src/renderer and src/page-shell import no Node built-ins: no files, no network, no ' +
         'processes (08 §4.2, 04 §3 rules 1 and 3).',
       severity: 'error',
       from: { path: RENDERER },
@@ -70,7 +71,7 @@ module.exports = {
     {
       name: 'D3-renderer-only-ui-sdk',
       comment:
-        'D3: apps/desktop/src/renderer imports only @cc/ui-sdk, @cc/schemas types and UI ' +
+        'D3: apps/desktop/src/renderer and src/page-shell import only @cc/ui-sdk, @cc/schemas types and UI ' +
         'libraries, never internal runtime packages or the main and preload processes (08 §4.2).',
       severity: 'error',
       from: { path: RENDERER },

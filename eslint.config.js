@@ -130,16 +130,22 @@ export default defineConfig(
     rules: { 'no-restricted-imports': ['error', { patterns: [D1_IMPORT, TEMPORAL_IMPORT] }] },
   },
   { files: ['apps/**', 'packages/**'], rules: { 'no-restricted-syntax': ['error', ...D1_SPAWN] } },
-  // D3: the renderer.
+  // D3: the renderer, and the page shell's script that runs in the same page.
   {
-    files: ['apps/desktop/src/renderer/**'],
+    files: ['apps/desktop/src/renderer/**', 'apps/desktop/src/page-shell/**'],
     languageOptions: { globals: { ...globals.browser } },
     rules: { 'no-restricted-globals': ['error', ...D3_GLOBALS] },
   },
-  // D3: the renderer and the UI contract load no package code at run time, so they import
-  // @cc/* packages and zod as types only (ADR 0008; until cc-build bundles the UI, P1-25).
+  // D3: the renderer, the page shell and the UI contract load no package code at run time, so
+  // they import @cc/* packages and zod as types only (ADR 0008). The default UI is served
+  // unbundled until it moves to @cc/ui (P1-26); an engine's UI is bundled by cc-build under
+  // the metafile allowlist instead (packages/build/src/ui.ts).
   {
-    files: ['apps/desktop/src/renderer/**', 'packages/ui-sdk/src/**'],
+    files: [
+      'apps/desktop/src/renderer/**',
+      'apps/desktop/src/page-shell/**',
+      'packages/ui-sdk/src/**',
+    ],
     rules: { '@typescript-eslint/no-restricted-imports': ['error', { patterns: [D3_TYPES_ONLY] }] },
   },
   // D4: pure packages. Tests may use the clock (they get it from @cc/test-kit).

@@ -12,6 +12,15 @@ export const EXECUTABLE_NAME = 'command-center';
 /** The engine's compiled theme tokens at the packaged app's root (`cc-build` writes it). */
 export const THEME_CSS = 'cc-theme.css';
 
+/**
+ * The engine's own UI at the packaged app's root, when it has one (`cc-build` bundles its
+ * `ui/app.ts`, ADR 0008 decision 1): the directory, its script and its stylesheet. Without it
+ * the app runs the default UI.
+ */
+export const ENGINE_UI_DIR = 'cc-ui';
+export const ENGINE_UI_SCRIPT = 'index.js';
+export const ENGINE_UI_STYLES = 'app.css';
+
 /** The executable inside a macOS `.app` bundle: `Contents/MacOS/<name>`, or null. */
 function bundleExecutable(bundle: string): string | null {
   const dir = join(bundle, 'Contents', 'MacOS');

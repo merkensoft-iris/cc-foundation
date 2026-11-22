@@ -14,7 +14,7 @@ import {
   type HardenableSession,
   type HardenableWebContents,
 } from '../src/main/hardening.js';
-import { APP_PAGE } from '../src/main/renderer-page.js';
+import { APP_CSS, APP_PAGE, SHELL_CSS } from '../src/main/renderer-page.js';
 
 describe('renderer hardening (04 §3, 04 §10 rule 5)', () => {
   it('runs every window isolated and sandboxed, without Node', () => {
@@ -147,51 +147,122 @@ describe('renderer hardening (04 §3, 04 §10 rule 5)', () => {
 });
 
 describe('the app origin cc-app://app', () => {
-  const root = path.resolve('/opt/cc/dist/renderer');
+  const dist = path.resolve('/opt/cc/dist');
+  const defaultRoots = {
+    shell: path.join(dist, 'page-shell'),
+    defaultUi: path.join(dist, 'renderer'),
+  };
+  const engineUi = path.resolve('/opt/cc/app.asar/cc-ui');
+  const engineRoots = { ...defaultRoots, engineUi };
 
-  it('serves the page, its stylesheet and the renderer build', () => {
-    expect(resolveAppRequest('cc-app://app/', root)).toMatchObject({
-      kind: 'inline',
-      contentType: 'text/html; charset=utf-8',
-    });
-    expect(resolveAppRequest('cc-app://app/app.css', root)).toMatchObject({ kind: 'inline' });
-    // The engine's compiled theme: from the packaged app, empty in an unpackaged run.
-    expect(resolveAppRequest('cc-app://app/theme.css', root)).toEqual({
-      kind: 'inline',
-      body: '',
-      contentType: 'text/css; charset=utf-8',
-    });
-    expect(
-      resolveAppRequest('cc-app://app/theme.css', root, '/opt/cc/app.asar/cc-theme.css'),
-    ).toEqual({
+  it('serves the page shell, its stylesheet and script, and the theme, whichever UI runs', () => {
+    for (const roots of [defaultRoots, engineRoots]) {
+      expect(resolveAppRequest('cc-app://app/', roots)).toMatchObject({
+        kind: 'inline',
+        body: APP_PAGE,
+        contentType: 'text/html; charset=utf-8',
+      });
+      expect(resolveAppRequest('cc-app://app/shell.css', roots)).toEqual({
+        kind: 'inline',
+        body: SHELL_CSS,
+        contentType: 'text/css; charset=utf-8',
+      });
+      expect(resolveAppRequest('cc-app://app/shell/index.js', roots)).toEqual({
+        kind: 'file',
+        path: path.join(dist, 'page-shell', 'index.js'),
+        contentType: 'text/javascript; charset=utf-8',
+      });
+      // The engine's compiled theme: from the packaged app, empty in an unpackaged run.
+      expect(resolveAppRequest('cc-app://app/theme.css', roots)).toEqual({
+        kind: 'inline',
+        body: '',
+        contentType: 'text/css; charset=utf-8',
+      });
+      expect(
+        resolveAppRequest('cc-app://app/theme.css', {
+          ...roots,
+          themeFile: '/opt/cc/app.asar/cc-theme.css',
+        }),
+      ).toEqual({
+        kind: 'file',
+        path: '/opt/cc/app.asar/cc-theme.css',
+        contentType: 'text/css; charset=utf-8',
+      });
+    }
+  });
+
+  it('keeps the page shell in main: the shell script before the UI, and the labels main owns', () => {
+    const scripts = [...APP_PAGE.matchAll(/<script[^>]*\bsrc="([^"]+)"/g)].map((m) => m[1]);
+    expect(scripts).toEqual(['/shell/index.js', '/ui/index.js']);
+    const styles = [...APP_PAGE.matchAll(/<link rel="stylesheet" href="([^"]+)"/g)].map(
+      (m) => m[1],
+    );
+    expect(styles).toEqual(['/theme.css', '/shell.css', '/ui/app.css']);
+    for (const id of ['mode-banner', 'rebuild-offer', 'rebuild-now', 'rebuild-later', 'app']) {
+      expect(APP_PAGE).toContain(`id="${id}"`);
+    }
+  });
+
+  it('AC-08-11 runs the default UI when the engine has none: /ui/ is the renderer build and APP_CSS', () => {
+    expect(resolveAppRequest('cc-app://app/ui/index.js', defaultRoots)).toEqual({
       kind: 'file',
-      path: '/opt/cc/app.asar/cc-theme.css',
-      contentType: 'text/css; charset=utf-8',
-    });
-    expect(resolveAppRequest('cc-app://app/renderer/index.js', root)).toEqual({
-      kind: 'file',
-      path: path.join(root, 'index.js'),
+      path: path.join(dist, 'renderer', 'index.js'),
       contentType: 'text/javascript; charset=utf-8',
     });
-    expect(resolveAppRequest('cc-app://app/renderer/screens/home.js.map', root)).toMatchObject({
+    expect(resolveAppRequest('cc-app://app/ui/screens/home.js.map', defaultRoots)).toEqual({
       kind: 'file',
-      path: path.join(root, 'screens', 'home.js.map'),
+      path: path.join(dist, 'renderer', 'screens', 'home.js.map'),
+      contentType: 'application/json; charset=utf-8',
+    });
+    expect(resolveAppRequest('cc-app://app/ui/app.css', defaultRoots)).toEqual({
+      kind: 'inline',
+      body: APP_CSS,
+      contentType: 'text/css; charset=utf-8',
     });
   });
 
-  it('serves nothing outside the renderer build', () => {
+  it("runs the engine's UI when its build bundled one: /ui/ is the bundle's script and stylesheet, nothing else", () => {
+    expect(resolveAppRequest('cc-app://app/ui/index.js', engineRoots)).toEqual({
+      kind: 'file',
+      path: path.join(engineUi, 'index.js'),
+      contentType: 'text/javascript; charset=utf-8',
+    });
+    expect(resolveAppRequest('cc-app://app/ui/app.css', engineRoots)).toEqual({
+      kind: 'file',
+      path: path.join(engineUi, 'app.css'),
+      contentType: 'text/css; charset=utf-8',
+    });
+    // No default-UI module and no other file of the packaged app is reachable beside it.
     for (const url of [
-      'cc-app://app/renderer/../main/index.js',
-      'cc-app://app/renderer/%2e%2e/main/index.js',
-      'cc-app://app/renderer/..%2fmain/index.js',
-      'cc-app://app/renderer/index.ts',
-      'cc-app://app/main/index.js',
-      'cc-app://app/renderer/',
-      'cc-app://other/renderer/index.js',
-      'https://app/renderer/index.js',
-      'not a url',
+      'cc-app://app/ui/screens/home.js',
+      'cc-app://app/ui/app/app.js',
+      'cc-app://app/ui/index.js.map',
+      'cc-app://app/ui/../cc-theme.css',
+      'cc-app://app/ui/%2e%2e/build-stamp.json',
     ]) {
-      expect(resolveAppRequest(url, root), url).toEqual({ kind: 'not-found' });
+      expect(resolveAppRequest(url, engineRoots), url).toEqual({ kind: 'not-found' });
+    }
+  });
+
+  it('serves nothing outside those files', () => {
+    for (const roots of [defaultRoots, engineRoots]) {
+      for (const url of [
+        'cc-app://app/ui/../main/index.js',
+        'cc-app://app/ui/%2e%2e/main/index.js',
+        'cc-app://app/ui/..%2fmain/index.js',
+        'cc-app://app/ui/index.ts',
+        'cc-app://app/ui/',
+        'cc-app://app/shell/../renderer/index.js',
+        'cc-app://app/shell/index.ts',
+        'cc-app://app/main/index.js',
+        'cc-app://app/app.css',
+        'cc-app://app/renderer/index.js',
+        'cc-app://other/ui/index.js',
+        'https://app/ui/index.js',
+        'not a url',
+      ]) {
+        expect(resolveAppRequest(url, roots), url).toEqual({ kind: 'not-found' });
+      }
     }
   });
 });

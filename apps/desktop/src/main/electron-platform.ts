@@ -17,7 +17,14 @@ import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { BUILD_STAMP, readBuildStamp, rebuildNow, THEME_CSS } from '@cc/build-runtime';
+import {
+  BUILD_STAMP,
+  ENGINE_UI_DIR,
+  ENGINE_UI_SCRIPT,
+  readBuildStamp,
+  rebuildNow,
+  THEME_CSS,
+} from '@cc/build-runtime';
 
 import {
   app,
@@ -41,6 +48,7 @@ import {
   APP_URL,
   resolveAppRequest,
   type AppResource,
+  type AppRoots,
 } from './app-protocol.js';
 import { parseShellArgs } from './args.js';
 import { systemClock } from './clock.js';
@@ -74,13 +82,17 @@ import type { TrayMenuItem } from './tray.js';
 
 const here = (relative: string): string => fileURLToPath(new URL(relative, import.meta.url));
 
-/** Build layout: dist/main, dist/preload, dist/renderer, dist/prompt-page, dist/core-host. */
+/**
+ * Build layout: dist/main, dist/preload, dist/page-shell, dist/renderer (the default UI),
+ * dist/prompt-page, dist/core-host.
+ */
 const PRELOAD = here('../preload/index.cjs');
 const PROMPT_PRELOADS = {
   confirm: here('../preload/confirm.cjs'),
   secret: here('../preload/secret.cjs'),
 } as const;
 const PROMPT_SCRIPT = here('../prompt-page/index.js');
+const PAGE_SHELL_ROOT = here('../page-shell');
 const RENDERER_ROOT = here('../renderer');
 const CORE_HOST = here('../core-host/index.js');
 
@@ -137,6 +149,15 @@ export function createElectronPlatform(argv: readonly string[]): ShellPlatform {
   const appRoot = app.getAppPath();
   const stamp = app.isPackaged ? readBuildStamp(join(appRoot, BUILD_STAMP)) : null;
   const themeFile = app.isPackaged ? join(appRoot, THEME_CSS) : undefined;
+  // The engine's own UI, when its build bundled one (ADR 0008 decision 1); else the default UI.
+  const engineUi = join(appRoot, ENGINE_UI_DIR);
+  const ui = app.isPackaged && existsSync(join(engineUi, ENGINE_UI_SCRIPT)) ? 'engine' : 'default';
+  const appRoots: AppRoots = {
+    shell: PAGE_SHELL_ROOT,
+    defaultUi: RENDERER_ROOT,
+    ...(ui === 'engine' ? { engineUi } : {}),
+    ...(themeFile === undefined ? {} : { themeFile }),
+  };
 
   /** Rebuild now; the shell passes the pre-update backup the core takes (04 §10 rule 2). */
   const rebuild =
@@ -201,6 +222,7 @@ export function createElectronPlatform(argv: readonly string[]): ShellPlatform {
     argv,
     packaged: app.isPackaged,
     version: app.getVersion(),
+    ui,
     userData,
     clock: systemClock,
     ipc: ipcMain as unknown as IpcMainLike,
@@ -267,9 +289,7 @@ export function createElectronPlatform(argv: readonly string[]): ShellPlatform {
           log('hardening.blocked', { what, url: url.slice(0, 200) }),
         ),
       );
-      protocol.handle(APP_SCHEME, (request) =>
-        respond(resolveAppRequest(request.url, RENDERER_ROOT, themeFile)),
-      );
+      protocol.handle(APP_SCHEME, (request) => respond(resolveAppRequest(request.url, appRoots)));
       // The prompt windows' session: only the prompt origin, no permissions, no DevTools.
       const prompts = session.fromPartition(PROMPT_PARTITION);
       prompts.protocol.handle(PROMPT_SCHEME, (request) =>

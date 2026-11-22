@@ -43,20 +43,21 @@ The template's interim `tools/cc.ts` runs the same bins (`node <bin> <args>`), s
 `COMMANDS` table needs no change. With pnpm 12 the engine's `pnpm-workspace.yaml` also needs
 `allowBuilds: { electron-winstaller: false }` (electron-builder brings it for Squirrel.Windows,
 which CC does not use; pnpm 12 fails an install with an unlisted install script), as the
-foundation's own does.
+foundation's own does, and an entry for `esbuild` (which bundles the engine's UI; its install
+script only checks its binary, so either value works).
 
 The engine also needs `"type": "module"` in its `package.json` (the build imports
 `cc.config.ts` with Node's type stripping), `dist/` in its `.gitignore` (the build output), a
 `tsconfig.json` (the type-check), and `extensionApi: <N>` in `cc.config.ts`.
 
-| Engine script     | Command                                               | What it does                                                                                                                                                                                                                                                                                                                                                                                                                                | Exit codes                      |
-| ----------------- | ----------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------- |
-| `postinstall`     | `cc-install-stamp`                                    | Writes `node_modules/.cc-install-stamp.json`: the sha256 of `package.json`, `pnpm-lock.yaml` and `pnpm-workspace.yaml` (ADR 0004 decision 2). An install with `--ignore-scripts` leaves no stamp, and the app then starts in developer mode                                                                                                                                                                                                 | 0                               |
-| `pnpm build`      | `cc-build [--out <dir>] [--no-package] [--installer]` | Checks `extensionApi` (warns when deprecated, fails when unsupported), loads `cc.config.ts` into `cc.config.json`, compiles `theme/tokens.json` into `cc-theme.css`, runs the engine's `tsc --noEmit`, inspects the tree, writes the build stamp, and packages git's view of the tree with electron-builder into `dist/` (default: the unpacked app; `--installer` for dmg and zip, NSIS or AppImage). `--no-package` stops after the stamp | 0 built, 1 failed, 2 usage      |
-| `pnpm start`      | `cc-start [--out <dir>] [--] [app args]`              | Runs the packaged app from `dist/` in the foreground; everything else goes to the app (`--profile-dir <dir>`, `--smoke`)                                                                                                                                                                                                                                                                                                                    | 0, 1 no build or the app failed |
-| `pnpm check`      | `cc-build check`                                      | The config and type-check steps of `build` only: for the engine's CI ("validate cc.config and the extension files", 08 §9)                                                                                                                                                                                                                                                                                                                  | 0, 1, 2                         |
-| `pnpm cc:upgrade` | `cc-upgrade [--to <version>] [--check]`               | Runs the foundation's codemods from the engine's `extensionApi` to the installed foundation's API, then the engine's type-check. `--check` writes nothing and lists the planned edits, for the engine's CI on dependency PRs                                                                                                                                                                                                                | see below                       |
-| (diagnostic)      | `cc-build start-check [--stamp <file>]`               | Prints the start mode the build in `dist/` would get, and whether Rebuild now is offered                                                                                                                                                                                                                                                                                                                                                    | 0                               |
+| Engine script     | Command                                               | What it does                                                                                                                                                                                                                                                                                                                                                                                                                                                                                | Exit codes                      |
+| ----------------- | ----------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------- |
+| `postinstall`     | `cc-install-stamp`                                    | Writes `node_modules/.cc-install-stamp.json`: the sha256 of `package.json`, `pnpm-lock.yaml` and `pnpm-workspace.yaml` (ADR 0004 decision 2). An install with `--ignore-scripts` leaves no stamp, and the app then starts in developer mode                                                                                                                                                                                                                                                 | 0                               |
+| `pnpm build`      | `cc-build [--out <dir>] [--no-package] [--installer]` | Checks `extensionApi` (warns when deprecated, fails when unsupported), loads `cc.config.ts` into `cc.config.json`, compiles `theme/tokens.json` into `cc-theme.css`, runs the engine's `tsc --noEmit`, bundles `ui/app.ts` under the D3 check (below), inspects the tree, writes the build stamp, and packages git's view of the tree with electron-builder into `dist/` (default: the unpacked app; `--installer` for dmg and zip, NSIS or AppImage). `--no-package` stops after the stamp | 0 built, 1 failed, 2 usage      |
+| `pnpm start`      | `cc-start [--out <dir>] [--] [app args]`              | Runs the packaged app from `dist/` in the foreground; everything else goes to the app (`--profile-dir <dir>`, `--smoke`)                                                                                                                                                                                                                                                                                                                                                                    | 0, 1 no build or the app failed |
+| `pnpm check`      | `cc-build check`                                      | The config, type-check and UI check steps of `build` only: for the engine's CI ("validate cc.config and the extension files", 08 §9)                                                                                                                                                                                                                                                                                                                                                        | 0, 1, 2                         |
+| `pnpm cc:upgrade` | `cc-upgrade [--to <version>] [--check]`               | Runs the foundation's codemods from the engine's `extensionApi` to the installed foundation's API, then the engine's type-check. `--check` writes nothing and lists the planned edits, for the engine's CI on dependency PRs                                                                                                                                                                                                                                                                | see below                       |
+| (diagnostic)      | `cc-build start-check [--stamp <file>]`               | Prints the start mode the build in `dist/` would get, and whether Rebuild now is offered                                                                                                                                                                                                                                                                                                                                                                                                    | 0                               |
 
 ### `cc-upgrade` exit codes (ADR 0003 decision 6, owner decision D-1)
 
@@ -131,7 +132,7 @@ electron-builder's `electronFuses` (RunAsNode off, EnableNodeOptionsEnvironmentV
 EnableNodeCliInspectArguments off, EnableEmbeddedAsarIntegrityValidation on,
 OnlyLoadAppFromAsar on); Electron `ELECTRON_VERSION`; the `commandcenter://` scheme; the
 native rebuild of `better-sqlite3`; and only git's view of the tree plus the generated files
-(`cc-build-stamp.json`, `cc.config.json`) in the app. The runtime hardening (contextIsolation,
+(`cc-build-stamp.json`, `cc.config.json`, `cc-theme.css` and the engine's UI in `cc-ui/`) in the app. The runtime hardening (contextIsolation,
 sandbox, CSP, navigation and permission handlers, the WebRTC policy and the no-network
 renderer session) is in `@cc/desktop` main, which every build packages.
 
@@ -142,6 +143,48 @@ candidate addition to 04 §10 rule 5 once the shell (P1-10) confirms nothing nee
 The engine's theme tokens are compiled at build time to `cc-theme.css` (`--cc-*` custom
 properties) under a closed grammar (`src/theme.ts`, ADR 0003 decision 4); the shell serves it
 as `/theme.css`; the token paths are `@cc/ui-sdk/v1`'s, the ones its `token()` reads. Not yet
-here: bundling the engine's `ui/` on `@cc/ui-sdk/v1` into the app (P1-25; the build lists any
-file it finds there instead of dropping it silently), and the full `cc.config` schema (P1-18; until then the build checks the
-version and that the config is plain data).
+here: the full `cc.config` schema (P1-18; until then the build checks the version, that the
+config is plain data, and the `ui` setting below).
+
+## The engine's UI (ADR 0008 decision 1, rule D3)
+
+After the type-check, `cc-build` bundles the engine's composition root, `ui/app.ts` (or
+`ui/app.tsx`), with esbuild into one ES module and one stylesheet (the CSS its modules import),
+and packs them as `cc-ui/index.js` and `cc-ui/app.css` at the app's root (`src/ui.ts`). Main
+serves them as `/ui/index.js` and `/ui/app.css` in a page shell it keeps (the HTML, the CSP, no
+inline script, the developer-mode banner and the Rebuild now strip). An engine with no
+`ui/app.ts`, such as the template's empty `ui/`, packs no `cc-ui/`, and the app runs the
+default UI; the build says which.
+
+The bundle passes the D3 check over esbuild's metafile (ADR 0003 decision 8 as ADR 0008
+extends it), or the build fails before anything is packaged:
+
+- a file of `ui/` imports only other files of `ui/`, `@cc/ui-sdk/v<N>` and `@cc/ui/v<N>` for an
+  extension API `N` the foundation builds, and the UI libraries the engine names in
+  `cc.config.ts` (any subpath of them); `@cc/schemas` is types only (`import type`);
+- a package file imports its own files and other packages (a UI library's own dependencies),
+  but no foundation runtime package other than `@cc/ui-sdk` and `@cc/ui`;
+- nothing imports a Node built-in (`node:*`) or leaves an import outside the bundle, and no
+  file of `ui/` that git ignores is bundled (ADR 0004 decision 4);
+- it fails closed: every file esbuild bundled must be one the check reached from the entry.
+
+```ts
+// cc.config.ts
+export default {
+  extensionApi: 1,
+  ui: { libraries: ['preact'] }, // the UI libraries ui/ may import; none by default
+};
+```
+
+```text
+$ pnpm build
+cc-build: type-check passed (180 ms)
+cc-build: ui/app.ts bundled (6 ui/ file(s), 14 package file(s); index.js 48.2 kB, app.css 3.1 kB); the app runs the engine's UI
+...
+$ pnpm build   # ui/screens/home.ts imports node-fetch
+cc-build: ui: ui/screens/home.ts: node-fetch is not on the UI import allowlist; name it in cc.config.ts ui.libraries if it is a UI library (D3)
+```
+
+`cc-build check` runs the same bundle and check and writes nothing. The run-time boundary is
+main's whatever the bundle holds: the CSP, no network, no WebRTC and the `window.cc` method
+allowlist (04 §10 rule 5).

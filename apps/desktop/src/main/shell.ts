@@ -69,6 +69,8 @@ export type SmokeResult =
       readonly offerRebuild: boolean;
       readonly packaged: boolean;
       readonly version: string;
+      /** The UI the window runs: the engine's own (bundled from its `ui/app.ts`) or the default. */
+      readonly ui: ShellUi;
       /** What the UI call through main to the core answered (`home.get`). */
       readonly uiCall: string;
       /**
@@ -79,6 +81,9 @@ export type SmokeResult =
       readonly ms: number;
     }
   | { readonly ok: false; readonly reason: string; readonly ms: number };
+
+/** Which UI the window runs (ADR 0008 decision 1). */
+export type ShellUi = 'engine' | 'default';
 
 /** How long a smoke run may take before it fails. */
 export const SMOKE_TIMEOUT_MS = 120_000;
@@ -105,6 +110,11 @@ export interface ShellPlatform {
   readonly argv: readonly string[];
   readonly packaged: boolean;
   readonly version: string;
+  /**
+   * The UI the window runs: `engine` when the packaged app holds the engine's own UI, which
+   * its build bundled from `ui/app.ts`; `default` otherwise (and when absent).
+   */
+  readonly ui?: ShellUi;
   /** `<userData>` (04 §9), after any `--profile-dir`. */
   readonly userData: string;
   readonly clock: Clock;
@@ -444,6 +454,7 @@ export async function startShell(
     mode = resolved;
     platform.log('shell.mode', {
       mode: resolved.kind,
+      ui: platform.ui ?? 'default',
       ...(resolved.kind === 'developer' ? { reasons: resolved.reasons } : {}),
       ...(verdict.offerRebuild ? { offerRebuild: true } : {}),
     });
@@ -552,6 +563,7 @@ async function runSmoke(run: SmokeRun): Promise<void> {
       offerRebuild: verdict.offerRebuild,
       packaged: platform.packaged,
       version: platform.version,
+      ui: platform.ui ?? 'default',
       uiCall,
       firstScreen,
       ms: elapsed(),
