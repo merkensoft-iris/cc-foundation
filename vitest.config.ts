@@ -4,6 +4,13 @@ import { defineConfig } from 'vitest/config';
 const root = fileURLToPath(new URL('.', import.meta.url)).replaceAll('\\', '/');
 
 /**
+ * A longer hook timeout for a slow runner (the Windows AC-08-04 step in ci.yml). Vitest hands
+ * `--testTimeout` on the command line to each project but not `--hookTimeout`, so the hook limit
+ * comes from CC_TEST_HOOK_TIMEOUT instead; unset, the default of 10 s applies.
+ */
+const hookTimeout = Number(process.env['CC_TEST_HOOK_TIMEOUT'] ?? '') || undefined;
+
+/**
  * Three projects: `unit` (unit, integration and fixture tests; pnpm test), `e2e`
  * (headless-core scenario tests; pnpm e2e) and `app` (Playwright runs of the human-only screens
  * in the built Electron app; pnpm e2e:app). All block the network (AC-08-01) and resolve @cc/*
@@ -21,6 +28,7 @@ export default defineConfig({
     ],
   },
   test: {
+    ...(hookTimeout === undefined ? {} : { hookTimeout }),
     setupFiles: [`${root}packages/test-kit/src/setup.ts`],
     projects: [
       {

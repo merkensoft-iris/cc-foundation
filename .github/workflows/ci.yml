@@ -84,9 +84,14 @@ jobs:
           # the workers the runner has and stretch every test. Each suite gets half the workers.
           # The Windows runner is still slower than the others at the process and file work the
           # tests do (seconds per test alone), so there the 5 s test and 10 s hook timeouts are
-          # doubled. What AC-08-04 checks is unchanged: both suites pass side by side.
+          # doubled. What AC-08-04 checks is unchanged: both suites pass side by side. Vitest gives
+          # each project --testTimeout but not --hookTimeout, so vitest.config.ts reads the hook
+          # limit from CC_TEST_HOOK_TIMEOUT.
           limits=(--maxWorkers=50%)
-          if [ "$RUNNER_OS" = Windows ]; then limits+=(--testTimeout=10000 --hookTimeout=20000); fi
+          if [ "$RUNNER_OS" = Windows ]; then
+            limits+=(--testTimeout=10000)
+            export CC_TEST_HOOK_TIMEOUT=20000
+          fi
           run_suite() { (cd "$1" && pnpm test "${limits[@]}" && pnpm e2e "${limits[@]}") > "$2" 2>&1; }
           run_suite "$GITHUB_WORKSPACE" "$RUNNER_TEMP/wt1.log" & first_pid=$!
           run_suite "$second" "$RUNNER_TEMP/wt2.log" & second_pid=$!
