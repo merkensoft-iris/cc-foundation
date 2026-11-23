@@ -14,7 +14,7 @@ import {
   type HardenableSession,
   type HardenableWebContents,
 } from '../src/main/hardening.js';
-import { APP_CSS, APP_PAGE, SHELL_CSS } from '../src/main/renderer-page.js';
+import { APP_PAGE, SHELL_CSS } from '../src/main/renderer-page.js';
 
 describe('renderer hardening (04 §3, 04 §10 rule 5)', () => {
   it('runs every window isolated and sandboxed, without Node', () => {
@@ -148,9 +148,12 @@ describe('renderer hardening (04 §3, 04 §10 rule 5)', () => {
 
 describe('the app origin cc-app://app', () => {
   const dist = path.resolve('/opt/cc/dist');
+  // The default UI is the @cc/ui package beside @cc/desktop (ADR 0008 decision 1).
+  const defaultUiPackage = path.resolve('/opt/cc/node_modules/@cc/ui');
   const defaultRoots = {
     shell: path.join(dist, 'page-shell'),
-    defaultUi: path.join(dist, 'renderer'),
+    defaultUi: path.join(defaultUiPackage, 'dist'),
+    defaultUiStyles: path.join(defaultUiPackage, 'styles', 'app.css'),
   };
   const engineUi = path.resolve('/opt/cc/app.asar/cc-ui');
   const engineRoots = { ...defaultRoots, engineUi };
@@ -203,20 +206,20 @@ describe('the app origin cc-app://app', () => {
     }
   });
 
-  it('AC-08-11 runs the default UI when the engine has none: /ui/ is the renderer build and APP_CSS', () => {
+  it('AC-08-11 runs the default UI when the engine has none: /ui/ is the @cc/ui build and its stylesheet', () => {
     expect(resolveAppRequest('cc-app://app/ui/index.js', defaultRoots)).toEqual({
       kind: 'file',
-      path: path.join(dist, 'renderer', 'index.js'),
+      path: path.join(defaultUiPackage, 'dist', 'index.js'),
       contentType: 'text/javascript; charset=utf-8',
     });
     expect(resolveAppRequest('cc-app://app/ui/screens/home.js.map', defaultRoots)).toEqual({
       kind: 'file',
-      path: path.join(dist, 'renderer', 'screens', 'home.js.map'),
+      path: path.join(defaultUiPackage, 'dist', 'screens', 'home.js.map'),
       contentType: 'application/json; charset=utf-8',
     });
     expect(resolveAppRequest('cc-app://app/ui/app.css', defaultRoots)).toEqual({
-      kind: 'inline',
-      body: APP_CSS,
+      kind: 'file',
+      path: path.join(defaultUiPackage, 'styles', 'app.css'),
       contentType: 'text/css; charset=utf-8',
     });
   });

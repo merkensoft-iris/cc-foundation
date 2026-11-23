@@ -6,7 +6,7 @@
  * Sandboxed preloads run as CommonJS with a restricted `require` that offers only Electron's
  * renderer modules, so this file is `.cts` and imports nothing else at run time.
  */
-import type { CcBridge, CcError, RebuildState, Route, ShellInfo } from '../renderer/bridge.js';
+import type { CcBridge, CcError, RebuildState, Route, ShellInfo } from '@cc/ui-sdk/v1';
 
 // A sandboxed preload can only `require` (eslint.config.js allows it in this directory).
 const { contextBridge, ipcRenderer } = require('electron') as typeof import('electron');

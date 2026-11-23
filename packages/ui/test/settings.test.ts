@@ -7,15 +7,10 @@
  */
 import { describe, expect, it } from 'vitest';
 
-import type { BackupStatus } from '../../src/renderer/app/api.js';
-import { SECTIONS } from '../../src/renderer/screens/settings.js';
-import {
-  canDo,
-  presetOf,
-  PRESETS,
-  SCOPE_LABELS,
-} from '../../src/renderer/screens/settings-agents.js';
-import { allByTest, byTest, queryByTest, textOf } from '../../src/renderer/ui/vnode.js';
+import type { BackupStatus } from '../src/app/api.js';
+import { SECTIONS } from '../src/screens/settings.js';
+import { canDo, presetOf, PRESETS, SCOPE_LABELS } from '../src/screens/settings-agents.js';
+import { allByTest, byTest, queryByTest, textOf } from '../src/ui/vnode.js';
 import { click, startApp, type } from './harness.js';
 
 const principals = [

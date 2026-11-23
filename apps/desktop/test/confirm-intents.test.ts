@@ -366,7 +366,8 @@ describe("main's confirm window and secret prompt (C-04-12, 04 §9.1 rule 3)", (
     expect(resolve('not a url')).toEqual({ kind: 'not-found' });
     const roots = {
       shell: path.resolve('/opt/cc/dist/page-shell'),
-      defaultUi: path.resolve('/opt/cc/dist/renderer'),
+      defaultUi: path.resolve('/opt/cc/node_modules/@cc/ui/dist'),
+      defaultUiStyles: path.resolve('/opt/cc/node_modules/@cc/ui/styles/app.css'),
     };
     expect(resolveAppRequest(`cc-app://app/p/${token}`, roots)).toEqual({ kind: 'not-found' });
     expect(resolveAppRequest('cc-app://app/prompt.js', roots)).toEqual({ kind: 'not-found' });

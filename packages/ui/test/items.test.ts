@@ -5,8 +5,8 @@
 import type { ActionItem, Evidence } from '@cc/schemas';
 import { describe, expect, it } from 'vitest';
 
-import type { ItemReview } from '../../src/renderer/app/api.js';
-import { byTest, queryByTest, textOf } from '../../src/renderer/ui/vnode.js';
+import type { ItemReview } from '../src/app/api.js';
+import { byTest, queryByTest, textOf } from '../src/ui/vnode.js';
 import { apiError, click, startApp, type } from './harness.js';
 
 function claimed(ref: string, extra: Partial<ActionItem> = {}): ActionItem {

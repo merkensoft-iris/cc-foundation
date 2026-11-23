@@ -256,6 +256,9 @@ importers:
       '@cc/schemas':
         specifier: workspace:*
         version: link:../../packages/schemas
+      '@cc/ui':
+        specifier: workspace:*
+        version: link:../../packages/ui
       '@cc/ui-sdk':
         specifier: workspace:*
         version: link:../../packages/ui-sdk
@@ -384,6 +387,15 @@ importers:
       '@cc/schemas':
         specifier: workspace:*
         version: link:../schemas
+
+  packages/ui:
+    dependencies:
+      '@cc/schemas':
+        specifier: workspace:*
+        version: link:../schemas
+      '@cc/ui-sdk':
+        specifier: workspace:*
+        version: link:../ui-sdk
 
   packages/ui-sdk:
     dependencies:

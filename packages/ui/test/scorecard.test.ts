@@ -5,8 +5,8 @@
 import type { DomainEvent, Goal } from '@cc/schemas';
 import { describe, expect, it } from 'vitest';
 
-import { goalChanges, type GoalForm } from '../../src/renderer/screens/scorecard.js';
-import { byTest, textOf } from '../../src/renderer/ui/vnode.js';
+import { goalChanges, type GoalForm } from '../src/screens/scorecard.js';
+import { byTest, textOf } from '../src/ui/vnode.js';
 import { click, startApp, type } from './harness.js';
 
 const goal = {

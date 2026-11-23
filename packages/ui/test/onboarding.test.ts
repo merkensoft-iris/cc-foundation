@@ -14,14 +14,14 @@ import { OnboardingProfile, type OnboardingStep } from '@cc/schemas';
 import { createProfileDir, FakeTimerClock, type ProfileDir } from '@cc/test-kit';
 import { afterEach, describe, expect, it } from 'vitest';
 
-import { QUESTIONS, STEPS } from '../../src/renderer/screens/onboarding/questions.js';
-import { allByTest, byTest, queryByTest, textOf, type VNode } from '../../src/renderer/ui/vnode.js';
+import { QUESTIONS, STEPS } from '../src/screens/onboarding/questions.js';
+import { allByTest, byTest, queryByTest, textOf, type VNode } from '../src/ui/vnode.js';
 import { click, startApp, type, type Answer, type Harness } from './harness.js';
 
 /** These tests run a real core and compose the whole rhythm; slow CI runners need longer than vitest's 5 s. */
 const SLOW_MS = 60_000;
 
-const ROOT = fileURLToPath(new URL('../../../..', import.meta.url));
+const ROOT = fileURLToPath(new URL('../../..', import.meta.url));
 const NOW = '2026-11-04T04:10:00.000Z';
 
 function fixture(name: string): OnboardingProfile {

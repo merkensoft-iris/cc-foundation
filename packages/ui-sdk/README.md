@@ -46,7 +46,7 @@ in `scripts/ui-contract.ts`.
 
 The package has no run-time dependencies: it imports `@cc/schemas` and `zod` as types only
 (rule D3, enforced by ESLint), so a UI bundle carries none of the core's code. An engine's UI
-imports it by entry point and `cc-build` bundles it (`packages/build/src/ui.ts`). The default UI
-in `apps/desktop/src/renderer` is still served unbundled until it moves to `@cc/ui` (P1-26), so
-it uses the contract's types and keeps its own copies of the few run-time pieces, checked
-against these by its tests.
+imports it by entry point and `cc-build` bundles it (`packages/build/src/ui.ts`). The default UI,
+`@cc/ui` (`packages/ui`), is served unbundled when the engine has no UI of its own, so it uses
+the contract's types and keeps its own copies of the few run-time pieces, checked against
+these by its tests.

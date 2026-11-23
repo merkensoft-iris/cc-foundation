@@ -14,7 +14,7 @@
  */
 import { chmodSync, existsSync, mkdirSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import {
@@ -83,8 +83,8 @@ import type { TrayMenuItem } from './tray.js';
 const here = (relative: string): string => fileURLToPath(new URL(relative, import.meta.url));
 
 /**
- * Build layout: dist/main, dist/preload, dist/page-shell, dist/renderer (the default UI),
- * dist/prompt-page, dist/core-host.
+ * Build layout: dist/main, dist/preload, dist/page-shell, dist/prompt-page, dist/core-host.
+ * The default UI is the `@cc/ui` package (ADR 0008 decision 1), found by its entry points.
  */
 const PRELOAD = here('../preload/index.cjs');
 const PROMPT_PRELOADS = {
@@ -93,7 +93,8 @@ const PROMPT_PRELOADS = {
 } as const;
 const PROMPT_SCRIPT = here('../prompt-page/index.js');
 const PAGE_SHELL_ROOT = here('../page-shell');
-const RENDERER_ROOT = here('../renderer');
+const DEFAULT_UI_ROOT = dirname(fileURLToPath(import.meta.resolve('@cc/ui/v1')));
+const DEFAULT_UI_STYLES = fileURLToPath(import.meta.resolve('@cc/ui/v1/app.css'));
 const CORE_HOST = here('../core-host/index.js');
 
 const RESPONSE_HEADERS = {
@@ -154,7 +155,8 @@ export function createElectronPlatform(argv: readonly string[]): ShellPlatform {
   const ui = app.isPackaged && existsSync(join(engineUi, ENGINE_UI_SCRIPT)) ? 'engine' : 'default';
   const appRoots: AppRoots = {
     shell: PAGE_SHELL_ROOT,
-    defaultUi: RENDERER_ROOT,
+    defaultUi: DEFAULT_UI_ROOT,
+    defaultUiStyles: DEFAULT_UI_STYLES,
     ...(ui === 'engine' ? { engineUi } : {}),
     ...(themeFile === undefined ? {} : { themeFile }),
   };

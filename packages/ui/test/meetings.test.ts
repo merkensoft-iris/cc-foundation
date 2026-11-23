@@ -6,9 +6,9 @@
 import type { MeetingInstance } from '@cc/schemas';
 import { describe, expect, it } from 'vitest';
 
-import type { MeetingView } from '../../src/renderer/app/api.js';
-import { minutesLeft } from '../../src/renderer/screens/meetings.js';
-import { allByTest, buttons, byTest, queryByTest, textOf } from '../../src/renderer/ui/vnode.js';
+import type { MeetingView } from '../src/app/api.js';
+import { minutesLeft } from '../src/screens/meetings.js';
+import { allByTest, buttons, byTest, queryByTest, textOf } from '../src/ui/vnode.js';
 import { click, startApp, type } from './harness.js';
 
 const NOW = Date.parse('2026-11-13T03:30:00Z');

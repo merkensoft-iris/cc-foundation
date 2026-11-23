@@ -6,9 +6,9 @@
 import type { Decision } from '@cc/schemas';
 import { describe, expect, it } from 'vitest';
 
-import { App } from '../../src/renderer/app/app.js';
-import { NAV, routeOfLink } from '../../src/renderer/app/routes.js';
-import { byTest, queryByTest, textOf, type VNode } from '../../src/renderer/ui/vnode.js';
+import { App } from '../src/app/app.js';
+import { NAV, routeOfLink } from '../src/app/routes.js';
+import { byTest, queryByTest, textOf, type VNode } from '../src/ui/vnode.js';
 import { apiError, click, startApp, type } from './harness.js';
 
 const home = {

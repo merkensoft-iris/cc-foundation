@@ -1,11 +1,11 @@
 /**
- * Runs the renderer's app headless (09 P1-11): a fake local API answers each method from a
+ * Runs the default UI's app headless (09 P1-11): a fake local API answers each method from a
  * table, every call is recorded, and each render's view tree is kept for the test to read and
  * click through.
  */
-import { App } from '../../src/renderer/app/app.js';
-import type { AppRoute } from '../../src/renderer/app/routes.js';
-import { textOf, type VNode } from '../../src/renderer/ui/vnode.js';
+import { App, type AppOptions } from '../src/app/app.js';
+import type { AppRoute } from '../src/app/routes.js';
+import { textOf, type VNode } from '../src/ui/vnode.js';
 
 export type Answer = (params: Record<string, unknown>) => unknown;
 
@@ -34,12 +34,14 @@ export async function startApp(
   answers: Record<string, Answer>,
   route: AppRoute = { screen: 'home' },
   now = Date.parse('2026-11-13T09:30:00Z'),
+  screens?: AppOptions['screens'],
 ): Promise<Harness> {
   let last: VNode | undefined;
   const calls: Harness['calls'] = [];
   const copied: string[] = [];
   const harness: Partial<Harness> & { answers: Record<string, Answer> } = { answers };
   const app = new App({
+    ...(screens === undefined ? {} : { screens }),
     call: async (method, params) => {
       const record = (params ?? {}) as Record<string, unknown>;
       calls.push({ method, params: record });
