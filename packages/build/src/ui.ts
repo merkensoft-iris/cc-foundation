@@ -7,8 +7,9 @@
  * The D3 check reads esbuild's metafile (ADR 0003 decision 8, extended by ADR 0008):
  *
  * - A file of the engine's `ui/` may import other files of `ui/`, the versioned entry points of
- *   the UI contract and the default UI (`@cc/ui-sdk/v<N>`, `@cc/ui/v<N>`, for each extension
- *   API `N` the foundation builds), and the UI libraries the engine names in `cc.config.ts`
+ *   the UI contract and the default UI (`@cc/ui-sdk/v<N>`, `@cc/ui/v<N>` and the default UI's
+ *   stylesheet `@cc/ui/v<N>/app.css`, for each extension API `N` the foundation builds), and
+ *   the UI libraries the engine names in `cc.config.ts`
  *   (`ui: { libraries: [...] }`, any subpath). `@cc/schemas` is types only (`import type`,
  *   which esbuild erases), and nothing else is allowed.
  * - A package file may import its own files and other packages (a UI library's own
@@ -33,6 +34,9 @@ export const UI_ENTRIES = ['ui/app.ts', 'ui/app.tsx'] as const;
 
 /** The packages a UI imports by versioned entry point only (ADR 0003 decision 2). */
 export const UI_CONTRACT_PACKAGES = ['@cc/ui-sdk', '@cc/ui'] as const;
+
+/** A versioned entry point: `@cc/ui-sdk/v<N>`, `@cc/ui/v<N>` or `@cc/ui/v<N>/app.css`. */
+const VERSIONED_ENTRY = /^@cc\/(?:ui-sdk\/v(\d+)|ui\/v(\d+)(?:\/app\.css)?)$/;
 
 /** An npm package name, optionally scoped. */
 const PACKAGE_NAME = /^(?:@[a-z0-9][a-z0-9._~-]*\/)?[a-z0-9][a-z0-9._~-]*$/;
@@ -89,9 +93,16 @@ export function packageOf(specifier: string): string {
 export function engineImportProblem(specifier: string, allow: UiAllowlist): string | undefined {
   const name = packageOf(specifier);
   if ((UI_CONTRACT_PACKAGES as readonly string[]).includes(name)) {
-    const version = /^@cc\/(?:ui-sdk|ui)\/v(\d+)$/.exec(specifier)?.[1];
+    const match = VERSIONED_ENTRY.exec(specifier);
+    const version = match?.[1] ?? match?.[2];
     if (version !== undefined && allow.supported.includes(Number(version))) return undefined;
-    const entries = allow.supported.map((n) => `${name}/v${String(n)}`).join(', ');
+    const entries = allow.supported
+      .flatMap((n) =>
+        name === '@cc/ui'
+          ? [`${name}/v${String(n)}`, `${name}/v${String(n)}/app.css`]
+          : [`${name}/v${String(n)}`],
+      )
+      .join(', ');
     return `${specifier} is not a versioned entry point this foundation builds (${entries})`;
   }
   if (allow.libraries.includes(name)) return undefined;

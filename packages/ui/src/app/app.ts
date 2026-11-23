@@ -19,7 +19,14 @@ import { h, type VNode } from '../ui/vnode.js';
 import { NAV, type AppRoute, type ScreenName } from './routes.js';
 import { errorText, isCcError, type Screen, type Ui } from './screen.js';
 
-const SCREENS: Record<ScreenName, Screen<unknown> & { readonly ticks?: boolean }> = {
+/**
+ * A screen the app frame shows. `ticks` asks for a render now and then while it is open, for a
+ * clock on screen (the meeting runner).
+ */
+export type AppScreen = Screen<unknown> & { readonly ticks?: boolean };
+
+/** The default UI's screens, by route name (09 P1-11). */
+export const SCREENS: Readonly<Record<ScreenName, AppScreen>> = {
   home: homeScreen as Screen<unknown>,
   items: itemsScreen as Screen<unknown>,
   decisions: decisionsScreen as Screen<unknown>,
@@ -31,6 +38,12 @@ const SCREENS: Record<ScreenName, Screen<unknown> & { readonly ticks?: boolean }
 };
 
 export interface AppOptions {
+  /**
+   * Screens that replace default ones, by route name (ADR 0008 decision 1): an engine's
+   * `ui/app.ts` passes them through `createApp`. A route not named here shows the default
+   * screen.
+   */
+  readonly screens?: Partial<Record<ScreenName, AppScreen>>;
   readonly call: (method: string, params?: unknown) => Promise<unknown>;
   readonly render: (node: VNode) => void;
   readonly now?: () => number;
@@ -45,6 +58,7 @@ type Loaded =
 
 export class App {
   readonly #options: AppOptions;
+  readonly #screens: Readonly<Record<ScreenName, AppScreen>>;
   readonly #memory = new Map<string, object>();
   #route: AppRoute = { screen: 'home' };
   #loaded: Loaded = { kind: 'loading' };
@@ -54,6 +68,7 @@ export class App {
 
   constructor(options: AppOptions) {
     this.#options = options;
+    this.#screens = { ...SCREENS, ...options.screens };
     this.ui = {
       // The typed client of @cc/ui-sdk/v1 over `window.cc.invoke` (or a test's fake of it).
       call: <M extends UiMethod>(method: M, params: Params<M>) =>
@@ -86,7 +101,7 @@ export class App {
 
   /** Whether the current screen shows a clock that needs a render now and then. */
   get ticks(): boolean {
-    return SCREENS[this.#route.screen].ticks === true && this.#loaded.kind === 'ready';
+    return this.#screens[this.#route.screen].ticks === true && this.#loaded.kind === 'ready';
   }
 
   /**
@@ -122,7 +137,7 @@ export class App {
     if (this.#loaded.kind !== 'ready') this.render();
     let next: Loaded;
     try {
-      next = { kind: 'ready', state: await SCREENS[route.screen].load(this.ui, route) };
+      next = { kind: 'ready', state: await this.#screens[route.screen].load(this.ui, route) };
     } catch (error) {
       next = {
         kind: 'failed',
@@ -191,6 +206,6 @@ export class App {
         ),
       );
     }
-    return SCREENS[this.#route.screen].view(loaded.state, this.ui, this.#route);
+    return this.#screens[this.#route.screen].view(loaded.state, this.ui, this.#route);
   }
 }

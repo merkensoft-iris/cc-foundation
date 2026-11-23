@@ -31,16 +31,16 @@ Instructions for AI developers are in [AGENTS.md](AGENTS.md). Architecture decis
 
 ## Layout
 
-| Path                                          | What                                                                          |
-| --------------------------------------------- | ----------------------------------------------------------------------------- |
-| `apps/desktop`                                | `@cc/desktop`: Electron shell (main, preload, renderer)                       |
-| `apps/cli`                                    | `@cc/cli`: `cc-axi`, the MCP stdio relay and the hook installer               |
-| `packages/*`                                  | `@cc/*` packages: schemas, store, domain, frameworks, rhythm, policy, core, … |
-| `templates/`                                  | Scaffolds for `cc:*` scripts                                                  |
-| `fixtures/`                                   | Synthetic fixtures only                                                       |
-| `skills/`                                     | Generated product skill for users' agents                                     |
-| `.agents/skills/`                             | Development skills for AI developers                                          |
-| `scripts/`                                    | Implementations of the `pnpm` scripts                                         |
-| `docs/adr`                                    | Architecture decision records                                                 |
-| `docs/runbooks`                               | Release, key rotation, incident response                                      |
-| `.dependency-cruiser.cjs`, `eslint.config.js` | Dependency rules D1-D7                                                        |
+| Path                                          | What                                                                              |
+| --------------------------------------------- | --------------------------------------------------------------------------------- |
+| `apps/desktop`                                | `@cc/desktop`: Electron shell (main, preload, page shell)                         |
+| `apps/cli`                                    | `@cc/cli`: `cc-axi`, the MCP stdio relay and the hook installer                   |
+| `packages/*`                                  | `@cc/*` packages: schemas, store, domain, frameworks, rhythm, policy, core, ui, … |
+| `templates/`                                  | Scaffolds for `cc:*` scripts                                                      |
+| `fixtures/`                                   | Synthetic fixtures only                                                           |
+| `skills/`                                     | Generated product skill for users' agents                                         |
+| `.agents/skills/`                             | Development skills for AI developers                                              |
+| `scripts/`                                    | Implementations of the `pnpm` scripts                                             |
+| `docs/adr`                                    | Architecture decision records                                                     |
+| `docs/runbooks`                               | Release, key rotation, incident response                                          |
+| `.dependency-cruiser.cjs`, `eslint.config.js` | Dependency rules D1-D7                                                            |

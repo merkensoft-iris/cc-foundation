@@ -5,11 +5,12 @@
  * the D3 allowlist fails the build, and the check fails closed.
  *
  * The fixture engines are synthetic (AGENTS.md rule 5). `@cc/ui-sdk` is the real UI contract,
- * copied from its sources; `@cc/ui/v1` is a small stand-in for the default UI package that
- * P1-26 publishes, with the composition API ADR 0008 names (`createApp(overrides)`); `tiny-view`
- * stands for a UI library the engine chooses, with a dependency of its own.
+ * copied from its sources. `@cc/ui/v1` is a small stand-in for the default UI package with its
+ * composition API (`createApp(overrides)`), so a screen can render with a library of its own;
+ * one test bundles the real `@cc/ui` (P1-26) instead. `tiny-view` stands for a UI library the
+ * engine chooses, with a dependency of its own.
  */
-import { cpSync, existsSync, readdirSync, readFileSync } from 'node:fs';
+import { cpSync, existsSync, readdirSync, readFileSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -28,6 +29,7 @@ import { createEngine, ENGINE_FILES, write, type EngineFixture } from './engine-
 
 const passingTypecheck = () => Promise.resolve({ ok: true, output: '', ms: 3 });
 const UI_SDK_SRC = fileURLToPath(new URL('../../ui-sdk/src', import.meta.url));
+const UI_PACKAGE = fileURLToPath(new URL('../../ui', import.meta.url));
 
 /** The engine files without the template's old widget file. */
 const BASE_FILES = Object.fromEntries(
@@ -114,6 +116,49 @@ function installPackages(root: string): void {
   }
 }
 
+/** The real default UI, `@cc/ui`, from its sources, in place of the stand-in. */
+function installDefaultUi(root: string): void {
+  const target = join(root, 'node_modules/@cc/ui');
+  rmSync(target, { recursive: true, force: true });
+  cpSync(join(UI_PACKAGE, 'src'), join(target, 'src'), { recursive: true });
+  cpSync(join(UI_PACKAGE, 'styles'), join(target, 'styles'), { recursive: true });
+  write(
+    root,
+    'node_modules/@cc/ui/package.json',
+    JSON.stringify({
+      name: '@cc/ui',
+      type: 'module',
+      exports: { './v1': './src/v1.ts', './v1/app.css': './styles/app.css' },
+    }),
+  );
+}
+
+/** The composition root over the real default UI: restyled, with the Home screen replaced. */
+const DEFAULT_UI_COMPOSED: Readonly<Record<string, string>> = {
+  'ui/README.md': '# The UI of this engine\n',
+  'ui/app.ts': [
+    "import '@cc/ui/v1/app.css';",
+    "import './styles/brand.css';",
+    "import { createApp } from '@cc/ui/v1';",
+    "import { home } from './screens/home.js';",
+    '',
+    'void createApp({ screens: { home } }).start();',
+    '',
+  ].join('\n'),
+  'ui/screens/home.ts': [
+    "import { h, type Screen } from '@cc/ui/v1';",
+    '',
+    'interface HomeState { readonly title: string }',
+    '',
+    'export const home: Screen<HomeState> = {',
+    "  load: () => Promise.resolve({ title: 'Our week at a glance' }),",
+    "  view: (state) => h('h1', { test: 'brand-home' }, state.title),",
+    '};',
+    '',
+  ].join('\n'),
+  'ui/styles/brand.css': '.nav {\n  letter-spacing: 0.02em;\n}\n',
+};
+
 function engineWith(files: Readonly<Record<string, string>>): EngineFixture {
   const engine = createEngine({ ...BASE_FILES, ...files });
   installPackages(engine.root);
@@ -192,6 +237,36 @@ describe('cc-build and the engine UI (09 P1-25, ADR 0008 decision 1)', () => {
     expect(script).toContain('// node_modules/tiny-view-core/index.js');
     expect(script).not.toMatch(/\bfrom\s*["']|\bimport\s*\(|\brequire\(/);
     expect(readFileSync(join(dir, 'app.css'), 'utf8')).toContain('font-weight: 650');
+  });
+
+  it('AC-08-11 an engine that composes the real @cc/ui/v1, restyled and with Home replaced, builds under D3', async () => {
+    engine = engineWith(DEFAULT_UI_COMPOSED);
+    installDefaultUi(engine.root);
+    const result = await runBuild({
+      root: engine.root,
+      typecheck: passingTypecheck,
+      package: false,
+    });
+    expect(result.exitCode, result.lines.join('\n')).toBe(0);
+    expect(
+      result.lines.some((l) => l.startsWith('cc-build: ui/app.ts bundled (3 ui/ file(s)')),
+    ).toBe(true);
+    const dir = join(engine.root, 'dist', '.stage', ENGINE_UI_DIR);
+    const script = readFileSync(join(dir, 'index.js'), 'utf8');
+    // The replaced Home, the default screens it did not replace and the app frame.
+    expect(script).toContain('Our week at a glance');
+    expect(script).toContain('// node_modules/@cc/ui/src/screens/items.ts');
+    expect(script).toContain('// node_modules/@cc/ui/src/app/create-app.ts');
+    // One module: no import or export statement, no dynamic import, no require. (Screen text
+    // such as `target-from'` rules out the looser match of the test above.)
+    expect(script).not.toMatch(/^\s*(?:import|export)\b[^\n]*\bfrom\s*["']/m);
+    expect(script).not.toMatch(/\bimport\s*\(|\brequire\(/);
+    // The default stylesheet, then the engine's own.
+    const styles = readFileSync(join(dir, 'app.css'), 'utf8');
+    const defaults = styles.indexOf('.settings-layout {');
+    const brand = styles.indexOf('letter-spacing: 0.02em');
+    expect(defaults).toBeGreaterThan(-1);
+    expect(brand).toBeGreaterThan(defaults);
   });
 
   it('`cc-build check` runs the same D3 check, and writes nothing', async () => {
@@ -375,6 +450,7 @@ describe('the D3 metafile check (ADR 0003 decision 8)', () => {
     for (const ok of [
       '@cc/ui-sdk/v1',
       '@cc/ui/v2',
+      '@cc/ui/v1/app.css',
       'tiny-view',
       'tiny-view/hooks',
       '@scope/kit/x',
@@ -384,6 +460,10 @@ describe('the D3 metafile check (ADR 0003 decision 8)', () => {
     for (const bad of [
       '@cc/ui-sdk',
       '@cc/ui/v3',
+      '@cc/ui/v3/app.css',
+      '@cc/ui/v1/screens/home.js',
+      '@cc/ui/styles/app.css',
+      '@cc/ui-sdk/v1/app.css',
       '@cc/ui-sdk/host',
       '@cc/store',
       'tiny-viewer',

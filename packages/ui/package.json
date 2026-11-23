@@ -1,0 +1,25 @@
+{
+  "name": "@cc/ui",
+  "version": "0.0.0",
+  "private": true,
+  "description": "The default UI: screens, app frame, UI kit and stylesheet, composed by an engine's ui/app.ts through createApp(overrides)",
+  "type": "module",
+  "exports": {
+    "./v1": {
+      "types": "./dist/v1.d.ts",
+      "default": "./dist/v1.js"
+    },
+    "./v1/app.css": "./styles/app.css"
+  },
+  "files": [
+    "dist",
+    "styles"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "@cc/schemas": "workspace:*",
+    "@cc/ui-sdk": "workspace:*"
+  }
+}

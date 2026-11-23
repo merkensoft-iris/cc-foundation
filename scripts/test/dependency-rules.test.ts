@@ -77,18 +77,14 @@ describe('dependency-cruiser rules', () => {
   const cases: Array<[rule: string, file: string, code: string]> = [
     [
       'D3-renderer-no-node',
-      'apps/desktop/src/renderer/index.ts',
+      'packages/ui/src/index.ts',
       "export { readFileSync } from 'node:fs';\n",
     ],
+    ['D3-renderer-only-ui-sdk', 'packages/ui/src/index.ts', "export * from '@cc/core';\n"],
     [
       'D3-renderer-only-ui-sdk',
-      'apps/desktop/src/renderer/index.ts',
-      "export * from '@cc/core';\n",
-    ],
-    [
-      'D3-renderer-only-ui-sdk',
-      'apps/desktop/src/renderer/index.ts',
-      "export * from '../main/index.ts';\n",
+      'packages/ui/src/index.ts',
+      "export * from '../../../apps/desktop/src/main/index.ts';\n",
     ],
     [
       'D4-pure-no-io',
@@ -148,7 +144,7 @@ describe('dependency-cruiser rules', () => {
         'packages/rhythm/test/rhythm.test.ts': "export { readFileSync } from 'node:fs';\n",
         'packages/domain/src/index.ts':
           "export * from '@cc/schemas';\nexport * from '@cc/policy';\n",
-        'apps/desktop/src/renderer/index.ts':
+        'packages/ui/src/index.ts':
           "export * from '@cc/ui-sdk';\nexport type * from '@cc/schemas';\n",
         'packages/test-kit/src/index.ts': "export { readFileSync } from 'node:fs';\n",
       }),
@@ -194,11 +190,8 @@ describe('ESLint rules', () => {
     expect(found.filter((message) => message.startsWith('D1: '))).toHaveLength(2);
   });
 
-  it('D3 the renderer may not use the network', async () => {
-    const found = await messages(
-      'apps/desktop/src/renderer/probe.ts',
-      "export const r = fetch('/x');\n",
-    );
+  it('D3 the default UI may not use the network', async () => {
+    const found = await messages('packages/ui/src/probe.ts', "export const r = fetch('/x');\n");
     expect(found).toEqual([expect.stringContaining('D3: ')]);
   });
 

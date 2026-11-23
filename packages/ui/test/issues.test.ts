@@ -4,9 +4,9 @@
  */
 import { describe, expect, it } from 'vitest';
 
-import type { WorkstreamRow } from '../../src/renderer/app/api.js';
-import { riskGroups } from '../../src/renderer/screens/issues.js';
-import { allByTest, byTest, textOf } from '../../src/renderer/ui/vnode.js';
+import type { WorkstreamRow } from '../src/app/api.js';
+import { riskGroups } from '../src/screens/issues.js';
+import { allByTest, byTest, textOf } from '../src/ui/vnode.js';
 import { click, startApp, type } from './harness.js';
 
 const workstreams: WorkstreamRow[] = [

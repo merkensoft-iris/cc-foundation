@@ -12,8 +12,8 @@
  * - `/ui/index.js` and `/ui/app.css`: the UI (ADR 0008 decision 1). When the packaged app
  *   holds the engine's own UI (`cc-ui/`, which `cc-build` bundled from its `ui/app.ts`), they
  *   are that bundle's two files and nothing else under `/ui/` exists. Otherwise they are the
- *   default UI: the compiled renderer (`/ui/<name>.js` and `.js.map`, from the renderer root)
- *   and `APP_CSS`.
+ *   default UI, `@cc/ui`: its compiled modules, unbundled (`/ui/<name>.js` and `.js.map`, from
+ *   its `dist`), and its stylesheet (`styles/app.css`).
  *
  * Everything else is 404. Main's own prompt windows (the confirm window and the secret prompt)
  * are on another origin, in another session (`shell-prompts.ts`). The resolver is pure;
@@ -23,7 +23,7 @@ import path from 'node:path';
 
 import { ENGINE_UI_SCRIPT, ENGINE_UI_STYLES } from '@cc/build-runtime';
 
-import { APP_CSS, APP_PAGE, SHELL_CSS } from './renderer-page.js';
+import { APP_PAGE, SHELL_CSS } from './renderer-page.js';
 
 export const APP_SCHEME = 'cc-app';
 export const APP_HOST = 'app';
@@ -48,8 +48,10 @@ const MODULE_FILE = /^((?:[a-z0-9-]+\/)*[a-z0-9-]+\.js(?:\.map)?)$/;
 export interface AppRoots {
   /** The page shell's compiled script (`dist/page-shell`). */
   readonly shell: string;
-  /** The default UI: the compiled renderer (`dist/renderer`). */
+  /** The default UI, `@cc/ui`: its compiled modules (`dist`). */
   readonly defaultUi: string;
+  /** The default UI's stylesheet (`@cc/ui/v1/app.css`, its `styles/app.css`). */
+  readonly defaultUiStyles: string;
   /** The engine's own UI in the packaged app (`<app>/cc-ui`), when its build bundled one. */
   readonly engineUi?: string;
   /** The packaged app's compiled theme, when there is one. */
@@ -99,6 +101,6 @@ export function resolveAppRequest(url: string, roots: AppRoots): AppResource {
     }
     return name === ENGINE_UI_SCRIPT ? moduleUnder(roots.engineUi, name) : { kind: 'not-found' };
   }
-  if (name === 'app.css') return { kind: 'inline', body: APP_CSS, contentType: CSS };
+  if (name === 'app.css') return { kind: 'file', path: roots.defaultUiStyles, contentType: CSS };
   return moduleUnder(roots.defaultUi, name);
 }

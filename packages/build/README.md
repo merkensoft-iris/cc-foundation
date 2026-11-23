@@ -159,8 +159,9 @@ default UI; the build says which.
 The bundle passes the D3 check over esbuild's metafile (ADR 0003 decision 8 as ADR 0008
 extends it), or the build fails before anything is packaged:
 
-- a file of `ui/` imports only other files of `ui/`, `@cc/ui-sdk/v<N>` and `@cc/ui/v<N>` for an
-  extension API `N` the foundation builds, and the UI libraries the engine names in
+- a file of `ui/` imports only other files of `ui/`, `@cc/ui-sdk/v<N>`, `@cc/ui/v<N>` and the
+  default UI's stylesheet `@cc/ui/v<N>/app.css` for an extension API `N` the foundation builds
+  (see `packages/ui/README.md` for composing the default UI), and the UI libraries the engine names in
   `cc.config.ts` (any subpath of them); `@cc/schemas` is types only (`import type`);
 - a package file imports its own files and other packages (a UI library's own dependencies),
   but no foundation runtime package other than `@cc/ui-sdk` and `@cc/ui`;

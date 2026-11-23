@@ -6,8 +6,8 @@
  */
 import { describe, expect, it } from 'vitest';
 
-import type { BackupRecord, BackupStatus } from '../../src/renderer/app/api.js';
-import { byTest, queryByTest, textOf } from '../../src/renderer/ui/vnode.js';
+import type { BackupRecord, BackupStatus } from '../src/app/api.js';
+import { byTest, queryByTest, textOf } from '../src/ui/vnode.js';
 import { apiError, click, startApp, type } from './harness.js';
 
 const PREVIOUS = 'bkp_01KA0000000000000000000001';
