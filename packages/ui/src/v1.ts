@@ -10,12 +10,23 @@
  *   screen is a `Screen` that renders `h` trees and may build on the default screens and the
  *   UI kit below.
  *
+ * - with a screen ejected (`pnpm cc:eject <screen>`): its source copied into the engine's
+ *   `ui/screens/`, where its imports of the default UI's own modules name this entry point, so
+ *   everything a default screen imports from outside `screens/` is exported here.
+ *
  * A UI written from scratch needs only `@cc/ui-sdk/v1`. A change to a default screen that
  * keeps this API is not an API bump; a change to this API is (ADR 0008 decision 1).
  */
 export { createApp, type AppOverrides, type DefaultApp } from './app/create-app.js';
 export { App, SCREENS, type AppOptions, type AppScreen } from './app/app.js';
-export { NAV, routeOfLink } from './app/routes.js';
+export {
+  NAV,
+  routeOfLink,
+  type AppRoute,
+  type ItemsTab,
+  type ScreenName,
+  type SettingsSection,
+} from './app/routes.js';
 export {
   act,
   actInWindow,
@@ -25,7 +36,10 @@ export {
   isCcError,
   waitingInWindow,
   type Screen,
+  type Ui,
 } from './app/screen.js';
+// The names of the local API results the default screens read, and the scope lists.
+export * from './app/api.js';
 
 // The default screens, for composition: an override may wrap one or reuse its parts.
 export { decisionsScreen } from './screens/decisions.js';

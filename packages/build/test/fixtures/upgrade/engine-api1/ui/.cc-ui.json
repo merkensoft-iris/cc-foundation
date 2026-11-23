@@ -1,0 +1,12 @@
+{
+  "$comment": "Screens ejected from @cc/ui: written by cc:eject and cc:ui-update, read by cc:upgrade --check. Do not edit.",
+  "screens": {
+    "home": {
+      "version": "1.4.0",
+      "api": 1,
+      "files": {
+        "ui/screens/home.ts": "98f2539a5e64397c0c1bdbf67193e5a4cfad02b01816ec642961701db0dd09db"
+      }
+    }
+  }
+}

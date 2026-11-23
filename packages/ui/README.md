@@ -22,18 +22,25 @@ import { home } from './screens/home.js';
 void createApp({ screens: { home } }).start();
 ```
 
-| Part            | Exports                                                                                                                                   |
-| --------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
-| Composition     | `createApp(overrides)`, `AppOverrides` (`screens`, `container`), `DefaultApp`                                                             |
-| App frame       | `App`, `AppOptions`, `AppScreen`, `SCREENS`, `NAV`, `routeOfLink`                                                                         |
-| Default screens | `homeScreen`, `itemsScreen`, `decisionsScreen`, `issuesScreen`, `meetingsScreen`, `scorecardScreen`, `settingsScreen`, `onboardingScreen` |
-| Screen helpers  | `Screen<S>`, `act`, `actInWindow`, `inWindow`, `waitingInWindow`, `IN_WINDOW`, `errorText`, `isCcError`                                   |
-| UI kit          | `h`, `VNode`, `Child`, `Props`, `mount`, `copyText`, the parts of `ui/parts.ts`                                                           |
-| Test queries    | `walk`, `textOf`, `byTest`, `queryByTest`, `allByTest`, `buttons`                                                                         |
-| Stylesheet      | `@cc/ui/v1/app.css`                                                                                                                       |
+| Part            | Exports                                                                                                                                                               |
+| --------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Composition     | `createApp(overrides)`, `AppOverrides` (`screens`, `container`), `DefaultApp`                                                                                         |
+| App frame       | `App`, `AppOptions`, `AppScreen`, `SCREENS`, `NAV`, `routeOfLink`                                                                                                     |
+| Default screens | `homeScreen`, `itemsScreen`, `decisionsScreen`, `issuesScreen`, `meetingsScreen`, `scorecardScreen`, `settingsScreen`, `onboardingScreen`                             |
+| Screen helpers  | `Screen<S>`, `Ui`, `act`, `actInWindow`, `inWindow`, `waitingInWindow`, `IN_WINDOW`, `errorText`, `isCcError`                                                         |
+| Result names    | the names of `app/api.ts` (`HomeResult`, `PrincipalRow`, ...), `SCOPES`, `GRANT_ONLY_SCOPES`; the route types `AppRoute`, `ItemsTab`, `ScreenName`, `SettingsSection` |
+| UI kit          | `h`, `VNode`, `Child`, `Props`, `mount`, `copyText`, the parts of `ui/parts.ts`                                                                                       |
+| Test queries    | `walk`, `textOf`, `byTest`, `queryByTest`, `allByTest`, `buttons`                                                                                                     |
+| Stylesheet      | `@cc/ui/v1/app.css`                                                                                                                                                   |
 
 A replaced screen is a `Screen` that renders `h` trees; a route not replaced shows the default
-screen, which keeps updating with `@cc/ui`. Human-only operations of Tier H are confirmed in
+screen, which keeps updating with `@cc/ui`. To start a replacement from the default screen,
+eject it: `pnpm cc:eject <screen>` (from `@cc/build`) copies its source from `src/screens/`,
+which this package ships, into the engine's `ui/screens/`, with its imports of the default UI's
+own modules on `@cc/ui/v1`, and records it in `ui/.cc-ui.json`. `@cc/ui/v1` therefore exports
+everything a default screen imports from outside `screens/` (`Ui`, the result names of
+`app/api.ts`, the route types). `pnpm cc:upgrade --check` lists upstream changes to an ejected
+screen and `pnpm cc:ui-update` merges them (`packages/build/README.md`). Human-only operations of Tier H are confirmed in
 the app shell's confirm window whatever the screen shows (04 §4.3 rule 4). A UI written from
 scratch, in any UI library the engine names, needs only `@cc/ui-sdk/v1`.
 

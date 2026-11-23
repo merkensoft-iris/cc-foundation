@@ -6,8 +6,9 @@
  * One bin per engine script, so an engine script names its bin and passes the user's
  * arguments straight through (the cc-engine template's `tools/cc.ts` does exactly that):
  * `cc-build` (pnpm build; with no command it builds), `cc-start` (pnpm start),
- * `cc-install-stamp` (postinstall) and `cc-upgrade` (pnpm cc:upgrade). `cc-build` also keeps
- * the subcommands `check`, `start`, `install-stamp` and `start-check`.
+ * `cc-install-stamp` (postinstall), `cc-upgrade` (pnpm cc:upgrade), `cc-eject` (pnpm cc:eject)
+ * and `cc-ui-update` (pnpm cc:ui-update). `cc-build` also keeps the subcommands `check`,
+ * `start`, `install-stamp` and `start-check`.
  */
 import { resolve } from 'node:path';
 import { parseArgs } from 'node:util';
@@ -15,6 +16,7 @@ import { parseArgs } from 'node:util';
 import { BUILD_STAMP, checkStart, readBuildStamp, writeInstallStamp } from '@cc/build-runtime';
 
 import { runBuild, STAGE_DIR, type CommandResult } from './build.js';
+import { runEject, runUiUpdate } from './eject.js';
 import { CC_START_USAGE, parseStartArgs, runStart } from './start.js';
 import { runUpgrade } from './upgrade.js';
 
@@ -28,6 +30,12 @@ export const CC_BUILD_USAGE = [
 ].join('\n');
 
 export const CC_UPGRADE_USAGE = 'usage: cc-upgrade [--to <version>] [--check]';
+
+export const CC_EJECT_USAGE =
+  'usage: cc-eject <screen>   copy a default screen of @cc/ui into ui/screens/ and track it in ui/.cc-ui.json';
+
+export const CC_UI_UPDATE_USAGE =
+  'usage: cc-ui-update [<screen>...]   merge upstream changes into the ejected screens (all when none is named)';
 
 const usage = (text: string, message?: string): CommandResult => ({
   exitCode: 2,
@@ -164,6 +172,27 @@ export async function ccUpgrade(argv: readonly string[], cwd: string): Promise<C
     check: values.check === true,
     ...(values.to === undefined ? {} : { to: values.to }),
   });
+}
+
+/** `cc-eject <screen>`: the engine's `pnpm cc:eject`. */
+export function ccEject(argv: readonly string[], cwd: string): CommandResult {
+  if (argv[0] === '--help' || argv[0] === '-h') return { exitCode: 0, lines: [CC_EJECT_USAGE] };
+  const [screen, ...rest] = argv;
+  if (screen === undefined || screen.startsWith('-') || rest.length > 0) {
+    return usage(CC_EJECT_USAGE, 'cc-eject: name one screen');
+  }
+  return runEject({ root: cwd, screen });
+}
+
+/** `cc-ui-update [<screen>...]`: the engine's `pnpm cc:ui-update`. */
+export function ccUiUpdate(argv: readonly string[], cwd: string): CommandResult {
+  if (argv[0] === '--help' || argv[0] === '-h') {
+    return { exitCode: 0, lines: [CC_UI_UPDATE_USAGE] };
+  }
+  const option = argv.find((arg) => arg.startsWith('-'));
+  if (option !== undefined)
+    return usage(CC_UI_UPDATE_USAGE, `cc-ui-update: unknown option ${option}`);
+  return runUiUpdate({ root: cwd, screens: argv });
 }
 
 /** Prints a result and sets the exit code. */
