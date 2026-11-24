@@ -228,7 +228,7 @@ jobs:
           pnpm install --no-frozen-lockfile
           git -c user.name=ci -c user.email=ci@example.invalid commit -qam "test: pin the packed foundation"
           test -z "$(git status --porcelain)"
-      - name: AC-08-11 a fresh template copy installs, builds and starts (pnpm install, pnpm build, pnpm start) on the default UI and opens onboarding
+      - name: AC-08-11 a fresh template copy installs, builds and starts (pnpm install, pnpm build, pnpm start) on its ui/ (or the default UI) and opens onboarding
         run: |
           cd "$ENGINE"
           pnpm install --frozen-lockfile
@@ -244,20 +244,11 @@ jobs:
           "${run[@]}" pnpm start --smoke --profile-dir "$PROFILE"
       - name: The packaged app started normally on the core (smoke.json), clean-tree start check and fuses
         run: |
-          cd "$ENGINE"
           cat "$PROFILE/smoke.json"
-          node -e '
-            const r = JSON.parse(require("fs").readFileSync(process.argv[1], "utf8"));
-            const fail = (m) => { console.error("::error::" + m); process.exit(1); };
-            if (r.ok !== true) fail("smoke failed: " + r.reason);
-            if (r.packaged !== true) fail("the smoke run was not the packaged app");
-            if (r.mode.kind !== "normal") fail("start mode " + JSON.stringify(r.mode) + ", expected normal for a clean build");
-            if (r.offerRebuild !== false) fail("Rebuild now offered for a build at HEAD");
-            if (r.firstScreen !== "onboarding") fail("AC-08-11: a fresh profile opened " + r.firstScreen + ", expected onboarding");
-            // The template has no ui/app.ts (an empty ui/), so the app runs the default UI (09 P1-25).
-            if (r.ui !== "default") fail("AC-08-11: the template copy ran the " + r.ui + " UI, expected the default UI");
-            console.log("packaged app: mode normal, " + r.ui + " UI, " + r.uiCall + ", opens " + r.firstScreen + ", ready in " + r.ms + " ms");
-          ' "$PROFILE/smoke.json"
+          # Normal mode, onboarding, and the UI the copy holds: its own when it has a ui/app.ts
+          # (the template's composition root over @cc/ui, ADR 0008), else the default UI.
+          pnpm cc:engine-template smoke --engine "$ENGINE" --report "$PROFILE/smoke.json"
+          cd "$ENGINE"
           test "$(pnpm exec cc-build start-check)" = "mode: normal"
           case "$RUNNER_OS" in
             macOS) app="$(ls -d dist/mac*/*.app | head -1)" ;;

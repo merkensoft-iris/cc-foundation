@@ -12,6 +12,10 @@
  *    tarball (`overrides`), list the install scripts the foundation's dependencies bring
  *    (`ENGINE_ALLOW_BUILDS`; pnpm 12 fails an install with an unlisted one), and turn on the
  *    `build`, `upgrade` and `start` build flags.
+ * 3. `smoke --engine <dir> --report <smoke.json>`: checks what the copy's packaged app wrote on
+ *    `pnpm start --smoke`: it started on the core in normal mode, opened onboarding, and ran the
+ *    UI the copy holds: its own when it has a `ui/app.ts` (the template's composition root over
+ *    `@cc/ui`, ADR 0008 decision 1), else the default UI (AC-08-11).
  *
  * It only ever writes `<dir>` and the scratch copy; it never pushes, publishes or touches the
  * template repository. Exit codes follow 08 §6: 0 done, 1 failed, 2 usage error.
@@ -29,11 +33,16 @@ import { ccManifests } from './release.ts';
 export const USAGE = [
   'usage: pnpm cc:engine-template pack --out <dir>',
   '       pnpm cc:engine-template pin --engine <dir> --tarballs <dir>',
+  '       pnpm cc:engine-template smoke --engine <dir> --report <smoke.json>',
 ].join('\n');
 
-/** The engine pins these directly; every other @cc/* package comes in through them. */
+/**
+ * The engine pins these directly; every other @cc/* package comes in through them. `ui/`
+ * imports `@cc/ui` and `@cc/ui-sdk`, and `cc-build` resolves them from the engine's root, so
+ * they are pinned even though `@cc/desktop` depends on them (pnpm does not hoist them).
+ */
 export const ENGINE_PINS = {
-  dependencies: ['@cc/desktop'],
+  dependencies: ['@cc/desktop', '@cc/ui', '@cc/ui-sdk'],
   devDependencies: ['@cc/build'],
 } as const;
 
@@ -169,6 +178,65 @@ export function pin(engine: string, tarballsDir: string): Result {
   };
 }
 
+/** The engine's UI entry points, as `cc-build` looks for them (`@cc/build` `UI_ENTRIES`). */
+export const ENGINE_UI_ENTRIES = ['ui/app.ts', 'ui/app.tsx'] as const;
+
+/** The UI the packaged app of `engine` should run: its own when it has a composition root. */
+export function expectedUi(engine: string): 'engine' | 'default' {
+  return ENGINE_UI_ENTRIES.some((entry) => existsSync(join(resolve(engine), entry)))
+    ? 'engine'
+    : 'default';
+}
+
+/** What `pnpm start --smoke` writes to `<profile>/smoke.json` (apps/desktop `shell.ts`). */
+interface SmokeReport {
+  readonly ok?: unknown;
+  readonly reason?: unknown;
+  readonly packaged?: unknown;
+  readonly mode?: { readonly kind?: unknown };
+  readonly offerRebuild?: unknown;
+  readonly firstScreen?: unknown;
+  readonly ui?: unknown;
+  readonly uiCall?: unknown;
+  readonly ms?: unknown;
+}
+
+/** Checks a smoke report of the engine copy's packaged app (AC-08-11). */
+export function smoke(engine: string, reportPath: string): Result {
+  if (!existsSync(reportPath)) {
+    return { exitCode: 1, lines: [`cc:engine-template: no smoke report at ${reportPath}`] };
+  }
+  const r = JSON.parse(readFileSync(reportPath, 'utf8')) as SmokeReport;
+  const ui = expectedUi(engine);
+  if (r.ok !== true) {
+    return { exitCode: 1, lines: [`cc:engine-template: smoke failed: ${String(r.reason)}`] };
+  }
+  const problems: string[] = [];
+  if (r.packaged !== true) problems.push('the smoke run was not the packaged app');
+  if (r.mode?.kind !== 'normal') {
+    problems.push(`start mode ${JSON.stringify(r.mode)}, expected normal for a clean build`);
+  }
+  if (r.offerRebuild !== false) problems.push('Rebuild now offered for a build at HEAD');
+  if (r.firstScreen !== 'onboarding') {
+    problems.push(`AC-08-11: a fresh profile opened ${String(r.firstScreen)}, expected onboarding`);
+  }
+  if (r.ui !== ui) {
+    const has = ui === 'engine' ? 'has a ui/app.ts' : 'has no ui/app.ts (an empty ui/)';
+    problems.push(
+      `AC-08-11: the engine copy ${has} but the app ran the ${String(r.ui)} UI, expected the ${ui} UI`,
+    );
+  }
+  if (problems.length > 0) {
+    return { exitCode: 1, lines: problems.map((p) => `cc:engine-template: ${p}`) };
+  }
+  return {
+    exitCode: 0,
+    lines: [
+      `cc:engine-template: packaged app: mode normal, ${ui} UI, ${String(r.uiCall)}, opens onboarding, ready in ${String(r.ms)} ms`,
+    ],
+  };
+}
+
 export function main(argv: readonly string[], root: string): Result {
   const [command, ...rest] = argv;
   let values;
@@ -179,6 +247,7 @@ export function main(argv: readonly string[], root: string): Result {
         out: { type: 'string' },
         engine: { type: 'string' },
         tarballs: { type: 'string' },
+        report: { type: 'string' },
       },
     }));
   } catch (error) {
@@ -188,6 +257,9 @@ export function main(argv: readonly string[], root: string): Result {
     if (command === 'pack' && values.out !== undefined) return pack(root, values.out);
     if (command === 'pin' && values.engine !== undefined && values.tarballs !== undefined) {
       return pin(values.engine, values.tarballs);
+    }
+    if (command === 'smoke' && values.engine !== undefined && values.report !== undefined) {
+      return smoke(values.engine, values.report);
     }
   } catch (error) {
     return {
