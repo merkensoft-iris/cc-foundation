@@ -19,7 +19,9 @@ carries electron-builder or ts-morph; this package re-exports it for the build a
 An engine's `package.json` (the `cc-engine` template) pins every `@cc/*` package exactly and
 wires its scripts to these commands. `@cc/desktop` is a **dependency**: electron-builder packs
 the engine's production dependencies into the app, and `@cc/desktop` is the app (its `main` is
-the entry point, `DESKTOP_MAIN`). `@cc/build` is a **development dependency**.
+the entry point, `DESKTOP_MAIN`). `ui/` imports `@cc/ui` and `@cc/ui-sdk`, and `cc-build`
+resolves them from the engine's root, so the engine pins them too, although `@cc/desktop`
+depends on them. `@cc/build` is a **development dependency**.
 
 ```json
 {
@@ -33,7 +35,9 @@ the entry point, `DESKTOP_MAIN`). `@cc/build` is a **development dependency**.
     "cc:ui-update": "cc-ui-update"
   },
   "dependencies": {
-    "@cc/desktop": "<foundation version>"
+    "@cc/desktop": "<foundation version>",
+    "@cc/ui": "<foundation version>",
+    "@cc/ui-sdk": "<foundation version>"
   },
   "devDependencies": {
     "@cc/build": "<foundation version>",
