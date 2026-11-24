@@ -119,6 +119,7 @@ cc-foundation/
   skills/
     command-center/SKILL.md         # generated product skill for users' agents (07 §8)
   .agents/skills/                   # development skills for AI developers (§7)
+  templates/engine-skills/          # source of the engine's development skill, copied by the engine template (§7)
   scripts/                          # implementations of the pnpm cc:* scripts (§6)
   docs/
     design/                         # these documents (OQ-08-02)
@@ -323,7 +324,7 @@ All scripts live in `scripts/` of the repository named in the table, run with `p
 
 ## 7. Skills (repeatable work that needs judgement)
 
-Development skills live in `.agents/skills/<name>/SKILL.md` of the repository they serve, with a trigger-shaped `description` in the frontmatter. Each lists its inputs, the scripts it calls, the decisions the agent must make, and when it is done. Skills never re-implement a script. The engine's own AI does not develop. The engine has one development skill, for the agents that change its UI ([ADR 0008](../adr/0008-engine-owned-ui.md)).
+Development skills live in `.agents/skills/<name>/SKILL.md` of the repository they serve, with a trigger-shaped `description` in the frontmatter. Each lists its inputs, the scripts it calls, the decisions the agent must make, and when it is done. Skills never re-implement a script. The engine's own AI does not develop. The engine has one development skill, for the agents that change its UI ([ADR 0008](../adr/0008-engine-owned-ui.md)). Its source is kept in the foundation, in `templates/engine-skills/cc-engine-ui/SKILL.md`, so it is reviewed beside the contract it describes; the engine template copies it to its own `.agents/skills/` in the engine PR that installs the `AGENTS.md` rule (P1-31).
 
 | Skill | Repository | Use when | Calls | Done when |
 |---|---|---|---|---|
