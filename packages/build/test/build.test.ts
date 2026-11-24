@@ -253,11 +253,14 @@ describe('the engine-facing commands (08 §6 exit codes)', () => {
     const manifest = JSON.parse(
       readFileSync(fileURLToPath(new URL('../package.json', import.meta.url)), 'utf8'),
     ) as { bin: Record<string, string> };
-    // cc-engine tools/cc.ts COMMANDS: build, start, upgrade, install-stamp (include is P5).
+    // cc-engine tools/cc.ts COMMANDS: build, start, upgrade, install-stamp (include is P5);
+    // eject and ui-update are the ejected-screen tooling of P1-27 (ADR 0008 decision 1).
     expect(Object.keys(manifest.bin).sort()).toEqual([
       'cc-build',
+      'cc-eject',
       'cc-install-stamp',
       'cc-start',
+      'cc-ui-update',
       'cc-upgrade',
     ]);
     for (const target of Object.values(manifest.bin)) {

@@ -3,10 +3,11 @@
 The foundation's build tooling for an engine repository (04 §10, 08 §4.1, 08 §6): the
 electron-builder configuration with the hardening and fuses every engine build gets, the
 build and install stamps and the clean-tree start check (ADR 0004), Rebuild now and the
-idle restart, and `cc:upgrade` with its codemod runner (ADR 0003 decision 6).
+idle restart, `cc:upgrade` with its codemod runner (ADR 0003 decision 6), and the tooling for
+screens an engine ejects from the default UI, `cc:eject` and `cc:ui-update` (ADR 0008 decision 1).
 
 The engine holds no script code (08 §6): each of its scripts calls one bin this package
-installs, `cc-build`, `cc-start`, `cc-install-stamp` or `cc-upgrade`, and passes the user's
+installs, `cc-build`, `cc-start`, `cc-install-stamp`, `cc-upgrade`, `cc-eject` or `cc-ui-update`, and passes the user's
 arguments straight through.
 
 The part the packaged app runs (the stamps, the start check, Rebuild now and the idle restart)
@@ -27,7 +28,9 @@ the entry point, `DESKTOP_MAIN`). `@cc/build` is a **development dependency**.
     "build": "cc-build",
     "start": "cc-start",
     "check": "cc-build check",
-    "cc:upgrade": "cc-upgrade"
+    "cc:upgrade": "cc-upgrade",
+    "cc:eject": "cc-eject",
+    "cc:ui-update": "cc-ui-update"
   },
   "dependencies": {
     "@cc/desktop": "<foundation version>"
@@ -50,22 +53,25 @@ The engine also needs `"type": "module"` in its `package.json` (the build import
 `cc.config.ts` with Node's type stripping), `dist/` in its `.gitignore` (the build output), a
 `tsconfig.json` (the type-check), and `extensionApi: <N>` in `cc.config.ts`.
 
-| Engine script     | Command                                               | What it does                                                                                                                                                                                                                                                                                                                                                                                                                                                                                | Exit codes                      |
-| ----------------- | ----------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------- |
-| `postinstall`     | `cc-install-stamp`                                    | Writes `node_modules/.cc-install-stamp.json`: the sha256 of `package.json`, `pnpm-lock.yaml` and `pnpm-workspace.yaml` (ADR 0004 decision 2). An install with `--ignore-scripts` leaves no stamp, and the app then starts in developer mode                                                                                                                                                                                                                                                 | 0                               |
-| `pnpm build`      | `cc-build [--out <dir>] [--no-package] [--installer]` | Checks `extensionApi` (warns when deprecated, fails when unsupported), loads `cc.config.ts` into `cc.config.json`, compiles `theme/tokens.json` into `cc-theme.css`, runs the engine's `tsc --noEmit`, bundles `ui/app.ts` under the D3 check (below), inspects the tree, writes the build stamp, and packages git's view of the tree with electron-builder into `dist/` (default: the unpacked app; `--installer` for dmg and zip, NSIS or AppImage). `--no-package` stops after the stamp | 0 built, 1 failed, 2 usage      |
-| `pnpm start`      | `cc-start [--out <dir>] [--] [app args]`              | Runs the packaged app from `dist/` in the foreground; everything else goes to the app (`--profile-dir <dir>`, `--smoke`)                                                                                                                                                                                                                                                                                                                                                                    | 0, 1 no build or the app failed |
-| `pnpm check`      | `cc-build check`                                      | The config, type-check and UI check steps of `build` only: for the engine's CI ("validate cc.config and the extension files", 08 §9)                                                                                                                                                                                                                                                                                                                                                        | 0, 1, 2                         |
-| `pnpm cc:upgrade` | `cc-upgrade [--to <version>] [--check]`               | Runs the foundation's codemods from the engine's `extensionApi` to the installed foundation's API, then the engine's type-check. `--check` writes nothing and lists the planned edits, for the engine's CI on dependency PRs                                                                                                                                                                                                                                                                | see below                       |
-| (diagnostic)      | `cc-build start-check [--stamp <file>]`               | Prints the start mode the build in `dist/` would get, and whether Rebuild now is offered                                                                                                                                                                                                                                                                                                                                                                                                    | 0                               |
+| Engine script       | Command                                               | What it does                                                                                                                                                                                                                                                                                                                                                                                                                                                                                | Exit codes                      |
+| ------------------- | ----------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------- |
+| `postinstall`       | `cc-install-stamp`                                    | Writes `node_modules/.cc-install-stamp.json`: the sha256 of `package.json`, `pnpm-lock.yaml` and `pnpm-workspace.yaml` (ADR 0004 decision 2). An install with `--ignore-scripts` leaves no stamp, and the app then starts in developer mode                                                                                                                                                                                                                                                 | 0                               |
+| `pnpm build`        | `cc-build [--out <dir>] [--no-package] [--installer]` | Checks `extensionApi` (warns when deprecated, fails when unsupported), loads `cc.config.ts` into `cc.config.json`, compiles `theme/tokens.json` into `cc-theme.css`, runs the engine's `tsc --noEmit`, bundles `ui/app.ts` under the D3 check (below), inspects the tree, writes the build stamp, and packages git's view of the tree with electron-builder into `dist/` (default: the unpacked app; `--installer` for dmg and zip, NSIS or AppImage). `--no-package` stops after the stamp | 0 built, 1 failed, 2 usage      |
+| `pnpm start`        | `cc-start [--out <dir>] [--] [app args]`              | Runs the packaged app from `dist/` in the foreground; everything else goes to the app (`--profile-dir <dir>`, `--smoke`)                                                                                                                                                                                                                                                                                                                                                                    | 0, 1 no build or the app failed |
+| `pnpm check`        | `cc-build check`                                      | The config, type-check and UI check steps of `build` only: for the engine's CI ("validate cc.config and the extension files", 08 §9)                                                                                                                                                                                                                                                                                                                                                        | 0, 1, 2                         |
+| `pnpm cc:upgrade`   | `cc-upgrade [--to <version>] [--check]`               | Runs the foundation's codemods from the engine's `extensionApi` to the installed foundation's API, then the engine's type-check. `--check` writes nothing and lists the planned edits and the upstream changes to ejected screens, for the engine's CI on dependency PRs                                                                                                                                                                                                                    | see below                       |
+| `pnpm cc:eject`     | `cc-eject <screen>`                                   | Copies one default screen of the installed `@cc/ui` into `ui/screens/` and records it in `ui/.cc-ui.json` (below)                                                                                                                                                                                                                                                                                                                                                                           | 0, 1 failed, 2 not a screen     |
+| `pnpm cc:ui-update` | `cc-ui-update [<screen>...]`                          | Merges upstream changes into the ejected screens (all of them when none is named), 3-way (below)                                                                                                                                                                                                                                                                                                                                                                                            | 0, 1 conflicts left, 2 usage    |
+| (diagnostic)        | `cc-build start-check [--stamp <file>]`               | Prints the start mode the build in `dist/` would get, and whether Rebuild now is offered                                                                                                                                                                                                                                                                                                                                                                                                    | 0                               |
 
 ### `cc-upgrade` exit codes (ADR 0003 decision 6, owner decision D-1)
 
 - **0**: the engine is already on the foundation's extension API and no site is marked for a
   person; or the upgrade was written, the type-check passed and no site was left.
-- **1**: `--check` found an upgrade due (the output lists the edits; the engine's CI comments
-  them on the dependency PR, which still merges as it is); or a site needs a person (it is
-  marked `/* cc:upgrade TODO(API n): ... */` and listed); or the type-check failed; or the
+- **1**: `--check` found an upgrade due (the output lists the edits, and the upstream changes
+  to ejected screens; the engine's CI comments them on the dependency PR, which still merges as
+  it is); or a site needs a person (it is marked `/* cc:upgrade TODO(API n): ... */` and listed,
+  or an ejected screen holds an unresolved merge of `cc-ui-update`); or the type-check failed; or the
   engine's API is outside what this foundation can upgrade; or `--to` names a version other
   than the installed one.
 - **2**: usage error.
@@ -88,7 +94,61 @@ cc-upgrade: ok  engine already on extension API 2 (foundation 2.0.0); nothing to
 
 Extension API 1 is the first version, so this foundation ships no codemods yet
 (`src/codemods/index.ts`). The runner is proven against a fixture foundation at API 2 and a
-fixture engine at API 1 (`test/upgrade.test.ts`, AC-08-10).
+fixture engine at API 1 whose `ui/` (a composition root and an ejected screen) the fixture
+codemod moves too (`test/upgrade.test.ts`, AC-08-10).
+
+## Ejected screens (`cc-eject`, `cc-ui-update`; ADR 0008 decision 1)
+
+An engine that wants to change a default screen beyond `createApp(overrides)` and its own
+stylesheet takes a copy of it, and the copy is tracked against its upstream (`src/eject.ts`):
+
+- `cc-eject <screen>` copies the screen's source from the installed `@cc/ui` (which ships
+  `src/`) to the same path under `ui/` (`screens/home.ts` becomes `ui/screens/home.ts`), with the
+  modules under `screens/` only it uses (Settings brings `settings-agents.ts`,
+  `settings-backups.ts` and `settings-parts.ts`). Its imports of the default UI's own modules
+  (`../app/screen.js`, `../ui/parts.js`) become `@cc/ui/v<N>`, which exports everything a default
+  screen imports, so the copy type-checks and passes the D3 check as it is. It refuses to
+  overwrite a file the engine has. Using the copy is the engine's choice: pass it to
+  `createApp({ screens: { home: homeScreen } })` in `ui/app.ts`.
+- `ui/.cc-ui.json` records each ejected screen: the `@cc/ui` version and extension API it was
+  taken (or last merged) from, and the sha256 of each upstream file. The upstream text itself
+  is kept as `ui/.cc-ui/base/<path>.base` (an extension no tool compiles or lints), the base of
+  the next merge. Both are written by the commands and committed with the engine; neither is
+  edited by hand.
+- `cc-upgrade` (both modes) compares each ejected screen with the installed `@cc/ui` and lists
+  the files that changed upstream, with their added and removed lines and whether the engine
+  changed its copy too; it predicts the merge, so the CI comment on a dependency PR says whether
+  `cc-ui-update` will need a person. `--check` exits 1 when a screen changed upstream.
+- `cc-ui-update [<screen>...]` merges each changed file, 3-way and line by line (`src/merge3.ts`,
+  no git needed): base the recorded upstream, ours the engine's copy, theirs the new upstream. A
+  copy the engine never changed takes the new upstream as it is; a module the screen starts to
+  use is added; one it stops using stays in the engine, no longer tracked; a region both sides
+  changed differently is written with git's markers (diff3 style, with the base between), and
+  the command exits 1. The manifest and the base move to the new upstream either way, and
+  `cc-upgrade` lists any marker left in an ejected file and exits 1 until a person resolves it.
+
+```text
+$ pnpm cc:eject home
+cc-eject: home ejected from @cc/ui 1.0.0 (1 file); recorded in ui/.cc-ui.json
+  ui/screens/home.ts
+  use it in ui/app.ts: import { homeScreen } from './screens/home.js'; createApp({ screens: { home: homeScreen } })
+  pnpm cc:upgrade --check lists upstream changes to it; pnpm cc:ui-update merges them
+$ pnpm cc:upgrade --check   # on the dependency PR that brings @cc/ui 1.1.0
+cc-upgrade --check: engine on extension API 1 (foundation 1.1.0); 1 ejected screen changed upstream
+  ejected screen home changed upstream (@cc/ui 1.0.0 -> 1.1.0):
+    ui/screens/home.ts: changed upstream (+1 -1 lines); changed here too, merges cleanly
+  run pnpm cc:ui-update locally to merge them
+$ pnpm cc:ui-update
+cc-ui-update: 1 file merged, 0 with conflicts
+  home: @cc/ui 1.0.0 -> 1.1.0
+    ui/screens/home.ts: merged
+  run pnpm check
+```
+
+They are proven against the real `@cc/ui` installed in a fixture engine, with the engine's real
+type-check and D3 check (`test/eject.test.ts`), and against a fixture foundation at API 2 with
+a fixture engine whose ejected screen a codemod moves from API 1 (`test/upgrade.test.ts`,
+AC-08-10).
 
 ## What the desktop shell runs (`@cc/build-runtime`)
 

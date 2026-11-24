@@ -171,12 +171,15 @@ describe('createApp(overrides)', () => {
 
 describe('@cc/ui/v1', () => {
   it('exports the composition API, the default screens and the UI kit, and nothing else', () => {
-    // A change to this list is a change to the composition API (ADR 0008 decision 1).
+    // A change to this list is a change to the composition API (ADR 0008 decision 1). The scope
+    // lists are there because an ejected screen imports them from here (pnpm cc:eject).
     expect(Object.keys(v1).sort()).toEqual(
       [
         'App',
+        'GRANT_ONLY_SCOPES',
         'IN_WINDOW',
         'NAV',
+        'SCOPES',
         'SCREENS',
         'act',
         'actInWindow',

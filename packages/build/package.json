@@ -2,13 +2,15 @@
   "name": "@cc/build",
   "version": "0.0.0",
   "private": true,
-  "description": "electron-builder config, fuses, hardening, clean-tree check; the engine-facing cc-build, cc-start, cc-install-stamp and cc-upgrade commands",
+  "description": "electron-builder config, fuses, hardening, clean-tree check; the engine-facing cc-build, cc-start, cc-install-stamp, cc-upgrade, cc-eject and cc-ui-update commands",
   "type": "module",
   "bin": {
     "cc-build": "./dist/bin/cc-build.js",
     "cc-start": "./dist/bin/cc-start.js",
     "cc-install-stamp": "./dist/bin/cc-install-stamp.js",
-    "cc-upgrade": "./dist/bin/cc-upgrade.js"
+    "cc-upgrade": "./dist/bin/cc-upgrade.js",
+    "cc-eject": "./dist/bin/cc-eject.js",
+    "cc-ui-update": "./dist/bin/cc-ui-update.js"
   },
   "exports": {
     ".": {

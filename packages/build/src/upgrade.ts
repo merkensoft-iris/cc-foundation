@@ -10,9 +10,15 @@
  * Exit codes (08 §6, ADR 0003 decision 6):
  * - 0: the engine is on the current API and no site is marked for a person; or the upgrade
  *   was written and the type-check passed with no site left for a person.
- * - 1: `--check` found an upgrade due; or a site needs a person; or the type-check failed;
- *   or the engine's API cannot be upgraded by this foundation.
+ * - 1: `--check` found an upgrade due (codemods to run, or upstream changes to an ejected
+ *   screen for `cc-ui-update` to merge); or a site needs a person (a codemod's mark, or an
+ *   unresolved merge in an ejected screen); or the type-check failed; or the engine's API
+ *   cannot be upgraded by this foundation.
  * - 2: usage error.
+ *
+ * Both modes also report upstream changes to the screens the engine ejected (`ui/.cc-ui.json`,
+ * `eject.ts`): which files changed in the installed `@cc/ui`, and whether `cc-ui-update` merges
+ * them cleanly (ADR 0008 decision 1).
  */
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join, relative, resolve, sep } from 'node:path';
@@ -22,6 +28,7 @@ import { IndentationText, Node, Project, QuoteKind, SyntaxKind, type SourceFile 
 import type { CommandResult } from './build.js';
 import { TODO_MARKER, type Codemod, type CodemodContext } from './codemod.js';
 import { CODEMODS } from './codemods/index.js';
+import { uiDrift, type UiDrift } from './eject.js';
 import { CONFIG_FILE, readExtensionApi } from './engine-config.js';
 import { currentFoundation, type Foundation } from './foundation.js';
 import { engineTypecheck, type Typecheck } from './typecheck.js';
@@ -95,6 +102,20 @@ function setExtensionApi(file: SourceFile, api: number): boolean {
   return false;
 }
 
+function driftSummary(drift: UiDrift): string {
+  return `${drift.changed} ejected ${drift.changed === 1 ? 'screen' : 'screens'} changed upstream`;
+}
+
+/** The report on ejected screens that follows the codemods' report. */
+function driftLines(drift: UiDrift): string[] {
+  if (drift.changed === 0 && drift.problems === 0) return [];
+  return [
+    ...(drift.changed > 0 ? [`  ${driftSummary(drift)}:`] : []),
+    ...drift.lines,
+    ...(drift.changed > 0 ? ['  run pnpm cc:ui-update locally to merge them'] : []),
+  ];
+}
+
 export async function runUpgrade(options: UpgradeOptions): Promise<CommandResult> {
   const root = resolve(options.root);
   const name = options.check === true ? 'cc-upgrade --check' : 'cc-upgrade';
@@ -124,12 +145,26 @@ export async function runUpgrade(options: UpgradeOptions): Promise<CommandResult
   const project = loadProject(root);
   if (from === foundation.api) {
     const left = markersLeft(root, project);
-    if (left.length > 0) {
+    const drift = uiDrift(root, foundation);
+    const where = `engine on extension API ${from} (foundation ${foundation.version})`;
+    if (left.length > 0 || drift.problems > 0) {
+      const sites = left.length + drift.problems;
       return {
         exitCode: 1,
         lines: [
-          `${name}: engine on extension API ${from} (foundation ${foundation.version}); ${left.length} ${left.length === 1 ? 'site needs' : 'sites need'} a person`,
+          `${name}: ${where}; ${sites} ${sites === 1 ? 'site needs' : 'sites need'} a person`,
           ...left.map((todo) => `  ${todo.file}:${todo.line} ${todo.message}`),
+          ...driftLines(drift),
+        ],
+      };
+    }
+    if (drift.changed > 0) {
+      return {
+        exitCode: options.check === true ? 1 : 0,
+        lines: [
+          `${name}: ${where}; ${driftSummary(drift)}`,
+          ...drift.lines,
+          `  run pnpm cc:ui-update locally to merge them`,
         ],
       };
     }
@@ -211,6 +246,7 @@ export async function runUpgrade(options: UpgradeOptions): Promise<CommandResult
   const ms = Math.round(performance.now() - started);
 
   if (options.check === true) {
+    const drift = uiDrift(root, foundation);
     return {
       exitCode: 1,
       lines: [
@@ -219,6 +255,7 @@ export async function runUpgrade(options: UpgradeOptions): Promise<CommandResult
         ...perFile,
         ...todoLines,
         `  run pnpm cc:upgrade locally to apply them (owner decision D-1)`,
+        ...driftLines(drift),
       ],
     };
   }
@@ -242,12 +279,15 @@ export async function runUpgrade(options: UpgradeOptions): Promise<CommandResult
     };
   }
   lines.push(`${name}: type-check passed (${typecheck.ms} ms)`);
-  if (todos.length > 0) {
+  const drift = uiDrift(root, foundation);
+  lines.push(...driftLines(drift));
+  const sites = todos.length + drift.problems;
+  if (sites > 0) {
     return {
       exitCode: 1,
       lines: [
         ...lines,
-        `${name}: ${todos.length} ${todos.length === 1 ? 'site needs' : 'sites need'} a person; see the marks above`,
+        `${name}: ${sites} ${sites === 1 ? 'site needs' : 'sites need'} a person; see the marks above`,
       ],
     };
   }
